@@ -1,0 +1,35 @@
+name: iOS simulator preview
+on:
+  pull_request:
+    paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml']
+  push:
+    branches: ['feature/ios-app']
+    paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.401'
+      - name: Select matching Xcode
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.0.app/Contents/Developer
+          xcodebuild -version
+      - name: Install iOS workload
+        run: dotnet workload install ios --version 10.0.401.1
+      - name: Shared core checks
+        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Build Apple Silicon simulator app
+        run: dotnet build iOS/ERateLookup.iOS.csproj -c Debug -r iossimulator-arm64
+      - name: Package simulator build
+        run: ditto -c -k --sequesterRsrc --keepParent iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app ERateLookup-iOS-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-iOS-simulator
+          path: ERateLookup-iOS-simulator.zip
+          if-no-files-found: error

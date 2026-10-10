@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-ios</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
+    <AppIcon>Assets.xcassets/AppIcon.appiconset</AppIcon>
+    <ApplicationId>com.yingyuwang.eratelookup</ApplicationId>
+    <ApplicationTitle>E-rate Lookup</ApplicationTitle>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+    <AssemblyName>ERateLookup</AssemblyName>
+    <!-- Preserve the shared core's reflection-based JSON models in this first port. -->
+    <TrimMode>copy</TrimMode>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <BundleResource Include="../Assets/ERateLookup.png" Link="Resources/ERateLookup.png" />
+  </ItemGroup>
+</Project>

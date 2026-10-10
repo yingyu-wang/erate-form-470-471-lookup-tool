@@ -90,3 +90,7 @@ See [Windows user guide](docs/USER_GUIDE.md), [Mac instructions](MACOS_README.md
 ## License
 
 Original project code and documentation are available under the [MIT License](LICENSE). Third-party components and USAC data retain their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## iPhone and iPad development preview
+
+A native C# / UIKit port is in [`iOS/`](iOS/README.md). It shares the existing query, bundled data, SQLite, and export core. See the iOS guide for simulator builds, free Personal Team testing, signing, and App Store steps. It is not yet a tested iPhone release.
