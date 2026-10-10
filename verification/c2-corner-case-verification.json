@@ -1,0 +1,23 @@
+{
+  "entity": [
+    {
+      "ben": "101552",
+      "billed_entity_name": "WHITTIER CHRISTIAN SCHOOLS",
+      "city": "WHITTIER",
+      "state": "CA",
+      "applicant_type": "School District",
+      "c2_budget_cycle": "FY2026-2030",
+      "child_entity_count": "2",
+      "c2_budget_algorithm": "Per Site Basis School District",
+      "full_time_students": "428",
+      "school_student_multiplier": "201.57",
+      "c2_budget": "86271.96",
+      "c2_budget_version": "Forecast",
+      "funded_c2_budget_amount": "0",
+      "pending_c2_budget_amount": "0",
+      "available_c2_budget_amount": "86271.96"
+    }
+  ],
+  "form470_by_year": [],
+  "checked_utc": "2026-10-10T00:48:33.185208+00:00"
+}

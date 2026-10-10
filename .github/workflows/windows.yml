@@ -1,0 +1,89 @@
+name: Windows build and release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build solution
+        run: dotnet build ERate470Lookup.sln -c Release
+      - name: Run offline checks
+        run: dotnet run --project Checks/Checks.csproj -c Release --no-build
+      - name: Publish Windows x64
+        run: dotnet publish Desktop/ERate470Lookup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-x64-framework
+      - name: Package executable and instructions
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path package -Force | Out-Null
+          Copy-Item publish/win-x64-framework/ERate470Lookup.exe package/
+          Copy-Item README.md,LICENSE,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
+          Compress-Archive -Path package/* -DestinationPath ERateLookup-win-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-win-x64
+          path: ERateLookup-win-x64.zip
+          retention-days: 7
+  mac-build:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        rid: [osx-arm64, osx-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Run shared core checks
+        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Build macOS bundle
+        run: bash Publish-Mac.sh ${{ matrix.rid }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-macOS-${{ matrix.rid }}
+          path: ../ERateLookup-v*-macos-*.zip
+          retention-days: 7
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, mac-build]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ERateLookup-win-x64
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-macOS-*
+          merge-multiple: true
+      - name: Create release with Windows and Mac downloads
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $asset = "ERateLookup-$env:RELEASE_TAG-win-x64.zip"
+          Move-Item ERateLookup-win-x64.zip $asset
+          $macAssets = Get-ChildItem "ERateLookup-v*-macos-*.zip" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-$env:RELEASE_TAG-macos-$architecture.zip"
+            if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
+            (Resolve-Path $renamed).Path
+          }
+          $checksums = Get-ChildItem "ERateLookup-*.zip" | Sort-Object Name | ForEach-Object {
+            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          }
+          $checksums | Set-Content SHA256SUMS.txt
+          gh release create "$env:RELEASE_TAG" "$asset" @macAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes "Runtime-dependent builds. Windows requires .NET 10 Desktop Runtime x64; macOS requires matching .NET 10 Runtime Arm64 or x64. Mac builds are unsigned previews and need macOS launch testing. Source is MIT-licensed; each package includes the license and third-party notices."

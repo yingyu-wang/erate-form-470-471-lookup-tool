@@ -1,0 +1,28 @@
+# .NET / Visual Studio build output
+**/bin/
+**/obj/
+publish/
+.vs/
+*.user
+*.suo
+*.pdb
+*.exe
+*.dll
+*.zip
+*.nupkg
+
+# Per-user caches and preferences
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+theme.txt
+
+# Local environment and logs
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
