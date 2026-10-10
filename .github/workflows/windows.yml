@@ -47,11 +47,14 @@ jobs:
       - name: Run shared core checks
         run: dotnet run --project Checks/Checks.csproj -c Release
       - name: Build macOS bundle
-        run: bash Publish-Mac.sh ${{ matrix.rid }}
+        run: |
+          bash Publish-Mac.sh ${{ matrix.rid }}
+          mkdir -p artifacts
+          cp ../ERateLookup-v*-macos-*.zip artifacts/
       - uses: actions/upload-artifact@v4
         with:
           name: ERateLookup-macOS-${{ matrix.rid }}
-          path: ../ERateLookup-v*-macos-*.zip
+          path: artifacts/ERateLookup-v*-macos-*.zip
           retention-days: 7
   release:
     if: startsWith(github.ref, 'refs/tags/v')
