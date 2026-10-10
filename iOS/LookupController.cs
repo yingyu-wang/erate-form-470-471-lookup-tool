@@ -92,7 +92,7 @@ public sealed class LookupController : UITableViewController
         if (busy || (!ready && !initializing)) return;
         busy = true; operation = new CancellationTokenSource();
         foreach (var control in controls) control.Enabled = false;
-        share.Enabled = false; cancel.Enabled = true;
+        share.Enabled = false; cancel.Enabled = !initializing;
         View!.EndEditing(true);
         try { await action(operation.Token); }
         catch (OperationCanceledException) { status = "Request canceled or timed out. Try again when ready."; }

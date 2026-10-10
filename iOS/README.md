@@ -36,7 +36,19 @@ xcrun simctl install booted iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLo
 xcrun simctl launch booted com.yingyuwang.eratelookup
 ```
 
-## Test on your own iPhone for free
+## Install the downloaded simulator preview
+
+The GitHub Actions artifact is **for a Mac simulator only**. It cannot be installed on a physical iPhone or iPad, even if the Mac and phone both use ARM64.
+
+1. On an Apple Silicon Mac, install compatible Xcode and an iOS simulator runtime from Xcode → Settings → Components.
+2. Open Xcode → Open Developer Tool → Simulator (Xcode 26), or Device Hub (Xcode 27), and start an iPhone/iPad simulator.
+3. Download the successful `iOS simulator preview` workflow's `ERateLookup-iOS-simulator` artifact. Extract the artifact ZIP, then extract the inner `ERateLookup-iOS-simulator.zip` to obtain `ERateLookup.app`.
+4. Drag `ERateLookup.app` onto the booted Simulator window, or run `xcrun simctl install booted /absolute/path/to/ERateLookup.app` in Terminal.
+5. Open its icon, or run `xcrun simctl launch booted com.yingyuwang.eratelookup`.
+
+No paid Apple membership or phone Developer Mode is needed for simulator testing. The supplied artifact is ARM64; an Intel Mac needs a separate `iossimulator-x64` build and compatible Apple tools.
+
+## Test on your own iPhone or iPad for free
 
 Developer Mode permits development-signed apps; it does **not** permit arbitrary unsigned apps.
 
@@ -51,7 +63,16 @@ dotnet build iOS/ERateLookup.iOS.csproj -c Debug -r ios-arm64 \
   -p:CodesignProvision='YOUR PROFILE NAME OR UUID'
 ```
 
-5. Use Xcode's device tools to install the signed build. If prompted, trust the developer under Settings → General → VPN & Device Management.
+5. Find your connected iPhone or iPad with `xcrun devicectl list devices`. Copy its identifier, then install the signed device build:
+
+```sh
+xcrun devicectl device install app --device 'YOUR DEVICE IDENTIFIER' \
+  iOS/bin/Debug/net10.0-ios/ios-arm64/ERateLookup.app
+```
+
+Launch E-rate Lookup from its Home Screen icon. If prompted, trust the developer under Settings → General → VPN & Device Management. Keep the device unlocked and connected during installation.
+
+If the app fails to install, verify the build is under `ios-arm64` (not `iossimulator-arm64`), the profile includes your device, its bundle identifier matches `ApplicationId`, and Developer Mode is enabled. “No signing identity” or “No matching provisioning profile” means finish the Xcode Personal Team setup and run the temporary Xcode app on that phone once before rebuilding this .NET project.
 
 Personal Team provisioning expires after seven days; rebuild/re-provision to continue testing. A spare phone works, but it follows the same signing requirements.
 
