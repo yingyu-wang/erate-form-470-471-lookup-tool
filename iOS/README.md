@@ -19,10 +19,10 @@ Source port prepared. A successful Apple toolchain build and simulator/device la
 
 ## Build on a Mac
 
-Install .NET SDK 10.0.401 and Xcode 27.0 (requires macOS 26.6+), then select that Xcode and accept its license. These versions match Microsoft's published workload set; update them together if changing the toolchain.
+Install .NET SDK 10.0.401 and Xcode 26.6 (requires macOS 26.2+), then select that Xcode and accept its license. These versions match Microsoft's published workload set; update them together if changing the toolchain.
 
 ```sh
-dotnet workload install ios --version 10.0.401.1
+dotnet workload install ios --version 10.0.401
 dotnet run --project Checks/Checks.csproj -c Release
 dotnet build iOS/ERateLookup.iOS.csproj -c Debug -r iossimulator-arm64
 ```
@@ -83,6 +83,6 @@ Before submission, review bundled third-party privacy manifests and required-rea
 - https://developer.apple.com/support/compare-memberships/
 - https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device
 - https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app/
-- https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode27.0-10722
+- https://github.com/dotnet/macios/releases/tag/dotnet-10.0.1xx-xcode26.5-10318
 
 MIT license and third-party/data notices from the repository root apply.

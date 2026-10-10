@@ -2,9 +2,6 @@ name: iOS simulator preview
 on:
   pull_request:
     paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml']
-  push:
-    branches: ['feature/ios-app']
-    paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,18 +15,31 @@ jobs:
           dotnet-version: '10.0.401'
       - name: Select matching Xcode
         run: |
-          sudo xcode-select --switch /Applications/Xcode_27.0.app/Contents/Developer
+          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -version
       - name: Install iOS workload
-        run: dotnet workload install ios --version 10.0.401.1
+        run: dotnet workload install ios --version 10.0.401
       - name: Shared core checks
         run: dotnet run --project Checks/Checks.csproj -c Release
       - name: Build Apple Silicon simulator app
         run: dotnet build iOS/ERateLookup.iOS.csproj -c Debug -r iossimulator-arm64
+      - name: Launch simulator smoke test
+        run: |
+          xcrun simctl list devices available --json > devices.json
+          DEVICE_ID=$(python3 -c 'import json; d=json.load(open("devices.json")); print(next(x["udid"] for k,v in d["devices"].items() if "iOS" in k for x in v if "iPhone" in x["name"]))')
+          xcrun simctl boot "$DEVICE_ID"
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          xcrun simctl install "$DEVICE_ID" iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app
+          xcrun simctl launch "$DEVICE_ID" com.yingyuwang.eratelookup
+          sleep 10
+          xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -F com.yingyuwang.eratelookup
+          xcrun simctl io "$DEVICE_ID" screenshot ios-launch.png
       - name: Package simulator build
         run: ditto -c -k --sequesterRsrc --keepParent iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app ERateLookup-iOS-simulator.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ERateLookup-iOS-simulator
-          path: ERateLookup-iOS-simulator.zip
+          path: |
+            ERateLookup-iOS-simulator.zip
+            ios-launch.png
           if-no-files-found: error

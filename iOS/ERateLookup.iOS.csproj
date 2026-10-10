@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <SupportedOSPlatformVersion>16.0</SupportedOSPlatformVersion>
-    <AppIcon>Assets.xcassets/AppIcon.appiconset</AppIcon>
     <ApplicationId>com.yingyuwang.eratelookup</ApplicationId>
     <ApplicationTitle>E-rate Lookup</ApplicationTitle>
     <ApplicationVersion>1</ApplicationVersion>
