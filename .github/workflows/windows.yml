@@ -74,6 +74,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
+          gh release view "$env:RELEASE_TAG" --json tagName --jq .tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release already exists; retaining its published assets."
+            exit 0
+          }
           $asset = "ERateLookup-$env:RELEASE_TAG-win-x64.zip"
           Move-Item ERateLookup-win-x64.zip $asset
           $macAssets = Get-ChildItem "ERateLookup-v*-macos-*.zip" | ForEach-Object {
