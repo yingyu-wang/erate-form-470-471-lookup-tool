@@ -1,0 +1,71 @@
+name: Publish Linux to v1.0.1
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    uses: ./.github/workflows/linux.yml
+  publish-existing-release:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: eratelookup-release-assets
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-Linux-*
+          merge-multiple: true
+          path: linux-packages
+      - name: Attach Linux packages and refresh the aggregate checksum file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: v1.0.1
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --json tagName > /dev/null
+          mkdir all-packages
+          gh release download "$RELEASE_TAG" --pattern 'ERateLookup-*.zip' --pattern 'ERateLookup-*.tar.gz' --dir all-packages
+          cp linux-packages/*.tar.gz all-packages/
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import hashlib
+          root = Path('all-packages')
+          expected = {f'ERateLookup-v1.0.1-{p}' for p in (
+              'win-x64.zip', 'win-arm64.zip', 'macos-x64.zip', 'macos-arm64.zip',
+              'android-preview.zip', 'linux-x64.tar.gz', 'linux-arm64.tar.gz')}
+          actual = {p.name for p in root.iterdir()}
+          if actual != expected: raise SystemExit(f'Unexpected release packages: {actual ^ expected}')
+          lines = []
+          for name in sorted(expected):
+              with (root / name).open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              lines.append(f'{digest}  {name}\n')
+          Path('SHA256SUMS.txt').write_text(''.join(lines), encoding='utf-8')
+          PYCODE
+          gh release upload "$RELEASE_TAG" linux-packages/*.tar.gz SHA256SUMS.txt --clobber
+          gh release view "$RELEASE_TAG" --json body --jq .body > release-body.md
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          import os
+          p = Path('release-body.md')
+          body = p.read_text().split('\n## Linux packages added')[0].rstrip()
+          # Correct the historical aggregate-checksum wording without changing other platforms.
+          body = body.replace('all five ZIP files', 'all seven package archives')
+          sha = os.environ['GITHUB_SHA']
+          p.write_text(body + '\n\n## Linux packages added\n\n'
+                       'Linux x64 and ARM64 portable Avalonia packages include .NET 10. '
+                       'Extract the matching `.tar.gz` and run `ERateLookup`. '
+                       'Keep all extracted files together. Ubuntu 24.04 is the native build/launch-check baseline. '
+                       'Linux packages were added after the original v1.0.1 tag; '
+                       f'[Linux source commit](https://github.com/{os.environ["GH_REPO"]}/commit/{sha}).\n\n'
+                       f'[Linux installation/build instructions](https://github.com/{os.environ["GH_REPO"]}/blob/{sha}/docs/LINUX_INSTALL.md). '
+                       'SHA256SUMS.txt covers the five existing ZIPs and both Linux archives.\n')
+          PYCODE
+          gh release edit "$RELEASE_TAG" --notes-file release-body.md

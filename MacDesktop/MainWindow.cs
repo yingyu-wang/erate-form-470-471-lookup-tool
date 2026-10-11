@@ -49,10 +49,10 @@ public sealed class MainWindow:Window
     private readonly DataGridTextColumn numberColumn=new(){Header="Form 470",Binding=new Binding("Number"),Width=new DataGridLength(120)};
     private readonly DataGridTextColumn servicesColumn=new(){Header="Requested services",Binding=new Binding("Services"),Width=new DataGridLength(1,DataGridLengthUnitType.Star)};
 
-    public MainWindow()
+    public MainWindow(bool refreshOnOpen = true)
     {
         Title="E-rate · Form 470 / 471 Lookup";Width=1200;Height=850;MinWidth=900;MinHeight=650;
-        FontFamily=new FontFamily("Arial");FontSize=14;
+        FontFamily=new FontFamily(OperatingSystem.IsLinux()?"DejaVu Sans":"Arial");FontSize=14;
         var cache=OperatingSystem.IsMacOS()?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Library","Application Support","ERateLookup","cache"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERateLookup","cache");
         client=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();windows=new(http,cache);
         themePath=Path.Combine(Path.GetDirectoryName(cache)!,"theme.txt");
@@ -79,7 +79,7 @@ public sealed class MainWindow:Window
         var actions=new WrapPanel{Margin=new Thickness(0,10,0,8)};
         foreach(var b in new[]{open,all,none,export,sync,windowInfo}){buttons.Add(b);actions.Children.Add(b);}
         selection.Margin=new Thickness(8,12,8,0);actions.Children.Add(selection);actions.Children.Add(Text("Theme"));actions.Children.Add(theme);Add(actions,7);
-        Add(Text("Filing cache: 2 hours. Refresh live bypasses it. Names search the local California directory.\nHold Command (⌘) to select individual rows; Shift selects a range. USAC data may lag EPC submissions."),8);Add(windowNotice,9);
+        Add(Text($"Filing cache: 2 hours. Refresh live bypasses it. Names search the local California directory.\nHold {(OperatingSystem.IsMacOS()?"Command (⌘)":"Ctrl")} to select individual rows; Shift selects a range. USAC data may lag EPC submissions."),8);Add(windowNotice,9);
         Content=root;buttons.AddRange(new[]{search,refresh,choose});ApplyTheme();ready=true;
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();
         matches.DoubleTapped+=async(_,_)=>await ChooseAsync();
@@ -90,7 +90,7 @@ public sealed class MainWindow:Window
         grid.SelectionChanged+=(_,_)=>UpdateSelection();all.Click+=(_,_)=>{grid.SelectedItems.Clear();foreach(var row in results)grid.SelectedItems.Add(row);};none.Click+=(_,_)=>grid.SelectedItems.Clear();
         open.Click+=async(_,_)=>await OpenAsync();grid.DoubleTapped+=async(_,_)=>await OpenAsync();export.Click+=async(_,_)=>await ExportAsync();sync.Click+=async(_,_)=>await SyncAsync(true);windowInfo.Click+=async(_,_)=>await WindowNoticeAsync(true);
         theme.SelectionChanged+=(_,_)=>{if(!ready)return;ApplyTheme();try{File.WriteAllText(themePath,theme.SelectedItem as string??"Mint Glass");}catch(IOException){}catch(UnauthorizedAccessException){}};
-        Opened+=async(_,_)=>{budget.Text="California directory / C2 snapshot: "+directory.LastUpdated;if(directory.NeedsRefresh)await SyncAsync(false);};
+        Opened+=async(_,_)=>{budget.Text="California directory / C2 snapshot: "+directory.LastUpdated;if(refreshOnOpen&&directory.NeedsRefresh)await SyncAsync(false);};
         Closed+=(_,_)=>{typing.Stop();lifetime.Cancel();http.Dispose();backdrop?.Dispose();};UpdateSelection();
     }
     private static Button Button(string text)=>new(){Content=text,Padding=new Thickness(12,8),Margin=new Thickness(0,0,8,6)};
@@ -201,7 +201,7 @@ public sealed class MainWindow:Window
     {
         if(!complete)return;
         var selected=grid.SelectedItems.Cast<Filing>().Select(r=>r.Number).ToHashSet();var items=results.Where(r=>selected.Contains(r.Number)).ToList();
-        if(results.Count>0&&items.Count==0){await MessageAsync("Select at least one filing. Use Command-click or Select all.");return;}
+        if(results.Count>0&&items.Count==0){await MessageAsync($"Select at least one filing. Use {(OperatingSystem.IsMacOS()?"Command":"Ctrl")}-click or Select all.");return;}
         var file=await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions{Title="Export selected filings",SuggestedFileName=$"Form{(int)selectedForm}_{selectedBen}_FY{selectedYear}.xlsx",DefaultExtension="xlsx",ShowOverwritePrompt=true,FileTypeChoices=new[]{new FilePickerFileType("Excel workbook"){Patterns=new[]{"*.xlsx"}},new FilePickerFileType("CSV file"){Patterns=new[]{"*.csv"}}}});
         if(file is null)return;
         try

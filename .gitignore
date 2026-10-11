@@ -30,3 +30,8 @@ theme.txt
 *.log
 .DS_Store
 Thumbs.db
+
+# Linux archives and Python packaging output
+*.tar.gz
+artifacts/
+**/__pycache__/

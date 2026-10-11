@@ -2,13 +2,13 @@
 
 <img src="Assets/ERateLookup.png" width="96" alt="E-rate Lookup icon">
 
-A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
+A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, and Android preview**
+**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 ## Download and run
 
-Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform ZIP to run the app.
+Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
@@ -16,11 +16,25 @@ Open this repository's **Releases** page and select **v1.0.1**. GitHub's automat
 | `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
 | `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
 | `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.1-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.1-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
 | `ERateLookup-v1.0.1-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
-Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK includes its runtime.
+Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
 Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` on macOS. Keep the Mac .app bundle intact. Mac builds target macOS 14 or later and are unsigned, non-notarized previews. For a blocked app you trust, use the per-app **Open Anyway** option in macOS Privacy & Security.
+
+## Install on Linux
+
+Download the matching **linux-x64** or **linux-arm64** `.tar.gz` from the release,
+extract it, and run `ERateLookup` from the extracted directory. Keep all files
+in that directory together. No .NET installation is required. Ubuntu 24.04 is
+the native build/launch-check baseline; an X11 desktop or XWayland and native
+system libraries are needed. Use **Ctrl-click** for individual row selection.
+
+See [Linux installation and build instructions](docs/LINUX_INSTALL.md) for
+architecture detection, dependencies, commands, checksums, and the optional
+application-menu shortcut with the app icon.
 
 ## Install on Android
 
@@ -68,6 +82,19 @@ bash Publish-Mac.sh osx-arm64
 bash Publish-Mac.sh osx-x64
 ```
 
+### Compile Linux packages
+
+Install .NET SDK 10 and Python 3, then run:
+
+```bash
+bash Publish-Linux.sh linux-x64
+bash Publish-Linux.sh linux-arm64
+```
+
+Self-contained archives appear under `artifacts/`. GitHub Actions builds and
+launch-checks each package on its matching Ubuntu 24.04 x64/ARM64 runner.
+See [Linux instructions](docs/LINUX_INSTALL.md).
+
 ### Compile the Android APK
 
 Install **.NET SDK 10.0.401**, **JDK 21**, and the **Android SDK platform 36 / Build Tools 36.0.0** (Android Studio’s SDK Manager can install the SDK components). Run these commands from the repository root. Replace both absolute paths with your SDK/JDK locations; on Windows, use paths such as `C:/Android/Sdk` and your JDK 21 installation folder.
@@ -86,7 +113,7 @@ For cloud builds, run the **Android preview APK** workflow in GitHub Actions and
 
 ## GitHub Actions and releases
 
-The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures plus the Android preview, runs the shared/security checks, and attaches the desktop ZIPs, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
+The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds Windows, macOS, and Linux x64/ARM64 packages plus the Android preview, runs the shared/security checks, and attaches the Windows/macOS ZIPs, Linux tar.gz archives, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 
 ```sh
 git add .
@@ -97,7 +124,9 @@ git tag v1.0.2
 git push origin v1.0.2
 ```
 
-Keep executables, ZIPs, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
+The **Publish Linux to v1.0.1** workflow can add the Linux packages to the existing release from `main`, regenerate the seven-package checksum file, and record the exact Linux source commit. The original v1.0.1 tag remains unchanged.
+
+Keep executables, package archives, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
 
 ## Project layout
 
@@ -105,21 +134,30 @@ Keep executables, ZIPs, caches, and user settings out of the source repository; 
 | --- | --- |
 | `Core/` | USAC queries, cache, seed data, budget display logic, and exports |
 | `Desktop/` | Windows Forms interface |
-| `MacDesktop/` | Avalonia interface for macOS |
+| `MacDesktop/` | Avalonia interface shared by macOS and Linux |
+| `LinuxDesktop/` | Linux entry point, icon, launch check, and shortcut helper |
 | `Android/` | Native Android development preview |
 | `Assets/` | PNG, ICO, and ICNS app icon |
 | `Checks/` | Shared verification program |
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
+| `Publish-Linux.sh` / `scripts/package_linux.py` | Creates self-contained Linux tar.gz archives |
+| `.github/workflows/linux.yml` | Native Linux x64/ARM64 builds and window launch checks |
+| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.1 release |
+| `docs/LINUX_INSTALL.md` | Linux installation, dependencies, shortcuts, and compilation |
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
 | `docs/ANDROID_INSTALL.md` | Android installation, updates, exports, and troubleshooting |
 
 ## Current limitations
 
-GUI launch and appearance still require hands-on Windows and Mac testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
+GUI launch and appearance still require hands-on Windows and Mac testing. Linux CI validates native window launch on x64 and ARM64; interactive lookup, selection, export, and browser opening still require hands-on desktop testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
 
 See [Windows user guide](docs/USER_GUIDE.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
 
 ## License
 
 Original project code and documentation are available under the [MIT License](LICENSE). Third-party components and USAC data retain their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Contributors
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md), including credit for Codex (OpenAI), the AI coding assistant used during development.

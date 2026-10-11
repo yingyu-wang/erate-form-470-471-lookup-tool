@@ -66,9 +66,12 @@ jobs:
   android-build:
     if: startsWith(github.ref, 'refs/tags/v')
     uses: ./.github/workflows/android.yml
+  linux-build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/linux.yml
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, mac-build, android-build]
+    needs: [build, mac-build, android-build, linux-build]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -84,10 +87,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ERateLookup-Android-preview
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-Linux-*
+          merge-multiple: true
       - uses: actions/checkout@v4
         with:
           path: source
-      - name: Create release with Windows, Mac, and Android downloads
+      - name: Create release with Windows, Mac, Linux, and Android downloads
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -106,18 +113,25 @@ jobs:
             if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
             (Resolve-Path $renamed).Path
           }
+          $linuxAssets = Get-ChildItem "ERateLookup-v*-linux-*.tar.gz" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-$env:RELEASE_TAG-linux-$architecture.tar.gz"
+            if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
+            (Resolve-Path $renamed).Path
+          }
+          if (@($linuxAssets).Count -ne 2) { throw "Expected Linux x64 and ARM64 archives" }
           $androidAssets = Get-ChildItem "ERateLookup-*-android-preview.zip" | ForEach-Object { $_.FullName }
           if (@($androidAssets).Count -ne 1) { throw "Expected one Android package ZIP" }
-          $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets)) | Sort-Object | ForEach-Object {
+          $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets) + @($linuxAssets)) | Sort-Object | ForEach-Object {
             "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $(Split-Path $_ -Leaf)"
           }
           $checksums | Set-Content SHA256SUMS.txt
           gh release view "$env:RELEASE_TAG" --json tagName 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets "SHA256SUMS.txt" --clobber
+            gh release upload "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets "SHA256SUMS.txt" --clobber
             if ($LASTEXITCODE -ne 0) { throw "Could not upload release assets" }
             gh release edit "$env:RELEASE_TAG" --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
           } else {
-            gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
+            gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
           }
           if ($LASTEXITCODE -ne 0) { throw "Could not publish release" }

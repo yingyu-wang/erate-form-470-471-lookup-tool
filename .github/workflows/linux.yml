@@ -1,0 +1,56 @@
+name: Linux Avalonia packages
+on:
+  pull_request:
+    branches: [main]
+    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'Checks/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
+  push:
+    branches: [main]
+    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'Checks/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            runner: ubuntu-24.04
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install GUI launch-check dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth libx11-6 libice6 libsm6 libfontconfig1 fonts-dejavu-core xdg-utils desktop-file-utils
+      - name: Shared offline checks
+        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Build self-contained package
+        run: bash Publish-Linux.sh '${{ matrix.rid }}'
+      - name: Check extracted package and launch Avalonia window
+        env:
+          LINUX_RID: ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          mkdir smoke
+          tar -xzf "artifacts/ERateLookup-v1.0.1-$LINUX_RID.tar.gz" -C smoke
+          app="$PWD/smoke/ERateLookup-v1.0.1-$LINUX_RID"
+          file "$app/ERateLookup"
+          mkdir -p "$PWD/smoke-data"
+          export XDG_DATA_HOME="$PWD/smoke-data"
+          python3 "$app/install-shortcut.py"
+          desktop-file-validate "$XDG_DATA_HOME/applications/org.eratelookup.desktop.desktop"
+          timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-Linux-${{ matrix.rid }}
+          path: artifacts/ERateLookup-v*-linux-*.tar.gz
+          retention-days: 30
