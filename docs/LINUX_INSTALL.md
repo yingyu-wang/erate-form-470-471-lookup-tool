@@ -49,7 +49,8 @@ Alpine/musl, headless servers without a display, and 32-bit systems are not targ
    ```
 
    No administrator privileges are needed for this step. Keep the app directory
-   at the same location; rerun the script after moving it. Remove the shortcut
+   at the same location; rerun the script after moving it. For the optional shortcut,
+   the app path must not contain an equals sign; the launcher uses `/usr/bin/env`. Remove the shortcut
    by deleting `~/.local/share/applications/org.eratelookup.desktop.desktop`
    (or the corresponding file under `$XDG_DATA_HOME`). Python 3 is needed only
    for this optional shortcut step.

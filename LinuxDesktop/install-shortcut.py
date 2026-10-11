@@ -4,8 +4,11 @@ from pathlib import Path
 import os
 
 root = Path(__file__).resolve().parent
+if '=' in str(root):
+    raise SystemExit('For an application-menu shortcut, move the app to a path without an equals sign.')
 if not (root / 'ERateLookup').is_file():
     raise SystemExit('Run this script from the extracted Linux package.')
+# Use env as the executable so GLib does not probe a still-escaped %% app path.
 # Desktop Entry quoting differs from shell quoting. Exec also treats % as a field code.
 def desktop_quote(value, executable=False):
     value = str(value)
@@ -25,7 +28,7 @@ launcher.parent.mkdir(parents=True, exist_ok=True)
 icon = str(root / 'ERateLookup.png').replace('\\', '\\\\')
 launcher.write_text('[Desktop Entry]\nType=Application\nName=E-rate Lookup\n'
                     'Comment=Find published E-rate Form 470 and 471 filings\n'
-                    f'Exec={desktop_quote(root / "ERateLookup", executable=True)}\n'
+                    f'Exec=/usr/bin/env -- {desktop_quote(root / "ERateLookup", executable=True)}\n'
                     f'Icon={icon}\nTerminal=false\nCategories=Office;Utility;\n', encoding='utf-8')
 launcher.chmod(0o644)
 print(f'Created {launcher}. Keep the app at {root}; rerun this script after moving it.')
