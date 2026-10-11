@@ -106,10 +106,10 @@ jobs:
             if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
             (Resolve-Path $renamed).Path
           }
-          $androidAssets = Get-ChildItem "ERateLookup-*-android-preview.*" | Where-Object { $_.Extension -in @(".apk", ".zip") } | ForEach-Object { $_.FullName }
-          if (@($androidAssets).Count -ne 2) { throw "Expected Android APK and package ZIP" }
-          $checksums = Get-ChildItem "ERateLookup-*" | Where-Object { $_.Extension -in @(".apk", ".zip") } | Sort-Object Name | ForEach-Object {
-            "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          $androidAssets = Get-ChildItem "ERateLookup-*-android-preview.zip" | ForEach-Object { $_.FullName }
+          if (@($androidAssets).Count -ne 1) { throw "Expected one Android package ZIP" }
+          $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets)) | Sort-Object | ForEach-Object {
+            "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $(Split-Path $_ -Leaf)"
           }
           $checksums | Set-Content SHA256SUMS.txt
           gh release view "$env:RELEASE_TAG" --json tagName 2>$null | Out-Null
