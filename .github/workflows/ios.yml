@@ -24,6 +24,8 @@ jobs:
         run: dotnet run --project Checks/Checks.csproj -c Release
       - name: Build Apple Silicon simulator app
         run: dotnet build iOS/ERateLookup.iOS.csproj -c Debug -r iossimulator-arm64
+      - name: Inspect compiled scene manifest
+        run: plutil -p iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app/Info.plist
       - name: Launch simulator smoke test
         run: |
           xcrun simctl list devices available --json > devices.json
@@ -44,6 +46,11 @@ jobs:
             fi
           done
           cat ios-app.stdout.log ios-app.stderr.log || true
+          if [ "$VISIBLE" != 1 ]; then
+            APP_PID=$(xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -F com.yingyuwang.eratelookup | awk '{print $1}')
+            sample "$APP_PID" 2 -file ios-app.sample.log || true
+            cat ios-app.sample.log || true
+          fi
           test "$VISIBLE" = 1
       - name: Package simulator build
         run: ditto -c -k --sequesterRsrc --keepParent iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app ERateLookup-iOS-simulator.zip
