@@ -16,7 +16,6 @@ Open this repository's **Releases** page and select **v1.0.1**. GitHub's automat
 | `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
 | `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
 | `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
-| `ERateLookup-v1.0.1-android-preview.apk` | Android 8.0+ ARM64 phone/tablet; x64 emulators | Nothing extra; runtime bundled |
 | `ERateLookup-v1.0.1-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK includes its runtime.
@@ -25,7 +24,7 @@ Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` o
 
 ## Install on Android
 
-1. On your phone/tablet, open [release v1.0.1](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.1) and download **ERateLookup-v1.0.1-android-preview.apk**. The package ZIP is also available with the installation guide and notices. `SHA256SUMS.txt` covers all platform packages.
+1. On your phone/tablet, open [release v1.0.1](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.1) and download **ERateLookup-v1.0.1-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.1-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
 2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
 3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
 4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.
@@ -83,11 +82,11 @@ dotnet publish Android/ERateLookup.Android.csproj -c Release -p:AndroidSdkDirect
 
 The dependency command accepts Android SDK licenses; read the terms before using it. Python 3 is required for the verifier regression tests. Install the **`*-Signed.apk`** from `publish/android/`; it bundles .NET and SQLite for ARM64/x64. The default local build uses a debug signing key. For stable updates, follow the [private release-key instructions](Android/README.md#signing-stable-updates). Keep keystores/passwords out of git.
 
-For cloud builds, run the **Android preview APK** workflow in GitHub Actions and download its **ERateLookup-Android-preview** artifact. Tagged releases also build and attach the Android preview APK/ZIP.
+For cloud builds, run the **Android preview APK** workflow in GitHub Actions and download its **ERateLookup-Android-preview** artifact. Tagged releases also build and attach the Android preview package ZIP.
 
 ## GitHub Actions and releases
 
-The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures plus the Android preview, runs the shared/security checks, and attaches the desktop ZIPs, Android APK/ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
+The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures plus the Android preview, runs the shared/security checks, and attaches the desktop ZIPs, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 
 ```sh
 git add .
