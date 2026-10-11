@@ -9,7 +9,7 @@
 
 ## Download the APK
 
-For v1.0.1, open this repository’s **Releases** page and download **ERateLookup-v1.0.1-android-preview.apk** directly. The Android package ZIP includes this guide and notices. Check the shared `SHA256SUMS.txt` if verifying your download.
+For v1.0.1, open this repository’s **Releases** page and download **ERateLookup-v1.0.1-android-preview.zip**. Extract it in Files/your file manager; the ZIP contains **ERateLookup-v1.0.1-android-preview.apk**, this guide, and notices. Check the shared `SHA256SUMS.txt` if verifying your download.
 
 The following Actions method is also available for development builds.
 
@@ -18,7 +18,7 @@ The following Actions method is also available for development builds.
 3. Open the downloaded artifact ZIP in Files or your file manager and extract it. The installable file is **ERateLookup-v1.0.1-android-preview.apk**. Do not install GitHub's source-code ZIP. The artifact also contains a package ZIP with this guide, license, notices, and checksums.
 4. Optional: verify the APK against the artifact's **SHA256SUMS.txt** with a trusted checksum tool. This detects an incomplete or altered download; a checksum alone does not verify publisher identity.
 
-Tagged releases include the preview APK after all platform builds and package checks succeed.
+Tagged releases include the preview package ZIP after all platform builds and package checks succeed.
 
 ## Install on a phone or tablet
 
