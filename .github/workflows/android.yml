@@ -1,0 +1,53 @@
+name: Android preview APK
+on:
+  pull_request:
+    branches: [main]
+    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/verify_android_apk.py', '.github/workflows/android.yml']
+  push:
+    branches: [main]
+    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/verify_android_apk.py', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.401'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: '21'
+      - name: Install Android workload
+        run: dotnet workload install android --version 10.0.401
+      - name: Install matching Android SDK components
+        run: dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
+      - name: Shared offline checks
+        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Publish standalone preview APK
+        run: dotnet publish Android/ERateLookup.Android.csproj -c Release -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -o publish/android
+      - name: Verify and package APK
+        run: |
+          python - <<'PY'
+          import hashlib, pathlib, shutil, subprocess, os, zipfile
+          apks = list(pathlib.Path('publish/android').glob('*-Signed.apk'))
+          if len(apks) != 1: raise SystemExit(f'Expected one universal signed APK, found {len(apks)}')
+          tools = sorted(pathlib.Path(os.environ['ANDROID_HOME'], 'build-tools').glob('*/apksigner'), key=lambda p: tuple(int(x) for x in p.parent.name.split('.') if x.isdigit()))[-1].parent
+          subprocess.run(['python', 'scripts/verify_android_apk.py', str(apks[0]), '--aapt', str(tools/'aapt'), '--apksigner', str(tools/'apksigner')], check=True)
+          out = pathlib.Path('artifacts'); out.mkdir()
+          apk = out/'ERateLookup-v1.1.0-android-preview.apk'; shutil.copy2(apks[0], apk)
+          package = out/'ERateLookup-v1.1.0-android-preview.zip'
+          with zipfile.ZipFile(package, 'w', zipfile.ZIP_DEFLATED) as z:
+              z.write(apk, apk.name)
+              for source, target in [('docs/ANDROID_INSTALL.md','ANDROID_INSTALL.md'), ('LICENSE','LICENSE'), ('THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')]: z.write(source, target)
+          (out/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in [apk, package]))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-Android-preview
+          path: artifacts/*
+          retention-days: 30

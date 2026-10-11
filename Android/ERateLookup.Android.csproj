@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <ApplicationId>com.yingyuwang.eratelookup.android</ApplicationId>
+    <ApplicationTitle>E-rate Lookup</ApplicationTitle>
+    <ApplicationVersion>110</ApplicationVersion>
+    <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
+    <RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+    <AndroidPackageFormats>apk</AndroidPackageFormats>
+    <EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+    <!-- Standalone preview; preserve Core's reflection-based JSON models. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <AndroidResource Include="../Assets/ERateLookup.png" Link="Resources/drawable/app_icon.png" />
+    <AndroidAsset Include="../LICENSE" Link="Assets/LICENSE.txt" />
+    <AndroidAsset Include="../THIRD_PARTY_NOTICES.md" Link="Assets/THIRD_PARTY_NOTICES.md" />
+  </ItemGroup>
+</Project>
