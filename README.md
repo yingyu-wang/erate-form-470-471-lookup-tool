@@ -4,7 +4,7 @@
 
 A portable C#/.NET 10 desktop tool for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.0 · MIT license · Windows x64 and macOS Arm64/x64**
+**Version 1.0.0 · MIT license · Windows x64/ARM64 and macOS Arm64/x64**
 
 ## Download and run
 
@@ -13,6 +13,7 @@ Open this repository's **Releases** page and select **v1.0.0**. GitHub's automat
 | Release asset | Computer | Install first |
 | --- | --- | --- |
 | `ERateLookup-v1.0.0-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
+| `ERateLookup-v1.0.0-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
 | `ERateLookup-v1.0.0-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
 | `ERateLookup-v1.0.0-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
 
@@ -44,7 +45,7 @@ Install the .NET 10 SDK. Open this folder in VS Code or open `ERate470Lookup.sln
 dotnet run --project Checks/Checks.csproj -c Release
 ```
 
-On Windows, use `Run-Windows.bat` to launch from source or `Publish-Windows.bat` to create the framework-dependent EXE under `publish/win-x64-framework`.
+On Windows, use `Run-Windows.bat` to launch from source or `Publish-Windows.bat` to create the framework-dependent EXE under `publish/win-x64-framework`. For Windows on ARM, use `Publish-Windows-ARM64.bat`; its native ARM64 executable is written to `publish/win-arm64-framework`. See [Windows ARM64 instructions](docs/WINDOWS_ARM64.md).
 
 On macOS, install Python 3 as well, then run:
 
@@ -56,7 +57,7 @@ bash Publish-Mac.sh osx-x64
 
 ## GitHub Actions and releases
 
-The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds Windows and both Mac architectures, runs the shared checks, and attaches the platform ZIP files to a GitHub Release.
+The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures, runs the shared checks, and attaches the platform ZIP files to a GitHub Release.
 
 ```sh
 git add .

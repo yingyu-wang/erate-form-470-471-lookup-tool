@@ -11,6 +11,9 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        rid: [win-x64, win-arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -20,19 +23,20 @@ jobs:
         run: dotnet build ERate470Lookup.sln -c Release
       - name: Run offline checks
         run: dotnet run --project Checks/Checks.csproj -c Release --no-build
-      - name: Publish Windows x64
-        run: dotnet publish Desktop/ERate470Lookup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-x64-framework
+      - name: Publish Windows ${{ matrix.rid }}
+        run: dotnet publish Desktop/ERate470Lookup.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/${{ matrix.rid }}-framework
       - name: Package executable and instructions
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path package -Force | Out-Null
-          Copy-Item publish/win-x64-framework/ERate470Lookup.exe package/
+          Copy-Item publish/${{ matrix.rid }}-framework/ERate470Lookup.exe package/
           Copy-Item README.md,LICENSE,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
-          Compress-Archive -Path package/* -DestinationPath ERateLookup-win-x64.zip
+          if ('${{ matrix.rid }}' -eq 'win-arm64') { Copy-Item docs/WINDOWS_ARM64.md package/ }
+          Compress-Archive -Path package/* -DestinationPath ERateLookup-${{ matrix.rid }}.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: ERateLookup-win-x64
-          path: ERateLookup-win-x64.zip
+          name: ERateLookup-${{ matrix.rid }}
+          path: ERateLookup-${{ matrix.rid }}.zip
           retention-days: 7
   mac-build:
     runs-on: macos-latest
@@ -65,7 +69,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: ERateLookup-win-x64
+          pattern: ERateLookup-win-*
+          merge-multiple: true
       - uses: actions/download-artifact@v4
         with:
           pattern: ERateLookup-macOS-*
@@ -82,8 +87,12 @@ jobs:
             Write-Host "Release already exists; retaining its published assets."
             exit 0
           }
-          $asset = "ERateLookup-$env:RELEASE_TAG-win-x64.zip"
-          Move-Item ERateLookup-win-x64.zip $asset
+          $windowsAssets = Get-ChildItem "ERateLookup-win-*.zip" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-$env:RELEASE_TAG-win-$architecture.zip"
+            Move-Item $_.FullName $renamed
+            (Resolve-Path $renamed).Path
+          }
           $macAssets = Get-ChildItem "ERateLookup-v*-macos-*.zip" | ForEach-Object {
             $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
             $renamed = "ERateLookup-$env:RELEASE_TAG-macos-$architecture.zip"
@@ -94,4 +103,4 @@ jobs:
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           }
           $checksums | Set-Content SHA256SUMS.txt
-          gh release create "$env:RELEASE_TAG" "$asset" @macAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes "Runtime-dependent builds. Windows requires .NET 10 Desktop Runtime x64; macOS requires matching .NET 10 Runtime Arm64 or x64. Mac builds are unsigned previews and need macOS launch testing. Source is MIT-licensed; each package includes the license and third-party notices."
+          gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes "Runtime-dependent builds. Windows requires .NET 10 Desktop Runtime matching x64 or ARM64; macOS requires matching .NET 10 Runtime Arm64 or x64. Mac builds are unsigned previews and need macOS launch testing. Source is MIT-licensed; each package includes the license and third-party notices."
