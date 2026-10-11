@@ -50,9 +50,9 @@ public sealed class PortfolioForm : Form
             Action("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})),counts),0,3);
         layout.Controls.Add(results,0,4);
         layout.Controls.Add(Row(Action("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})),Action("Next",()=>Do(()=>{page++;Render();})),
-            Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!IsDisposed)MessageBox.Show(this,text,"Source-backed dates");}),Action("History / summary",()=>Do(()=>MessageBox.Show(this,PortfolioInsights.Summary(session,directory),"Saved district history"))),
+            Action("Change history",()=>Do(()=>MessageBox.Show(this,session.ChangeHistory(),"Unread changes"))),Action("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})),Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!IsDisposed)MessageBox.Show(this,text,"Source-backed dates");}),Action("History / summary",()=>Do(()=>MessageBox.Show(this,PortfolioInsights.Summary(session,directory),"Saved district history"))),
             Action("Open selected PDF",()=>Do(()=>{if(results.SelectedItem is PortfolioRow r&&Uri.TryCreate(r.Filing?.Pdf,UriKind.Absolute,out var uri)&&uri.Scheme=="https")System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri){UseShellExecute=true});else throw new InvalidOperationException("Select an application with an HTTPS document link.");})),
-            Action("Clear saved history",()=>Do(()=>{if(MessageBox.Show(this,"Delete all saved filing snapshots? Watchlists are retained.","Clear history",MessageBoxButtons.YesNo)==DialogResult.Yes){session.Store.ClearHistory();session.LoadSaved(Queries(false));Render();}}))),0,5);
+            Action("Clear saved history",()=>Do(()=>{if(MessageBox.Show(this,"Delete all saved filing snapshots? Watchlists are retained.","Clear history",MessageBoxButtons.YesNo)==DialogResult.Yes){session.Store.ClearHistory();session.ClearView();Render();}}))),0,5);
         layout.Controls.Add(status,0,6);
         gated.AddRange(new Control[]{lists,listName,entries,ben,name,tags,years,forms,keyword,service,changes,results});
         lists.SelectedIndexChanged+=(_,_)=>{listName.Text=(lists.SelectedItem as Watchlist)?.Name??"";ReloadEntries();};
@@ -68,7 +68,7 @@ public sealed class PortfolioForm : Form
     async Task Run(Func<Task> action)
     {
         if(operation is not null)return;using var current=new CancellationTokenSource();operation=current;foreach(var c in gated)c.Enabled=false;
-        try{await action();}catch(Exception ex){if(!IsDisposed)status.Text=ex.Message;}
+        try{await action();}catch(Exception ex){if(!IsDisposed)status.Text=ex is OperationCanceledException?"Canceled. A selected export destination may contain an incomplete file.":ex.Message;}
         finally{operation=null;if(!IsDisposed)foreach(var c in gated)c.Enabled=true;}
     }
     async Task RefreshAsync(bool single)
@@ -87,14 +87,16 @@ public sealed class PortfolioForm : Form
     {
         var id=RequireList();using var dialog=new OpenFileDialog{Filter="BEN CSV (*.csv)|*.csv"};if(dialog.ShowDialog(this)!=DialogResult.OK)return;
         if(new FileInfo(dialog.FileName).Length>1024*1024)throw new ArgumentException("CSV exceeds 1 MiB.");
-        var preview=PortfolioSession.ParseCsv(await File.ReadAllTextAsync(dialog.FileName));
+        using var input=File.OpenRead(dialog.FileName);
+        var preview=await PortfolioSession.ReadCsvAsync(input,operation!.Token);operation.Token.ThrowIfCancellationRequested();
         if(MessageBox.Show(this,$"Import {preview.Entries.Count} valid BENs?\n{string.Join("\n",preview.Errors.Take(10))}\nExisting BENs will be skipped. Extra columns are ignored.","Import preview",MessageBoxButtons.YesNo)!=DialogResult.Yes)return;
-        var existing=session.Store.Entries(id).Select(e=>e.Ben).ToHashSet();var added=0;
-        foreach(var e in preview.Entries.Where(e=>!existing.Contains(e.Ben))){session.Store.SaveEntry(id,e);added++;}ReloadEntries();status.Text=$"Imported {added} BENs.";
+        operation!.Token.ThrowIfCancellationRequested();
+        var added=await Task.Run(()=>session.Store.ImportEntries(id,preview.Entries,operation.Token));
+        if (!IsDisposed){ReloadEntries();status.Text=$"Imported {added} BENs.";}
     }
     async Task ExportAsync()
     {
-        var rows=session.ExportRows();using var dialog=new SaveFileDialog{Filter="Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv",FileName="E-rate-portfolio.xlsx"};if(dialog.ShowDialog(this)!=DialogResult.OK)return;
+        var rows=session.ExportRows(directory);using var dialog=new SaveFileDialog{Filter="Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv",FileName="E-rate-portfolio.xlsx"};if(dialog.ShowDialog(this)!=DialogResult.OK)return;
         await Task.Run(()=>{if(Path.GetExtension(dialog.FileName).Equals(".csv",StringComparison.OrdinalIgnoreCase))DataExporter.WriteCsv(dialog.FileName,rows,operation!.Token);else DataExporter.WriteExcel(dialog.FileName,rows,operation!.Token);});status.Text=$"Exported {rows.Count-1} selected results.";
     }
 }

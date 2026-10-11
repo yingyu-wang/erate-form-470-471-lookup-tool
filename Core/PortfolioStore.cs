@@ -19,7 +19,8 @@ public sealed record LookupKey(string Ben, int Year, FilingForm Form)
 }
 public sealed record FilingChange(string Application, string Kind, string Before, string After);
 public sealed record SavedLookup(LookupKey Key, DateTimeOffset ObservedAt, long Sequence,
-    List<Filing> Filings, List<FilingChange> Changes);
+    List<Filing> Filings, List<FilingChange> Changes, bool FirstObservation = false);
+public sealed record SavedChange(long Sequence,FilingChange Change,DateTimeOffset ObservedAt);
 
 /// <summary>Durable user data, separate from the disposable HTTP query cache.</summary>
 public sealed class PortfolioStore
@@ -36,7 +37,7 @@ public sealed class PortfolioStore
         using var tx = db.BeginTransaction();
         using var version = Command(db, tx, "PRAGMA user_version");
         var schema = Convert.ToInt32(version.ExecuteScalar(), CultureInfo.InvariantCulture);
-        if (schema > 1) throw new InvalidOperationException("Saved portfolio data belongs to a newer app. Update the app; the data has not been changed.");
+        if (schema > 2) throw new InvalidOperationException("Saved portfolio data belongs to a newer app. Update the app; the data has not been changed.");
         if (schema == 0)
         {
             using var migration = Command(db, tx, """
@@ -50,6 +51,17 @@ public sealed class PortfolioStore
                 PRAGMA user_version=1;
                 """);
             migration.ExecuteNonQuery();
+        }
+        if(schema<2)
+        {
+            using var migration=Command(db,tx,"""
+                ALTER TABLE sequence ADD COLUMN cleared_through INTEGER NOT NULL DEFAULT 0;
+                CREATE TABLE change_events(query_key TEXT NOT NULL,sequence INTEGER NOT NULL,application TEXT NOT NULL,
+                  observed_utc TEXT NOT NULL,payload TEXT NOT NULL,acknowledged_utc TEXT,
+                  PRIMARY KEY(query_key,sequence,application));
+                CREATE TABLE lookup_outcomes(query_key TEXT PRIMARY KEY,sequence INTEGER NOT NULL,outcome TEXT NOT NULL,observed_utc TEXT NOT NULL);
+                PRAGMA user_version=2;
+                """);migration.ExecuteNonQuery();
         }
         tx.Commit();
     }
@@ -118,6 +130,21 @@ public sealed class PortfolioStore
     {
         using var db=Open(); using var c=Command(db,null,"DELETE FROM entries WHERE list_id=$id AND ben=$ben",("$id",id),("$ben",ben)); c.ExecuteNonQuery();
     }
+    public int ImportEntries(string id,IReadOnlyList<WatchlistEntry> entries,CancellationToken ct=default)
+    {
+        using var db=Open();using var tx=db.BeginTransaction();
+        using var existing=Command(db,tx,"SELECT ben FROM entries WHERE list_id=$id",("$id",id));
+        var bens=new HashSet<string>();using(var reader=existing.ExecuteReader())while(reader.Read())bens.Add(reader.GetString(0));
+        var pending=entries.Where(e=>!bens.Contains(e.Ben)).DistinctBy(e=>e.Ben).ToList();
+        if(bens.Count+pending.Count>500)throw new InvalidOperationException("Import would exceed 500 BENs. No entries were added.");
+        foreach(var entry in pending)
+        {
+            ct.ThrowIfCancellationRequested();new LookupKey(entry.Ben,2027,FilingForm.Form470).Validate();
+            if(entry.Ben.Length>32)throw new ArgumentException("BEN is too long.");
+            using var c=Command(db,tx,"INSERT INTO entries VALUES($id,$ben,$name,$tags)",("$id",id),("$ben",entry.Ben),("$name",Text(entry.Name,200,"Display name")),("$tags",Text(entry.Tags,300,"Tags")));c.ExecuteNonQuery();
+        }
+        ct.ThrowIfCancellationRequested();tx.Commit();return pending.Count;
+    }
     // Allocated immediately before starting the network observation. Global across app processes.
     public long BeginObservation()
     {
@@ -134,24 +161,50 @@ public sealed class PortfolioStore
         using var c=Command(db,tx,"SELECT payload FROM snapshots WHERE query_key=$key",("$key",key.Id));
         return c.ExecuteScalar() is string json ? JsonSerializer.Deserialize<SavedLookup>(json,Json) : null;
     }
-    public bool SaveLive(LookupKey key, long sequence, QueryResult<List<Filing>> result)
+    public bool SaveLive(LookupKey key, long sequence, QueryResult<List<Filing>> result,CancellationToken ct=default)
     {
         key.Validate(); if(result.FromCache) return false;
         if(result.Data.Any(f=>f.Ben!=key.Ben || string.IsNullOrWhiteSpace(f.Number)) || result.Data.Select(f=>f.Number).Distinct().Count()!=result.Data.Count)
             throw new InvalidOperationException("The returned applications do not form a valid complete snapshot.");
         using var db=Open(); using var tx=db.BeginTransaction(); var old=Read(db,tx,key);
+        using var watermark=Command(db,tx,"SELECT cleared_through FROM sequence");
+        if(sequence<=Convert.ToInt64(watermark.ExecuteScalar()))return false;
         if(old is not null && sequence<=old.Sequence) return false;
         var changes=old is null ? new List<FilingChange>() : Compare(old.Filings,result.Data);
-        var saved=new SavedLookup(key,result.FetchedAt,sequence,result.Data,changes);
+        var saved=new SavedLookup(key,result.FetchedAt,sequence,result.Data,changes,old is null);
         using var c=Command(db,tx,"""
             INSERT INTO snapshots(query_key,sequence,payload,previous_payload) VALUES($key,$seq,$data,$old)
             ON CONFLICT(query_key) DO UPDATE SET sequence=excluded.sequence,payload=excluded.payload,previous_payload=excluded.previous_payload
             """,("$key",key.Id),("$seq",sequence),("$data",JsonSerializer.Serialize(saved,Json)),("$old",old is null ? null : JsonSerializer.Serialize(old with { Changes=[] },Json)));
-        c.ExecuteNonQuery(); tx.Commit(); return true;
+        c.ExecuteNonQuery();
+        foreach(var change in changes)
+        {
+            using var add=Command(db,tx,"INSERT INTO change_events(query_key,sequence,application,observed_utc,payload) VALUES($key,$seq,$app,$utc,$data)",
+                ("$key",key.Id),("$seq",sequence),("$app",change.Application),("$utc",result.FetchedAt.ToUniversalTime().ToString("O")),("$data",JsonSerializer.Serialize(change,Json)));add.ExecuteNonQuery();
+        }
+        using var cleanup=Command(db,tx,"DELETE FROM change_events WHERE acknowledged_utc IS NOT NULL AND acknowledged_utc < $cutoff",("$cutoff",DateTimeOffset.UtcNow.AddDays(-90).ToString("O")));cleanup.ExecuteNonQuery();
+        ct.ThrowIfCancellationRequested();tx.Commit(); return true;
+    }
+    public List<SavedChange> UnreadChanges(LookupKey key)
+    {
+        using var db=Open();using var c=Command(db,null,"SELECT sequence,observed_utc,payload FROM change_events WHERE query_key=$key AND acknowledged_utc IS NULL ORDER BY sequence,application",("$key",key.Id));using var r=c.ExecuteReader();var changes=new List<SavedChange>();
+        while(r.Read())changes.Add(new(r.GetInt64(0),JsonSerializer.Deserialize<FilingChange>(r.GetString(2),Json)!,DateTimeOffset.Parse(r.GetString(1),CultureInfo.InvariantCulture)));return changes;
+    }
+    public void Acknowledge(LookupKey key,long throughSequence)
+    {
+        using var db=Open();using var c=Command(db,null,"UPDATE change_events SET acknowledged_utc=$utc WHERE query_key=$key AND sequence<=$seq AND acknowledged_utc IS NULL",("$key",key.Id),("$seq",throughSequence),("$utc",DateTimeOffset.UtcNow.ToString("O")));c.ExecuteNonQuery();
+    }
+    public void RecordOutcome(LookupKey key,long sequence,string outcome)
+    {
+        using var db=Open();using var c=Command(db,null,"""
+            INSERT INTO lookup_outcomes VALUES($key,$seq,$outcome,$utc)
+            ON CONFLICT(query_key) DO UPDATE SET sequence=excluded.sequence,outcome=excluded.outcome,observed_utc=excluded.observed_utc
+            WHERE excluded.sequence>lookup_outcomes.sequence
+            """,("$key",key.Id),("$seq",sequence),("$outcome",outcome),("$utc",DateTimeOffset.UtcNow.ToString("O")));c.ExecuteNonQuery();
     }
     public void ClearHistory()
     {
-        using var db=Open(); using var c=Command(db,null,"DELETE FROM snapshots"); c.ExecuteNonQuery();
+        using var db=Open();using var tx=db.BeginTransaction();using var c=Command(db,tx,"UPDATE sequence SET value=value+1,cleared_through=value+1; DELETE FROM snapshots; DELETE FROM change_events; DELETE FROM lookup_outcomes;");c.ExecuteNonQuery();tx.Commit();
     }
     public static List<FilingChange> Compare(IEnumerable<Filing> before,IEnumerable<Filing> after)
     {
@@ -165,5 +218,5 @@ public sealed class PortfolioStore
         return changes;
     }
     static string Describe(Filing f) => JsonSerializer.Serialize(new { f.Status,f.Certified,f.Nickname,
-        Services=string.Join("; ",f.Services.Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),f.Pdf });
+        Services=string.Join("; ",f.Services.Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),f.Pdf,f.AllowableContractDate });
 }

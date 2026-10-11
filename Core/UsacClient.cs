@@ -94,7 +94,7 @@ public sealed class UsacClient
                 }
             }
         }
-        using var response=await http.GetAsync(endpoint+"?"+query, ct);
+        using var response=await SendAsync(endpoint+"?"+query, ct);
         if (response.StatusCode==HttpStatusCode.TooManyRequests) throw new HttpRequestException("USAC is limiting requests. Please try again shortly.");
         response.EnsureSuccessStatusCode();
         using var stream=await response.Content.ReadAsStreamAsync(ct);
@@ -108,6 +108,22 @@ public sealed class UsacClient
             await command.ExecuteNonQueryAsync(ct);
         }
         return new(rows,fetched,false);
+    }
+    async Task<HttpResponseMessage> SendAsync(string url,CancellationToken ct)
+    {
+        for(var attempt=0;;attempt++)
+        {
+            HttpResponseMessage response;
+            try{response=await http.GetAsync(url,ct);}
+            catch(Exception ex) when(attempt<2&&!ct.IsCancellationRequested&&(ex is HttpRequestException or TaskCanceledException))
+            {await Task.Delay(TimeSpan.FromSeconds(attempt+1),ct);continue;}
+            if(attempt>=2||!(response.StatusCode==HttpStatusCode.TooManyRequests||response.StatusCode is HttpStatusCode.BadGateway or HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout))return response;
+            var retry=response.Headers.RetryAfter;
+            var wait=retry?.Delta??(retry?.Date is { } date?date-DateTimeOffset.UtcNow:TimeSpan.FromSeconds(attempt+1));
+            // A long server delay is reported as a failure; never retry before it expires.
+            if(wait>TimeSpan.FromSeconds(30))return response;
+            response.Dispose();await Task.Delay(wait<TimeSpan.Zero?TimeSpan.Zero:wait,ct);
+        }
     }
     public async Task<QueryResult<EntityResults>> FindEntitiesAsync(string name, string state, bool refresh, CancellationToken ct)
     {

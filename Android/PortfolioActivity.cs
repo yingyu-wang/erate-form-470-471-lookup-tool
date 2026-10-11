@@ -7,6 +7,7 @@ using Android.Views;
 using Android.Widget;
 using ERate470Lookup.Core;
 using Path=System.IO.Path;
+using OperationCanceledException=System.OperationCanceledException;
 
 namespace ERate470Lookup.AndroidApp;
 
@@ -28,7 +29,7 @@ public sealed class PortfolioActivity : Activity
     List<WatchlistEntry> entryItems=[];
     List<PortfolioRow> visible=[];
     CancellationTokenSource? operation;
-    string? pendingExport;
+    string? pendingExport,pendingImportList;
     bool destroyed;
     int page;
     string? ListId=>lists.SelectedItemPosition>=0&&lists.SelectedItemPosition<listItems.Count?listItems[lists.SelectedItemPosition].Id:null;
@@ -50,7 +51,7 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Save BEN",()=>Do(()=>{session.Store.SaveEntry(RequireList(),new(ben.Text??"",name.Text??"",tags.Text??""));ReloadEntries();})));
         root.AddView(Button("Update BEN",()=>Do(()=>{session.Store.SaveEntry(RequireList(),new(ben.Text??"",name.Text??"",tags.Text??""),true);ReloadEntries();})));
         root.AddView(Button("Remove BEN",()=>Do(()=>{session.Store.RemoveEntry(RequireList(),ben.Text?.Trim()??"");ReloadEntries();})));
-        root.AddView(Button("Import BEN CSV",()=>Do(()=>{RequireList();var intent=new Intent(Intent.ActionOpenDocument);intent.AddCategory(Intent.CategoryOpenable);intent.SetType("*/*");StartActivityForResult(intent,ImportRequest);})));
+        root.AddView(Button("Import BEN CSV",()=>Do(()=>{pendingImportList=RequireList();var intent=new Intent(Intent.ActionOpenDocument);intent.AddCategory(Intent.CategoryOpenable);intent.SetType("*/*");StartActivityForResult(intent,ImportRequest);})));
         years=Field(root,"Funding years (comma separated)");years.Text=(DateTime.Now.Year+1).ToString();forms=Picker(root,"Forms",new[]{"Form 470","Form 471","Both forms"});
         root.AddView(Button("Refresh watchlist",()=>RefreshAsync(false)));root.AddView(Button("Refresh selected BEN",()=>RefreshAsync(true)));
         root.AddView(Button("Open saved / offline",()=>Do(()=>{session.LoadSaved(Queries(false));page=0;Render();status.Text="Saved results; no network request made.";})));
@@ -61,13 +62,16 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})));
         counts=Label("");root.AddView(counts);status=Label("");status.SetTextIsSelectable(true);root.AddView(status);results=Column();root.AddView(results);gated.Add(results);
         root.AddView(Button("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})));root.AddView(Button("Next",()=>Do(()=>{page++;Render();})));
+        root.AddView(Button("Change history",()=>Do(()=>new AlertDialog.Builder(this)!.SetTitle("Unread changes")!.SetMessage(session.ChangeHistory())!.SetPositiveButton("Close",(_,_)=>{})!.Show())));
+        root.AddView(Button("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})));
         root.AddView(Button("Export selected CSV",()=>PrepareExportAsync("csv")));root.AddView(Button("Export selected Excel",()=>PrepareExportAsync("xlsx")));
         root.AddView(Button("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!destroyed)new AlertDialog.Builder(this)!.SetTitle("Source-backed dates")!.SetMessage(text)!.SetPositiveButton("Close",(_,_)=>{})!.Show();}));
         root.AddView(Button("History / summary",()=>Do(()=>new AlertDialog.Builder(this)!.SetTitle("District history")!.SetMessage(PortfolioInsights.Summary(session,directory))!.SetPositiveButton("Close",(_,_)=>{})!.Show())));
-        root.AddView(Button("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.LoadSaved(Queries(false));Render();}}));
+        root.AddView(Button("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.ClearView();Render();}}));
         lists.ItemSelected+=(_,_)=>{listName.Text=listItems.FirstOrDefault(l=>l.Id==ListId)?.Name??"";ReloadEntries();};
         entries.ItemSelected+=(_,_)=>{if(entries.SelectedItemPosition>=0&&entries.SelectedItemPosition<entryItems.Count){var e=entryItems[entries.SelectedItemPosition];ben.Text=e.Ben;name.Text=e.Name;tags.Text=e.Tags;}};
         var pending=saved?.GetString("pendingPortfolioExport");if(pending is not null&&Path.GetDirectoryName(pending)==CacheDir!.AbsolutePath&&File.Exists(pending))pendingExport=pending;
+        pendingImportList=saved?.GetString("pendingImportList");
         ReloadLists(saved?.GetString("portfolioList"));
         years.Text=saved?.GetString("portfolioYears")??years.Text;
         if(saved is not null)forms.SetSelection(saved.GetInt("portfolioForms",0));
@@ -88,12 +92,13 @@ public sealed class PortfolioActivity : Activity
     {listItems=session.Store.Lists();SetItems(lists,listItems.Select(l=>l.Name));lists.SetSelection(Math.Max(0,listItems.FindIndex(l=>l.Id==selected)));ReloadEntries();}
     void ReloadEntries(){entryItems=ListId is null?[]:session.Store.Entries(ListId);SetItems(entries,entryItems.Select(e=>e.ToString()));}
     List<LookupKey> Queries(bool single)=>PortfolioSession.Queries(single?entries.SelectedItemPosition>=0&&entries.SelectedItemPosition<entryItems.Count?new[]{entryItems[entries.SelectedItemPosition]}:throw new InvalidOperationException("Select a saved BEN first."):session.Store.Entries(RequireList()),PortfolioSession.ParseYears(years.Text??""),forms.SelectedItemPosition);
+    static void Enable(View view,bool enabled){view.Enabled=enabled;if(view is ViewGroup group)for(var i=0;i<group.ChildCount;i++)Enable(group.GetChildAt(i)!,enabled);}
     async Task Run(Func<Task> action,bool allowPending=false)
     {
         if(destroyed||operation is not null||(pendingExport is not null&&!allowPending))return;
-        using var current=new CancellationTokenSource();operation=current;foreach(var c in gated)c.Enabled=false;
+        using var current=new CancellationTokenSource();operation=current;foreach(var c in gated)Enable(c,false);
         try{await action();}catch(Exception ex){if(!destroyed)status.Text=ex is OperationCanceledException?"Canceled. A selected export destination may contain an incomplete file.":ex.Message;}
-        finally{operation=null;if(!destroyed)foreach(var c in gated)c.Enabled=true;}
+        finally{operation=null;if(!destroyed)foreach(var c in gated)Enable(c,true);}
     }
     async Task RefreshAsync(bool single)
     {var queries=Queries(single);var progress=new Progress<string>(s=>{if(!destroyed)status.Text=s;});await Task.Run(()=>session.RefreshAsync(queries,progress,operation!.Token));if(!destroyed){page=0;Render();}}
@@ -117,7 +122,7 @@ public sealed class PortfolioActivity : Activity
     }
     async Task PrepareExportAsync(string extension)
     {
-        var rows=session.ExportRows();var path=Path.Combine(CacheDir!.AbsolutePath,"portfolio-"+Guid.NewGuid().ToString("N")+"."+extension);
+        var rows=session.ExportRows(directory);var path=Path.Combine(CacheDir!.AbsolutePath,"portfolio-"+Guid.NewGuid().ToString("N")+"."+extension);
         try
         {
             await Task.Run(()=>{if(extension=="csv")DataExporter.WriteCsv(path,rows,operation!.Token);else DataExporter.WriteExcel(path,rows,operation!.Token);});operation!.Token.ThrowIfCancellationRequested();
@@ -132,11 +137,13 @@ public sealed class PortfolioActivity : Activity
         if(requestCode==ImportRequest&&resultCode==Result.Ok&&data?.Data is { } source)
             await Run(async()=>
             {
-                var id=RequireList();using var input=ContentResolver!.OpenInputStream(source)??throw new IOException("Cannot read CSV.");using var output=new MemoryStream();
-                var buffer=new byte[8192];int count;while((count=await input.ReadAsync(buffer,operation!.Token))>0){if(output.Length+count>1024*1024)throw new ArgumentException("CSV exceeds 1 MiB.");output.Write(buffer,0,count);}
-                var preview=PortfolioSession.ParseCsv(System.Text.Encoding.UTF8.GetString(output.ToArray()));
+                var id=pendingImportList??throw new InvalidOperationException("Choose Import BEN CSV again.");pendingImportList=null;
+                using var input=ContentResolver!.OpenInputStream(source)??throw new IOException("Cannot read CSV.");
+                var preview=await PortfolioSession.ReadCsvAsync(input,operation!.Token);operation.Token.ThrowIfCancellationRequested();
                 if(!await Confirm($"Import {preview.Entries.Count} valid BENs?\n{string.Join("\n",preview.Errors.Take(10))}\nExisting BENs skipped; extra columns ignored."))return;
-                var existing=session.Store.Entries(id).Select(e=>e.Ben).ToHashSet();var added=0;foreach(var e in preview.Entries.Where(e=>!existing.Contains(e.Ben))){session.Store.SaveEntry(id,e);added++;}ReloadEntries();status.Text=$"Imported {added} BENs.";
+                operation!.Token.ThrowIfCancellationRequested();
+                var added=await Task.Run(()=>session.Store.ImportEntries(id,preview.Entries,operation.Token));
+                if(!destroyed){ReloadEntries();status.Text=$"Imported {added} BENs.";}
             });
         if(requestCode==ExportRequest&&pendingExport is string path)
             await Run(async()=>
@@ -150,7 +157,7 @@ public sealed class PortfolioActivity : Activity
             },true);
     }
     protected override void OnSaveInstanceState(Bundle state)
-    {state.PutString("pendingPortfolioExport",pendingExport);state.PutString("portfolioList",ListId);state.PutString("portfolioYears",years.Text);state.PutInt("portfolioForms",forms.SelectedItemPosition);base.OnSaveInstanceState(state);}
+    {if(session is null||lists is null){base.OnSaveInstanceState(state);return;}state.PutString("pendingImportList",pendingImportList);state.PutString("pendingPortfolioExport",pendingExport);state.PutString("portfolioList",ListId);state.PutString("portfolioYears",years.Text);state.PutInt("portfolioForms",forms.SelectedItemPosition);base.OnSaveInstanceState(state);}
     protected override void OnDestroy(){destroyed=true;operation?.Cancel();http.Dispose();base.OnDestroy();}
     sealed class PortfolioInsets:Java.Lang.Object,View.IOnApplyWindowInsetsListener
     {
@@ -158,7 +165,7 @@ public sealed class PortfolioActivity : Activity
         {
             if(view is not null&&insets is not null)
             {
-                if(Build.VERSION.SdkInt>=BuildVersionCodes.R){var bars=insets.GetInsets(WindowInsets.Type.SystemBars()|WindowInsets.Type.Ime());view.SetPadding(bars.Left,bars.Top,bars.Right,bars.Bottom);}
+                if(OperatingSystem.IsAndroidVersionAtLeast(30)){var bars=insets.GetInsets(WindowInsets.Type.SystemBars()|WindowInsets.Type.Ime());view.SetPadding(bars.Left,bars.Top,bars.Right,bars.Bottom);}
                 else view.SetPadding(insets.SystemWindowInsetLeft,insets.SystemWindowInsetTop,insets.SystemWindowInsetRight,insets.SystemWindowInsetBottom);
             }
             return insets!;

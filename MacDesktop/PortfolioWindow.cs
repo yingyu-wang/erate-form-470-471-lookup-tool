@@ -46,8 +46,8 @@ public sealed class PortfolioWindow : Window
         Add(Row(keyword,service,changes,Action("Apply filters",()=>Do(()=>{page=0;Render();})),Action("Select visible",()=>Do(()=>{foreach(var r in visible)session.Selected.Add(r.Id);Render();})),
             Action("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})),counts),3);
         Add(new ScrollViewer{Content=results},4);
-        Add(Row(Action("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})),Action("Next",()=>Do(()=>{page++;Render();})),Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!closed)await ShowText(text);}),
-            Action("History / summary",()=>ShowText(PortfolioInsights.Summary(session,directory))),Action("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.LoadSaved(Queries(false));Render();}})),5);
+        Add(Row(Action("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})),Action("Next",()=>Do(()=>{page++;Render();})),Action("Change history",()=>ShowText(session.ChangeHistory())),Action("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})),Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!closed)await ShowText(text);}),
+            Action("History / summary",()=>ShowText(PortfolioInsights.Summary(session,directory))),Action("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.ClearView();Render();}})),5);
         Add(status,6);gated.AddRange(new Control[]{lists,listName,entries,ben,name,tags,years,forms,keyword,service,changes,results});
         lists.SelectionChanged+=(_,_)=>{listName.Text=(lists.SelectedItem as Watchlist)?.Name??"";ReloadEntries();};
         entries.SelectionChanged+=(_,_)=>{if(entries.SelectedItem is WatchlistEntry e){ben.Text=e.Ben;name.Text=e.Name;tags.Text=e.Tags;}};
@@ -63,7 +63,7 @@ public sealed class PortfolioWindow : Window
     async Task Run(Func<Task> action)
     {
         if(operation is not null)return;using var current=new CancellationTokenSource();operation=current;foreach(var c in gated)c.IsEnabled=false;
-        try{await action();}catch(Exception ex){if(!closed)status.Text=ex.Message;}
+        try{await action();}catch(Exception ex){if(!closed)status.Text=ex is OperationCanceledException?"Canceled. A selected export destination may contain an incomplete file.":ex.Message;}
         finally{operation=null;if(!closed)foreach(var c in gated)c.IsEnabled=true;}
     }
     async Task RefreshAsync(bool single)
@@ -99,16 +99,16 @@ public sealed class PortfolioWindow : Window
     async Task ImportAsync()
     {
         var id=RequireList();var files=await StorageProvider.OpenFilePickerAsync(new(){Title="Import BEN CSV",AllowMultiple=false,FileTypeFilter=new[]{new FilePickerFileType("CSV"){Patterns=new[]{"*.csv"}}}});if(files.Count==0)return;
-        using var file=files[0];await using var stream=await file.OpenReadAsync();using var memory=new MemoryStream();
-        var buffer=new byte[8192];int count;while((count=await stream.ReadAsync(buffer,operation!.Token))>0){if(memory.Length+count>1024*1024)throw new ArgumentException("CSV exceeds 1 MiB.");memory.Write(buffer,0,count);}
-        var preview=PortfolioSession.ParseCsv(System.Text.Encoding.UTF8.GetString(memory.ToArray()));
+        using var file=files[0];await using var stream=await file.OpenReadAsync();
+        var preview=await PortfolioSession.ReadCsvAsync(stream,operation!.Token);operation.Token.ThrowIfCancellationRequested();
         if(!await Confirm($"Import {preview.Entries.Count} valid BENs?\n{string.Join("\n",preview.Errors.Take(10))}\nExisting BENs will be skipped. Extra columns are ignored."))return;
-        var existing=session.Store.Entries(id).Select(e=>e.Ben).ToHashSet();var added=0;
-        foreach(var e in preview.Entries.Where(e=>!existing.Contains(e.Ben))){session.Store.SaveEntry(id,e);added++;}ReloadEntries();status.Text=$"Imported {added} BENs.";
+        operation!.Token.ThrowIfCancellationRequested();
+        var added=await Task.Run(()=>session.Store.ImportEntries(id,preview.Entries,operation.Token));
+        if (!closed){ReloadEntries();status.Text=$"Imported {added} BENs.";}
     }
     async Task ExportAsync()
     {
-        var rows=session.ExportRows();using var file=await StorageProvider.SaveFilePickerAsync(new(){Title="Export selected results",SuggestedFileName="E-rate-portfolio.xlsx",FileTypeChoices=new[]{new FilePickerFileType("Excel"){Patterns=new[]{"*.xlsx"}},new FilePickerFileType("CSV"){Patterns=new[]{"*.csv"}}}});if(file is null)return;
+        var rows=session.ExportRows(directory);using var file=await StorageProvider.SaveFilePickerAsync(new(){Title="Export selected results",SuggestedFileName="E-rate-portfolio.xlsx",FileTypeChoices=new[]{new FilePickerFileType("Excel"){Patterns=new[]{"*.xlsx"}},new FilePickerFileType("CSV"){Patterns=new[]{"*.csv"}}}});if(file is null)return;
         var path=file.TryGetLocalPath()??throw new InvalidOperationException("Choose a local destination.");
         await Task.Run(()=>{if(Path.GetExtension(path).Equals(".csv",StringComparison.OrdinalIgnoreCase))DataExporter.WriteCsv(path,rows,operation!.Token);else DataExporter.WriteExcel(path,rows,operation!.Token);});status.Text=$"Exported {rows.Count-1} selected results.";
     }
