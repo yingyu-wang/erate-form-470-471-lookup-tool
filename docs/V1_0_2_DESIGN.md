@@ -38,7 +38,9 @@ Store portfolio data in a versioned SQLite database in the existing app data
 directory, separate from disposable query caches. Apply additive transactional
 migrations with a schema version; back up before destructive migrations. Do not
 rewrite existing directory/cache tables. Serialize writes per store, use bound SQL
-parameters, and commit snapshot plus comparison events in one transaction.
+parameters, and commit snapshot plus comparison events in one transaction. Reject observations whose request-start
+sequence is older than the current baseline inside that transaction; serialize
+refreshes per query key and retain the freshness check for overlapping processes.
 Future-schema databases must be refused with a useful message, not overwritten.
 
 Track allocated storage and provide **Clear saved history** separately from
