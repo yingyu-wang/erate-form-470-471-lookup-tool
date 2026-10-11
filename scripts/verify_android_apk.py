@@ -1,16 +1,17 @@
 """Verify standalone preview packaging; this does not assert device runtime behavior."""
 import argparse
+from pathlib import Path
 import struct
-import subprocess
 import zipfile
 
 parser = argparse.ArgumentParser()
 parser.add_argument("apk")
-parser.add_argument("--aapt", required=True)
-parser.add_argument("--apksigner", required=True)
+parser.add_argument("--badging-file", required=True, type=Path,
+                    help="UTF-8 output from the CI aapt dump badging step")
 args = parser.parse_args()
-subprocess.run([args.apksigner, "verify", "--verbose", "--print-certs", args.apk], check=True)
-badging = subprocess.check_output([args.aapt, "dump", "badging", args.apk], text=True)
+# External SDK tools are invoked by CI, never from command-line executable paths.
+# Signature verification must succeed there before this data-only check runs.
+badging = args.badging_file.read_text(encoding="utf-8")
 print(badging)
 assert "name='com.yingyuwang.eratelookup.android'" in badging
 assert "versionCode='110'" in badging and "versionName='1.1.0'" in badging

@@ -2,10 +2,10 @@ name: Android preview APK
 on:
   pull_request:
     branches: [main]
-    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/verify_android_apk.py', '.github/workflows/android.yml']
+    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/*android_apk.py', '.github/workflows/android.yml']
   push:
     branches: [main]
-    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/verify_android_apk.py', '.github/workflows/android.yml']
+    paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/*android_apk.py', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,16 +28,28 @@ jobs:
         run: dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
       - name: Shared offline checks
         run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: APK verifier security regression checks
+        run: python -m unittest discover -s scripts -p 'test_verify_android_apk.py' -v
       - name: Publish standalone preview APK
         run: dotnet publish Android/ERateLookup.Android.csproj -c Release -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -o publish/android
       - name: Verify and package APK
+        shell: bash
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(publish/android/*-Signed.apk)
+          if [ "${#apks[@]}" -ne 1 ]; then
+            echo "Expected one universal signed APK, found ${#apks[@]}" >&2
+            exit 1
+          fi
+          # Fixed SDK tool names/version; no executable path supplied to Python.
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "${apks[0]}"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apks[0]}" > publish/android/apk-badging.txt
+          python scripts/verify_android_apk.py "${apks[0]}" --badging-file publish/android/apk-badging.txt
           python - <<'PY'
-          import hashlib, pathlib, shutil, subprocess, os, zipfile
+          import hashlib, pathlib, shutil, zipfile
           apks = list(pathlib.Path('publish/android').glob('*-Signed.apk'))
           if len(apks) != 1: raise SystemExit(f'Expected one universal signed APK, found {len(apks)}')
-          tools = sorted(pathlib.Path(os.environ['ANDROID_HOME'], 'build-tools').glob('*/apksigner'), key=lambda p: tuple(int(x) for x in p.parent.name.split('.') if x.isdigit()))[-1].parent
-          subprocess.run(['python', 'scripts/verify_android_apk.py', str(apks[0]), '--aapt', str(tools/'aapt'), '--apksigner', str(tools/'apksigner')], check=True)
           out = pathlib.Path('artifacts'); out.mkdir()
           apk = out/'ERateLookup-v1.1.0-android-preview.apk'; shutil.copy2(apks[0], apk)
           package = out/'ERateLookup-v1.1.0-android-preview.zip'
