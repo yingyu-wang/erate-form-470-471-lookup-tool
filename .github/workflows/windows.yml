@@ -31,7 +31,10 @@ jobs:
           New-Item -ItemType Directory -Path package -Force | Out-Null
           Copy-Item publish/${{ matrix.rid }}-framework/ERate470Lookup.exe package/
           Copy-Item README.md,LICENSE,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
-          if ('${{ matrix.rid }}' -eq 'win-arm64') { Copy-Item docs/WINDOWS_ARM64.md package/ }
+          if ('${{ matrix.rid }}' -eq 'win-arm64') {
+            Copy-Item docs/WINDOWS_ARM64.md package/
+            (Get-Content package/README.md -Raw).Replace('docs/WINDOWS_ARM64.md', 'WINDOWS_ARM64.md') | Set-Content package/README.md
+          }
           Compress-Archive -Path package/* -DestinationPath ERateLookup-${{ matrix.rid }}.zip
       - uses: actions/upload-artifact@v4
         with:
@@ -82,11 +85,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$env:RELEASE_TAG" --json tagName --jq .tagName 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release already exists; retaining its published assets."
-            exit 0
-          }
           $windowsAssets = Get-ChildItem "ERateLookup-win-*.zip" | ForEach-Object {
             $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
             $renamed = "ERateLookup-$env:RELEASE_TAG-win-$architecture.zip"
@@ -103,4 +101,17 @@ jobs:
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
           }
           $checksums | Set-Content SHA256SUMS.txt
+          gh release view "$env:RELEASE_TAG" --json assets --jq '.assets[].name' 2>$null | Set-Variable -Name existingAssets
+          if ($LASTEXITCODE -eq 0) {
+            # Add missing packages with individual checksums; never replace published binaries.
+            foreach ($file in @($windowsAssets) + @($macAssets)) {
+              $name = Split-Path $file -Leaf
+              if (@($existingAssets) -contains $name) { continue }
+              $checksumFile = "$file.sha256"
+              "$((Get-FileHash $file -Algorithm SHA256).Hash.ToLower())  $name" | Set-Content $checksumFile
+              gh release upload "$env:RELEASE_TAG" "$file" "$checksumFile"
+              if ($LASTEXITCODE -ne 0) { throw "Could not upload $name" }
+            }
+            exit 0
+          }
           gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes "Runtime-dependent builds. Windows requires .NET 10 Desktop Runtime matching x64 or ARM64; macOS requires matching .NET 10 Runtime Arm64 or x64. Mac builds are unsigned previews and need macOS launch testing. Source is MIT-licensed; each package includes the license and third-party notices."
