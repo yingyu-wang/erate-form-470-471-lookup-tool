@@ -8,7 +8,7 @@ A portable C#/.NET 10 desktop tool with an Android development preview for findi
 
 ## Download and run
 
-Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform ZIP to run the app.
+Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ For cloud builds, run the **Android preview APK** workflow in GitHub Actions and
 
 ## GitHub Actions and releases
 
-The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures plus the Android preview, runs the shared/security checks, and attaches the desktop ZIPs, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
+The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds Windows, macOS, and Linux x64/ARM64 packages plus the Android preview, runs the shared/security checks, and attaches the Windows/macOS ZIPs, Linux tar.gz archives, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 
 ```sh
 git add .
@@ -124,7 +124,9 @@ git tag v1.0.2
 git push origin v1.0.2
 ```
 
-Keep executables, ZIPs, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
+The **Publish Linux to v1.0.1** workflow can add the Linux packages to the existing release from `main`, regenerate the seven-package checksum file, and record the exact Linux source commit. The original v1.0.1 tag remains unchanged.
+
+Keep executables, package archives, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
 
 ## Project layout
 
@@ -138,13 +140,17 @@ Keep executables, ZIPs, caches, and user settings out of the source repository; 
 | `Assets/` | PNG, ICO, and ICNS app icon |
 | `Checks/` | Shared verification program |
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
+| `Publish-Linux.sh` / `scripts/package_linux.py` | Creates self-contained Linux tar.gz archives |
+| `.github/workflows/linux.yml` | Native Linux x64/ARM64 builds and window launch checks |
+| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.1 release |
+| `docs/LINUX_INSTALL.md` | Linux installation, dependencies, shortcuts, and compilation |
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
 | `docs/ANDROID_INSTALL.md` | Android installation, updates, exports, and troubleshooting |
 
 ## Current limitations
 
-GUI launch and appearance still require hands-on Windows and Mac testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
+GUI launch and appearance still require hands-on Windows and Mac testing. Linux CI validates native window launch on x64 and ARM64; interactive lookup, selection, export, and browser opening still require hands-on desktop testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
 
 See [Windows user guide](docs/USER_GUIDE.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
 

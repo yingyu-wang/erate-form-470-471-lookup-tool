@@ -4,15 +4,18 @@ from pathlib import Path
 import shutil
 import sys
 import tarfile
-import xml.etree.ElementTree as ET
+import re
 
 root = Path(__file__).resolve().parents[1]
 if len(sys.argv) != 2 or sys.argv[1] not in ('linux-x64', 'linux-arm64'):
     raise SystemExit('Use linux-x64 or linux-arm64')
 rid = sys.argv[1]
-version = ET.parse(root / 'LinuxDesktop/ERateLookup.Linux.csproj').findtext('.//Version')
-if not version or not all(c.isdigit() or c == '.' for c in version):
-    raise SystemExit('Invalid Linux package version')
+# Read the literal project version without interpreting XML entities or DTDs.
+versions = re.findall(r'<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>',
+                      (root / 'LinuxDesktop/ERateLookup.Linux.csproj').read_text())
+if len(versions) != 1:
+    raise SystemExit('Expected one literal numeric Linux package version')
+version = versions[0]
 output = root / 'publish' / rid
 binary_dir = output / 'bin'
 for required in ('ERateLookup', 'libcoreclr.so', 'libSkiaSharp.so', 'libe_sqlite3.so'):
