@@ -72,6 +72,7 @@ public class MainActivity : Activity
         suggestions = Column(); page.AddView(suggestions);
         page.AddView(Row(ActionButton("Look up", () => LookupAsync(false)), ActionButton("Refresh filings", () => LookupAsync(true))));
         page.AddView(ActionButton("Refresh CA data", RefreshDirectoryAsync));
+        page.AddView(ActionButton("Saved BENs / Watchlists", () => { StartActivity(new Intent(this, typeof(PortfolioActivity))); return Task.CompletedTask; }));
         status = Label("Loading bundled California data…"); status.SetTextIsSelectable(true); page.AddView(status);
         budget = Label(""); budget.SetTextIsSelectable(true); page.AddView(budget);
         cancel = ActionButton("Cancel request", () => { operation?.Cancel(); return Task.CompletedTask; }, false);

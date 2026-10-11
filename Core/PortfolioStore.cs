@@ -1,0 +1,169 @@
+using System.Globalization;
+using System.Text.Json;
+using Microsoft.Data.Sqlite;
+
+namespace ERate470Lookup.Core;
+
+public sealed record Watchlist(string Id, string Name)
+{
+    public override string ToString() => Name;
+}
+public sealed record WatchlistEntry(string Ben, string Name, string Tags)
+{
+    public override string ToString() => $"{Ben} · {Name}";
+}
+public sealed record LookupKey(string Ben, int Year, FilingForm Form)
+{
+    public string Id => $"{Ben}/{Year}/{(int)Form}";
+    public void Validate() => _ = UsacClient.FilingFilter(Ben, Year, Form);
+}
+public sealed record FilingChange(string Application, string Kind, string Before, string After);
+public sealed record SavedLookup(LookupKey Key, DateTimeOffset ObservedAt, long Sequence,
+    List<Filing> Filings, List<FilingChange> Changes);
+
+/// <summary>Durable user data, separate from the disposable HTTP query cache.</summary>
+public sealed class PortfolioStore
+{
+    readonly string connectionString;
+    static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
+    public PortfolioStore(string dataDirectory)
+    {
+        Directory.CreateDirectory(dataDirectory);
+        connectionString = new SqliteConnectionStringBuilder {
+            DataSource = Path.Combine(dataDirectory, "portfolio.sqlite3"), Pooling = false,
+            DefaultTimeout = 15 }.ToString();
+        using var db = Open();
+        using var tx = db.BeginTransaction();
+        using var version = Command(db, tx, "PRAGMA user_version");
+        var schema = Convert.ToInt32(version.ExecuteScalar(), CultureInfo.InvariantCulture);
+        if (schema > 1) throw new InvalidOperationException("Saved portfolio data belongs to a newer app. Update the app; the data has not been changed.");
+        if (schema == 0)
+        {
+            using var migration = Command(db, tx, """
+                CREATE TABLE watchlists(id TEXT PRIMARY KEY,name TEXT NOT NULL);
+                CREATE TABLE entries(list_id TEXT NOT NULL REFERENCES watchlists(id) ON DELETE CASCADE,
+                  ben TEXT NOT NULL,name TEXT NOT NULL,tags TEXT NOT NULL,PRIMARY KEY(list_id,ben));
+                CREATE TABLE sequence(value INTEGER NOT NULL);
+                INSERT INTO sequence VALUES(0);
+                CREATE TABLE snapshots(query_key TEXT PRIMARY KEY,sequence INTEGER NOT NULL,payload TEXT NOT NULL,previous_payload TEXT);
+                INSERT INTO watchlists VALUES('favorites','Favorites');
+                PRAGMA user_version=1;
+                """);
+            migration.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+    SqliteConnection Open()
+    {
+        var db = new SqliteConnection(connectionString); db.Open();
+        using var c = db.CreateCommand(); c.CommandText = "PRAGMA foreign_keys=ON"; c.ExecuteNonQuery();
+        return db;
+    }
+    static SqliteCommand Command(SqliteConnection db, SqliteTransaction? tx, string sql, params (string, object?)[] args)
+    {
+        var c = db.CreateCommand(); c.Transaction = tx; c.CommandText = sql;
+        foreach (var (key,value) in args) c.Parameters.AddWithValue(key, value ?? DBNull.Value);
+        return c;
+    }
+    static string Text(string value, int limit, string label, bool required = false)
+    {
+        value = value.Trim();
+        if (value.Length > limit || (required && value.Length == 0) || value.Any(char.IsControl))
+            throw new ArgumentException($"{label} must contain {(required ? "1" : "0")}–{limit} printable characters.");
+        return value;
+    }
+    public List<Watchlist> Lists()
+    {
+        using var db = Open(); using var c = Command(db,null,"SELECT id,name FROM watchlists ORDER BY name,id");
+        using var r = c.ExecuteReader(); var result = new List<Watchlist>();
+        while(r.Read()) result.Add(new(r.GetString(0),r.GetString(1))); return result;
+    }
+    public Watchlist CreateList(string name)
+    {
+        var list = new Watchlist(Guid.NewGuid().ToString("N"),Text(name,80,"List name",true));
+        using var db = Open(); using var c = Command(db,null,"INSERT INTO watchlists VALUES($id,$name)",("$id",list.Id),("$name",list.Name));
+        c.ExecuteNonQuery(); return list;
+    }
+    public void RenameList(string id, string name)
+    {
+        using var db = Open(); using var c = Command(db,null,"UPDATE watchlists SET name=$name WHERE id=$id",("$id",id),("$name",Text(name,80,"List name",true)));
+        if(c.ExecuteNonQuery()!=1) throw new InvalidOperationException("Watchlist no longer exists.");
+    }
+    public void DeleteList(string id)
+    {
+        using var db = Open(); using var c = Command(db,null,"DELETE FROM watchlists WHERE id=$id",("$id",id)); c.ExecuteNonQuery();
+    }
+    public List<WatchlistEntry> Entries(string id)
+    {
+        using var db = Open(); using var c = Command(db,null,"SELECT ben,name,tags FROM entries WHERE list_id=$id ORDER BY name,ben",("$id",id));
+        using var r = c.ExecuteReader(); var result = new List<WatchlistEntry>();
+        while(r.Read()) result.Add(new(r.GetString(0),r.GetString(1),r.GetString(2))); return result;
+    }
+    public void SaveEntry(string id, WatchlistEntry entry, bool replace = false)
+    {
+        var ben=entry.Ben.Trim(); if(ben.Length>32) throw new ArgumentException("BEN is too long.");
+        new LookupKey(ben,2027,FilingForm.Form470).Validate();
+        using var db=Open(); using var tx=db.BeginTransaction();
+        using var count=Command(db,tx,"SELECT COUNT(*) FROM entries WHERE list_id=$id",("$id",id));
+        if(!replace && Convert.ToInt32(count.ExecuteScalar())>=500) throw new InvalidOperationException("A watchlist supports up to 500 BENs.");
+        using var c=Command(db,tx,replace
+            ? "UPDATE entries SET name=$name,tags=$tags WHERE list_id=$id AND ben=$ben"
+            : "INSERT INTO entries(list_id,ben,name,tags) VALUES($id,$ben,$name,$tags)",
+            ("$id",id),("$ben",ben),("$name",Text(entry.Name,200,"Display name")),("$tags",Text(entry.Tags,300,"Tags")));
+        try { if(c.ExecuteNonQuery()!=1) throw new InvalidOperationException("Saved BEN no longer exists."); }
+        catch(SqliteException ex) when(ex.SqliteErrorCode==19) { throw new InvalidOperationException("This BEN is already saved, or the watchlist no longer exists.",ex); }
+        tx.Commit();
+    }
+    public void RemoveEntry(string id,string ben)
+    {
+        using var db=Open(); using var c=Command(db,null,"DELETE FROM entries WHERE list_id=$id AND ben=$ben",("$id",id),("$ben",ben)); c.ExecuteNonQuery();
+    }
+    // Allocated immediately before starting the network observation. Global across app processes.
+    public long BeginObservation()
+    {
+        using var db=Open(); using var tx=db.BeginTransaction();
+        using var c=Command(db,tx,"UPDATE sequence SET value=value+1 RETURNING value");
+        var value=Convert.ToInt64(c.ExecuteScalar(),CultureInfo.InvariantCulture); tx.Commit(); return value;
+    }
+    public SavedLookup? Read(LookupKey key)
+    {
+        key.Validate(); using var db=Open(); return Read(db,null,key);
+    }
+    static SavedLookup? Read(SqliteConnection db,SqliteTransaction? tx,LookupKey key)
+    {
+        using var c=Command(db,tx,"SELECT payload FROM snapshots WHERE query_key=$key",("$key",key.Id));
+        return c.ExecuteScalar() is string json ? JsonSerializer.Deserialize<SavedLookup>(json,Json) : null;
+    }
+    public bool SaveLive(LookupKey key, long sequence, QueryResult<List<Filing>> result)
+    {
+        key.Validate(); if(result.FromCache) return false;
+        if(result.Data.Any(f=>f.Ben!=key.Ben || string.IsNullOrWhiteSpace(f.Number)) || result.Data.Select(f=>f.Number).Distinct().Count()!=result.Data.Count)
+            throw new InvalidOperationException("The returned applications do not form a valid complete snapshot.");
+        using var db=Open(); using var tx=db.BeginTransaction(); var old=Read(db,tx,key);
+        if(old is not null && sequence<=old.Sequence) return false;
+        var changes=old is null ? new List<FilingChange>() : Compare(old.Filings,result.Data);
+        var saved=new SavedLookup(key,result.FetchedAt,sequence,result.Data,changes);
+        using var c=Command(db,tx,"""
+            INSERT INTO snapshots(query_key,sequence,payload,previous_payload) VALUES($key,$seq,$data,$old)
+            ON CONFLICT(query_key) DO UPDATE SET sequence=excluded.sequence,payload=excluded.payload,previous_payload=excluded.previous_payload
+            """,("$key",key.Id),("$seq",sequence),("$data",JsonSerializer.Serialize(saved,Json)),("$old",old is null ? null : JsonSerializer.Serialize(old with { Changes=[] },Json)));
+        c.ExecuteNonQuery(); tx.Commit(); return true;
+    }
+    public void ClearHistory()
+    {
+        using var db=Open(); using var c=Command(db,null,"DELETE FROM snapshots"); c.ExecuteNonQuery();
+    }
+    public static List<FilingChange> Compare(IEnumerable<Filing> before,IEnumerable<Filing> after)
+    {
+        var a=before.ToDictionary(f=>f.Number); var b=after.ToDictionary(f=>f.Number); var changes=new List<FilingChange>();
+        foreach(var (id,f) in b)
+        {
+            if(!a.TryGetValue(id,out var old)) changes.Add(new(id,"New","",Describe(f)));
+            else if(Describe(old)!=Describe(f)) changes.Add(new(id,"Changed",Describe(old),Describe(f)));
+        }
+        foreach(var (id,f) in a) if(!b.ContainsKey(id)) changes.Add(new(id,"No longer returned by this query",Describe(f),""));
+        return changes;
+    }
+    static string Describe(Filing f) => JsonSerializer.Serialize(new { f.Status,f.Certified,f.Nickname,
+        Services=string.Join("; ",f.Services.Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),f.Pdf });
+}

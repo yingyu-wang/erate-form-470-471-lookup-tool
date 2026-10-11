@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="../Core/Core.csproj" />
     <Compile Include="../MacDesktop/MainWindow.cs" Link="MainWindow.cs" />
+    <Compile Include="../MacDesktop/PortfolioWindow.cs" Link="PortfolioWindow.cs" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
