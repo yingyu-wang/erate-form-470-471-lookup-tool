@@ -8,13 +8,21 @@ public static class Program
 [Register("AppDelegate")]
 public sealed class AppDelegate : UIApplicationDelegate
 {
+    public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions) => true;
+}
+[Register("SceneDelegate")]
+public sealed class SceneDelegate : UIWindowSceneDelegate
+{
     public override UIWindow? Window { get; set; }
-    public override bool FinishedLaunching(UIApplication application, NSDictionary? launchOptions)
+
+    public override void WillConnect(UIScene scene, UISceneSession session, UISceneConnectionOptions connectionOptions)
     {
-        Window = new UIWindow(UIScreen.MainScreen.Bounds);
-        Window.RootViewController = new UINavigationController(new LookupController());
-        Window.TintColor = UIColor.FromRGB(0, 117, 104);
+        if (scene is not UIWindowScene windowScene) return;
+        Window = new UIWindow(windowScene)
+        {
+            RootViewController = new UINavigationController(new LookupController()),
+            TintColor = UIColor.FromRGB(0, 117, 104)
+        };
         Window.MakeKeyAndVisible();
-        return true;
     }
 }

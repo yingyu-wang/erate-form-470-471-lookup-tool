@@ -1,7 +1,7 @@
 name: iOS simulator preview
 on:
   pull_request:
-    paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml']
+    paths: ['iOS/**', 'Core/**', '.github/workflows/ios.yml', 'scripts/verify_ios_screenshot.swift']
   workflow_dispatch:
 permissions:
   contents: read
@@ -31,9 +31,18 @@ jobs:
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl install "$DEVICE_ID" iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app
           xcrun simctl launch "$DEVICE_ID" com.yingyuwang.eratelookup
-          sleep 10
-          xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -F com.yingyuwang.eratelookup
-          xcrun simctl io "$DEVICE_ID" screenshot ios-launch.png
+          swiftc scripts/verify_ios_screenshot.swift -o /tmp/verify-ios-screenshot
+          VISIBLE=0
+          for attempt in {1..12}; do
+            sleep 10
+            xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -F com.yingyuwang.eratelookup
+            xcrun simctl io "$DEVICE_ID" screenshot ios-launch.png
+            if /tmp/verify-ios-screenshot ios-launch.png; then
+              VISIBLE=1
+              break
+            fi
+          done
+          test "$VISIBLE" = 1
       - name: Package simulator build
         run: ditto -c -k --sequesterRsrc --keepParent iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app ERateLookup-iOS-simulator.zip
       - uses: actions/upload-artifact@v4
