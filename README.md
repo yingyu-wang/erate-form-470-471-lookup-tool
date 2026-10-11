@@ -2,9 +2,9 @@
 
 <img src="Assets/ERateLookup.png" width="96" alt="E-rate Lookup icon">
 
-A portable C#/.NET 10 desktop tool for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
+A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.1 · MIT license · Windows x64/ARM64 and macOS Arm64/x64**
+**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, and Android preview**
 
 ## Download and run
 
@@ -16,16 +16,26 @@ Open this repository's **Releases** page and select **v1.0.1**. GitHub's automat
 | `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
 | `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
 | `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.1-android-preview.apk` | Android 8.0+ ARM64 phone/tablet; x64 emulators | Nothing extra; runtime bundled |
+| `ERateLookup-v1.0.1-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
-Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Runtime files are not bundled in these downloads.
+Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK includes its runtime.
 
 Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` on macOS. Keep the Mac .app bundle intact. Mac builds target macOS 14 or later and are unsigned, non-notarized previews. For a blocked app you trust, use the per-app **Open Anyway** option in macOS Privacy & Security.
 
+## Install on Android
+
+1. On your phone/tablet, open [release v1.0.1](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.1) and download **ERateLookup-v1.0.1-android-preview.apk**. The package ZIP is also available with the installation guide and notices. `SHA256SUMS.txt` covers all platform packages.
+2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
+3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
+4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.
+5. Try **CENIC**, BEN **225495**, FY **2027**, **Form 470**. Select filings and use **Save selected CSV / Excel** to choose an export destination.
+
+Requires **Android 8.0+** and an **ARM64** phone/tablet; x64 emulators are also included. 32-bit-only devices are unsupported. Android is a **development preview**; physical-device UI testing remains outstanding. Builds use a generated debug signing key. If a newer preview reports a signature conflict, export needed files, uninstall the previous preview, then install the new APK. Uninstalling clears the app’s local cache/settings.
+
+See the [complete Android installation, update, troubleshooting, and USB guide](docs/ANDROID_INSTALL.md) and [Android developer guide](Android/README.md).
+
 ## Features
-
-### Android development preview
-
-A native Android phone/tablet preview app is available in [`Android/`](Android/README.md), reusing the shared lookup and export core. The preview targets Android 8.0+ on ARM64 devices and x64 emulators, with the runtime bundled in its APK. See [Android installation instructions](docs/ANDROID_INSTALL.md) for downloading a build, installing it, exporting files, and updating it. The v1.0.1 release includes desktop packages and an Android v1.0.1 preview APK.
 
 - Choose Form 470 or Form 471, funding year, and an exact BEN or California customer-name suggestion.
 - Search names locally after two characters, with up to 15 suggestions.
@@ -59,17 +69,33 @@ bash Publish-Mac.sh osx-arm64
 bash Publish-Mac.sh osx-x64
 ```
 
+### Compile the Android APK
+
+Install **.NET SDK 10.0.401**, **JDK 21**, and the **Android SDK platform 36 / Build Tools 36.0.0** (Android Studio’s SDK Manager can install the SDK components). Run these commands from the repository root. Replace both absolute paths with your SDK/JDK locations; on Windows, use paths such as `C:/Android/Sdk` and your JDK 21 installation folder.
+
+```sh
+dotnet workload install android --version 10.0.401
+dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies -p:AndroidSdkDirectory="/absolute/path/android-sdk" -p:JavaSdkDirectory="/absolute/path/jdk-21" -p:AcceptAndroidSDKLicenses=True
+dotnet run --project Checks/Checks.csproj -c Release
+python -m unittest discover -s scripts -p test_verify_android_apk.py -v
+dotnet publish Android/ERateLookup.Android.csproj -c Release -p:AndroidSdkDirectory="/absolute/path/android-sdk" -p:JavaSdkDirectory="/absolute/path/jdk-21" -o publish/android
+```
+
+The dependency command accepts Android SDK licenses; read the terms before using it. Python 3 is required for the verifier regression tests. Install the **`*-Signed.apk`** from `publish/android/`; it bundles .NET and SQLite for ARM64/x64. The default local build uses a debug signing key. For stable updates, follow the [private release-key instructions](Android/README.md#signing-stable-updates). Keep keystores/passwords out of git.
+
+For cloud builds, run the **Android preview APK** workflow in GitHub Actions and download its **ERateLookup-Android-preview** artifact. Tagged releases also build and attach the Android preview APK/ZIP.
+
 ## GitHub Actions and releases
 
-The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures, runs the shared checks, and attaches the platform ZIP files to a GitHub Release.
+The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds both Windows and both Mac architectures plus the Android preview, runs the shared/security checks, and attaches the desktop ZIPs, Android APK/ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 
 ```sh
 git add .
 git commit -m "Describe the change"
 git push origin main
 # Choose an unused version for the next release:
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 Keep executables, ZIPs, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
@@ -85,7 +111,9 @@ Keep executables, ZIPs, caches, and user settings out of the source repository; 
 | `Assets/` | PNG, ICO, and ICNS app icon |
 | `Checks/` | Shared verification program |
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
-| `.github/workflows/windows.yml` | Build and release automation |
+| `.github/workflows/windows.yml` | All-platform tagged release automation |
+| `.github/workflows/android.yml` | Android APK build and package verification |
+| `docs/ANDROID_INSTALL.md` | Android installation, updates, exports, and troubleshooting |
 
 ## Current limitations
 
