@@ -1,3 +1,7 @@
+# Android v1.0.1 validation
+
+Version 1.0.1 uses Android version code **111**. Local validation passed 52 host checks (including 15 Android behavior regressions), four verifier security regressions, and Android Activity compilation against API 36. Release CI rebuilds and verifies all packages before uploading them. Use the release’s `SHA256SUMS.txt` for 1.0.1 hashes; the historical hashes below apply only to the earlier 1.1.0 preview. Physical-device UI testing remains outstanding.
+
 # Android v1.1.0 preview validation
 
 App commit: `741e90e665cc12147d40a6d6ee6d6e92326e27d9`.

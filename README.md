@@ -4,18 +4,18 @@
 
 A portable C#/.NET 10 desktop tool for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.0 · MIT license · Windows x64/ARM64 and macOS Arm64/x64**
+**Version 1.0.1 · MIT license · Windows x64/ARM64 and macOS Arm64/x64**
 
 ## Download and run
 
-Open this repository's **Releases** page and select **v1.0.0**. GitHub's automatic source ZIP contains source code; download a platform ZIP to run the app.
+Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform ZIP to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
-| `ERateLookup-v1.0.0-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
-| `ERateLookup-v1.0.0-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
-| `ERateLookup-v1.0.0-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
-| `ERateLookup-v1.0.0-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.1-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
+| `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
+| `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
+| `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Runtime files are not bundled in these downloads.
 
@@ -25,7 +25,7 @@ Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` o
 
 ### Android development preview
 
-A native Android phone/tablet app is being developed in [`Android/`](Android/README.md), reusing the shared lookup and export core. The preview targets Android 8.0+ on ARM64 devices and x64 emulators, with the runtime bundled in its APK. See [Android installation instructions](docs/ANDROID_INSTALL.md) for downloading a build, installing it, exporting files, and updating it. Desktop v1.0.0 releases remain separate from the Android v1.1.0 preview.
+A native Android phone/tablet preview app is available in [`Android/`](Android/README.md), reusing the shared lookup and export core. The preview targets Android 8.0+ on ARM64 devices and x64 emulators, with the runtime bundled in its APK. See [Android installation instructions](docs/ANDROID_INSTALL.md) for downloading a build, installing it, exporting files, and updating it. The v1.0.1 release includes desktop packages and an Android v1.0.1 preview APK.
 
 - Choose Form 470 or Form 471, funding year, and an exact BEN or California customer-name suggestion.
 - Search names locally after two characters, with up to 15 suggestions.

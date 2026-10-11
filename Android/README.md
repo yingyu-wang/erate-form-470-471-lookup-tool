@@ -1,6 +1,6 @@
 # Android development preview
 
-Native C# / Android UI sharing the existing `Core` project. Version **1.1.0**, version code **110**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
+Native C# / Android UI sharing the existing `Core` project. Version **1.0.1**, version code **111**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
 
 Features: offline California name search, nationwide name search, BEN/year/Form 470/471 lookup, two-hour query cache, C2 budget snapshot and forecast labels, directory refresh, cancellation, selected-filing CSV/XLSX export through the Android document picker, and HTTPS PDF opening in another app. The existing PNG icon is reused. Native Android styling replaces the desktop themes.
 
@@ -50,3 +50,5 @@ The [Android APK build and package checks](https://github.com/yingyu-wang/erate-
 Shared-core checks cover query filters, result collapsing, bundled data/cache logic, budget rules and CSV/XLSX safety. APK inspection verifies build packaging, not runtime UI or live networking. Before calling Android supported, test on a physical ARM64 phone/tablet: first launch offline/SQLite seed import; CA match selection; Form 470 and 471 queries; budget forecast/missing labels; cancellation/offline cache; selected-only exports and picker cancel; PDF links; rotation, keyboard, large text and TalkBack; and update signing.
 
 Code/docs are MIT-licensed; root third-party/data notices apply and are included in preview packages.
+
+Version 1.0.1 includes optional-request fallback, 50-item result pages, cancellable export generation/copy, and automatic stale-snapshot refresh with offline fallback. Tagged releases include the preview APK and package ZIP alongside desktop assets.

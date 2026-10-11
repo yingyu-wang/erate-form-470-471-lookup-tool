@@ -1,8 +1,8 @@
-# Windows ARM64 portable app — version 1.0.0
+# Windows ARM64 portable app — version 1.0.1
 
-Download `ERateLookup-v1.0.0-win-arm64.zip` from the v1.0.0 release. Install the **.NET 10 Desktop Runtime for Windows ARM64** from https://dotnet.microsoft.com/en-us/download/dotnet/10.0, extract the ZIP, and open `ERate470Lookup.exe`. No app installer or administrator access is required for the extracted application. The runtime is a separate prerequisite.
+Download `ERateLookup-v1.0.1-win-arm64.zip` from the v1.0.1 release. Install the **.NET 10 Desktop Runtime for Windows ARM64** from https://dotnet.microsoft.com/en-us/download/dotnet/10.0, extract the ZIP, and open `ERate470Lookup.exe`. No app installer or administrator access is required for the extracted application. The runtime is a separate prerequisite.
 
-This package targets native Windows ARM64 (for example, a Snapdragon Windows PC). It does not run on Windows x64 or x86. Existing Windows x64 downloads remain available. Application version is 1.0.0 and source is MIT licensed; third-party notices are included.
+This package targets native Windows ARM64 (for example, a Snapdragon Windows PC). It does not run on Windows x64 or x86. Existing Windows x64 downloads remain available. Application version is 1.0.1 and source is MIT licensed; third-party notices are included.
 
 ## Build
 

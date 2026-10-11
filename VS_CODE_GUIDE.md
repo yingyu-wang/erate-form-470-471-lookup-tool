@@ -37,8 +37,8 @@ The included .github/workflows/windows.yml runs builds/checks and uploads a ZIP 
 To publish the tested commit as a release:
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 A version tag triggers the workflow to publish a GitHub Release with a Windows x64 ZIP. This requires Actions to be enabled and the repository to allow the workflow's contents:write permission. Ordinary pushes produce build artifacts; version tags produce public release entries according to repository visibility. Saving local files alone never triggers GitHub. Review the commit before tagging it. Each new release needs a new tag, such as v1.0.1; do not reuse an existing published tag.

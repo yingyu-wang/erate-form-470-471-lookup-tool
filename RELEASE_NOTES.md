@@ -1,6 +1,8 @@
-# v1.0.0 — E-rate Form 470 / 471 Lookup Tool
+# v1.0.1 — E-rate Form 470 / 471 Lookup Tool
 
-Initial open-source release for Windows x64, macOS Apple Silicon, and macOS Intel.
+Unified 1.0.1 release for Windows x64/ARM64, macOS Apple Silicon/Intel, and Android preview.
+
+Android packaging removes command-line executable paths from the verifier and includes four security regression checks. Android remains a development preview: optional lookup failures preserve filings, result views are paged in groups of 50, exports honor cancellation during generation and copying, and stale California data refreshes at startup with offline fallback.
 
 ## Features
 
@@ -17,12 +19,16 @@ Initial open-source release for Windows x64, macOS Apple Silicon, and macOS Inte
 
 | Asset | Platform | Runtime prerequisite |
 | --- | --- | --- |
-| ERateLookup-v1.0.0-win-x64.zip | Windows x64 | .NET 10 Desktop Runtime x64 |
-| ERateLookup-v1.0.0-macos-arm64.zip | macOS Apple Silicon | .NET 10 Runtime Arm64 |
-| ERateLookup-v1.0.0-macos-x64.zip | macOS Intel | .NET 10 Runtime x64 |
+| ERateLookup-v1.0.1-win-x64.zip | Windows x64 | .NET 10 Desktop Runtime x64 |
+| ERateLookup-v1.0.1-win-arm64.zip | Windows ARM64 | .NET 10 Desktop Runtime ARM64 |
+| ERateLookup-v1.0.1-macos-arm64.zip | macOS Apple Silicon | .NET 10 Runtime Arm64 |
+| ERateLookup-v1.0.1-macos-x64.zip | macOS Intel | .NET 10 Runtime x64 |
+| ERateLookup-v1.0.1-android-preview.apk / .zip | Android 8.0+ ARM64; x64 emulators | Runtime bundled |
 
-Install the matching runtime from [Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), extract the ZIP, and run the EXE or .app. The runtime is not bundled. SHA256SUMS.txt provides checksums for the three ZIP files.
+Android installation instructions are included in the Android ZIP and `docs/ANDROID_INSTALL.md`. The preview uses a generated debug signing certificate; updates from another build may require uninstalling first, which removes the app’s local cache. Android version code is 111. No iOS package is included.
+
+Install the matching runtime from [Microsoft](https://dotnet.microsoft.com/en-us/download/dotnet/10.0), extract the ZIP, and run the EXE or .app. Desktop runtimes are not bundled. SHA256SUMS.txt provides checksums for all five ZIP files and the Android APK.
 
 ## Validation and limitations
 
-Windows publish succeeded. The icon payloads were verified in the Windows EXE. macOS icon registration, ZIP integrity, and executable permissions were checked. These GUI builds have not been launched on Windows or macOS in this build environment; hands-on launch, selection, export, and layout testing is still required. Packages are unsigned; macOS packages are not notarized. The funding-year selector currently covers 2016–2027. Local suggestions cover California; USAC publishing delays and API errors can affect results.
+CI builds Windows/macOS packages and verifies the Android APK signature, manifest, native SQLite libraries, and package contents. All 52 host checks and four verifier security regression tests pass. These GUI builds have not been launched on Windows or macOS in this build environment; hands-on launch, selection, export, and layout testing is still required. Packages are unsigned; macOS packages are not notarized. The funding-year selector currently covers 2016–2027. Local suggestions cover California; USAC publishing delays and API errors can affect results.
