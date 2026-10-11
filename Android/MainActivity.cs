@@ -10,6 +10,8 @@ using Android.Widget;
 using ERate470Lookup.Core;
 using Uri = System.Uri;
 using Path = System.IO.Path;
+using Entity = ERate470Lookup.Core.Entity;
+using OperationCanceledException = System.OperationCanceledException;
 
 namespace ERate470Lookup.AndroidApp;
 
