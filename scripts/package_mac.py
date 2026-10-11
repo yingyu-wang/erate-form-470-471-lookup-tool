@@ -6,12 +6,15 @@ import shutil
 import stat
 import sys
 import zipfile
-import xml.etree.ElementTree as ET
+import re
 
 root = Path(__file__).resolve().parents[1]
 rid = sys.argv[1]
 if rid not in ('osx-arm64', 'osx-x64'):
     raise SystemExit('Use osx-arm64 or osx-x64')
+versions = re.findall(r'<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>', (root / 'MacDesktop/MacDesktop.csproj').read_text())
+if len(versions) != 1: raise SystemExit('Expected one Mac package version')
+version = versions[0]
 output = root / 'publish' / rid
 binary_dir = output / 'bin'
 if not (binary_dir / 'ERateLookup').is_file():
@@ -34,14 +37,13 @@ info = {
     'CFBundleExecutable': 'ERateLookup',
     'CFBundleIdentifier': 'org.eratelookup.desktop',
     'CFBundlePackageType': 'APPL',
-    'CFBundleShortVersionString': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1',
-    'CFBundleVersion': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1',
+    'CFBundleShortVersionString': version,
+    'CFBundleVersion': version,
     'LSMinimumSystemVersion': '14.0',
     'NSHighResolutionCapable': True,
 }
 with (contents / 'Info.plist').open('wb') as stream:
     plistlib.dump(info, stream)
-version = ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1'
 architecture = 'arm64' if rid == 'osx-arm64' else 'x64'
 archive = root.parent / f'ERateLookup-v{version}-macos-{architecture}.zip'
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
@@ -54,6 +56,7 @@ with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         if path.is_dir():
             entry.external_attr |= 0x10
         z.writestr(entry, b'' if path.is_dir() else path.read_bytes())
-    for name in ('MACOS_README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'RELEASE_NOTES.md'):
+    for name in ('MACOS_README.md', 'LICENSE', 'CONTRIBUTORS.md', 'THIRD_PARTY_NOTICES.md', 'RELEASE_NOTES.md'):
         z.write(root / name, name)
+    z.write(root / 'docs/PORTFOLIO_GUIDE.md', 'PORTFOLIO_GUIDE.md')
 print(f'{archive}: {archive.stat().st_size:,} bytes')

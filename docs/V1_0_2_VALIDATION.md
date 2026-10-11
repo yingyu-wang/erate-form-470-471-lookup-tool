@@ -1,6 +1,13 @@
 # v1.0.2 validation and release checklist
 
-Status: **planned checks; not completed validation results**.
+Status: **implementation PR #8; automated validation in progress, manual gates pending**.
+
+The initial CI commit built Windows and macOS on x64/ARM64 and passed native Linux
+x64/ARM64 window launches. Android initially failed an ambiguous exception-name
+compile check; the alias was corrected in the subsequent commit. Consult the
+latest PR checks for the current head; earlier successes are not final-head evidence.
+Local shared checks cover the new storage, import, batch, changes, and export
+semantics. Physical Android and interactive desktop verification remain pending.
 See the [feature acceptance criteria](V1_0_2_PLAN.md) and
 [technical design](V1_0_2_DESIGN.md). Record commit, platform, result, and remaining
 limitations in the implementing PR. The planning PR needs document/link review;

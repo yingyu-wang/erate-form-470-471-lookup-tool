@@ -4,7 +4,7 @@
 
 A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+**Development version 1.0.2 (unreleased) · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 ## Download and run
 
@@ -60,19 +60,22 @@ See the [complete Android installation, update, troubleshooting, and USB guide](
 
 Successful filing queries are cached for two hours by **BEN + funding year + form type**. Each successful query replaces only its own cache entry. Directory and budget snapshots refresh separately when at least 24 hours old, retaining existing records if refresh fails. USAC query failures are shown as errors rather than reported as no filings.
 
-## Planned v1.0.2 work
+## v1.0.2 portfolio development build
 
-The [v1.0.2 implementation plan](docs/V1_0_2_PLAN.md) proposes saved district
-watchlists, CSV batch lookup, change highlighting, service/keyword filters,
-source-backed deadlines, district history, customer summaries, offline saved
-results, expanded selected-result exports, and Android sharing. These are planned
-features; the published app remains v1.0.1.
+The new **Saved BENs / Watchlists** button opens named district lists, CSV imports,
+selected-BEN or whole-list refresh, offline snapshots, persistent unread changes,
+filters, multi-year summaries, requested-funding comparison, source-backed dates,
+selected exports, and Android sharing. See the [portfolio user guide](docs/PORTFOLIO_GUIDE.md).
 
-Work starts with shared data contracts, then watchlists/offline snapshots, batch
-lookup/change tracking, review/export tools, history/deadlines, Android sharing,
-and seven-platform-package validation. See the [technical design](docs/V1_0_2_DESIGN.md)
-and [validation/release checklist](docs/V1_0_2_VALIDATION.md) for dependencies,
-acceptance criteria, testing, and documentation requirements.
+These features are in [implementation PR #8](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/8).
+The latest published download remains **v1.0.1**, listed above. To test v1.0.2,
+open a successful PR #8 Actions run and download the matching Windows/macOS,
+Linux, or Android artifact; extract it before running/installing. A passing build
+is not a substitute for the remaining hands-on platform checks.
+
+The [implementation plan](docs/V1_0_2_PLAN.md), [technical design](docs/V1_0_2_DESIGN.md),
+[source contracts](docs/V1_0_2_SOURCE_CONTRACTS.md), and
+[validation checklist](docs/V1_0_2_VALIDATION.md) document scope and release gates.
 
 ## First test
 

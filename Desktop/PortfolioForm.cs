@@ -50,7 +50,7 @@ public sealed class PortfolioForm : Form
             Action("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})),counts),0,3);
         layout.Controls.Add(results,0,4);
         layout.Controls.Add(Row(Action("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})),Action("Next",()=>Do(()=>{page++;Render();})),
-            Action("Change history",()=>Do(()=>MessageBox.Show(this,session.ChangeHistory(),"Unread changes"))),Action("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})),Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!IsDisposed)MessageBox.Show(this,text,"Source-backed dates");}),Action("History / summary",()=>Do(()=>MessageBox.Show(this,PortfolioInsights.Summary(session,directory),"Saved district history"))),
+            Action("Change history",()=>Do(()=>ShowText(session.ChangeHistory(),"Unread changes"))),Action("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})),Action("Export selected",ExportAsync),Action("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!IsDisposed)ShowText(text,"Source-backed dates");}),Action("History / summary",()=>Do(()=>ShowText(PortfolioInsights.Summary(session,directory),"District history / summary"))),
             Action("Open selected PDF",()=>Do(()=>{if(results.SelectedItem is PortfolioRow r&&Uri.TryCreate(r.Filing?.Pdf,UriKind.Absolute,out var uri)&&uri.Scheme=="https")System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri){UseShellExecute=true});else throw new InvalidOperationException("Select an application with an HTTPS document link.");})),
             Action("Clear saved history",()=>Do(()=>{if(MessageBox.Show(this,"Delete all saved filing snapshots? Watchlists are retained.","Clear history",MessageBoxButtons.YesNo)==DialogResult.Yes){session.Store.ClearHistory();session.ClearView();Render();}}))),0,5);
         layout.Controls.Add(status,0,6);
@@ -82,6 +82,11 @@ public sealed class PortfolioForm : Form
         try{results.Items.Clear();foreach(var r in visible.Skip(page*50).Take(50))results.Items.Add(r,session.Selected.Contains(r.Id));}
         finally{rendering=false;}
         counts.Text=$"{session.Selected.Count} selected · {visible.Count}/{session.Rows.Count} visible · page {page+1}/{Math.Max(1,(visible.Count+49)/50)}";
+    }
+    void ShowText(string message,string title)
+    {
+        using var dialog=new Form{Text=title,Width=850,Height=650,StartPosition=FormStartPosition.CenterParent};
+        dialog.Controls.Add(new TextBox{Multiline=true,ReadOnly=true,ScrollBars=ScrollBars.Both,WordWrap=false,Dock=DockStyle.Fill,Text=message.Replace("\n",Environment.NewLine)});dialog.ShowDialog(this);
     }
     async Task ImportAsync()
     {

@@ -1,17 +1,22 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.2 — Planned, unreleased
+## v1.0.2 — Development build, unreleased
 
-The [implementation plan](docs/V1_0_2_PLAN.md) covers ten proposed improvements:
-saved district watchlists, CSV batch lookup, change highlighting, service/keyword
-filters, source-backed deadlines, district history, customer summaries, offline
-saved results, expanded selected-result exports, and Android sharing.
+- Dedicated Saved BENs / Watchlists screen on Windows, macOS/Linux Avalonia, and Android.
+- Named lists with saved BENs, names/tags, and validated atomic CSV import.
+- Cancellable batch refresh across up to five years and both form types, with distinct failure/empty outcomes.
+- Durable offline snapshots and overlap-safe comparison baselines.
+- Persistent unread changes, before/after history, and explicit acknowledgement.
+- Service/keyword filters, selection across 50-row pages, and consolidated CSV/Excel exports.
+- District summaries with independently dated C2 budget snapshots and observed Form 471 requested-funding totals.
+- Source-reported Form 470 contract dates and optional filing-window dates; missing data remains Unknown.
+- Android system share chooser for filing summaries and HTTPS document links.
+- Version 1.0.2 metadata; Android version code 112. All seven package variants remain supported build targets.
 
-This is a documentation milestone. None of those new behaviors is shipped by the
-planning PR, and no v1.0.2 binaries or tag are published. Implementation, platform
-validation, and all seven package checks must be completed before release. See
-the [technical design](docs/V1_0_2_DESIGN.md) and
-[validation checklist](docs/V1_0_2_VALIDATION.md).
+See [portfolio usage](docs/PORTFOLIO_GUIDE.md), [source mappings](docs/V1_0_2_SOURCE_CONTRACTS.md),
+and [validation status](docs/V1_0_2_VALIDATION.md). Provider comparisons are unavailable
+in the application-level view. App UI/device checks remain required before publishing.
+There is no v1.0.2 release tag or public release asset yet; use successful PR #8 Actions artifacts for testing.
 
 ## v1.0.1 — Published
 

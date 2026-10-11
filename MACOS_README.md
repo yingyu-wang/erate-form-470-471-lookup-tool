@@ -50,3 +50,9 @@ The shared Core tests pass in the build environment. Both Mac architectures are 
 ## Application icon
 
 The Mint Glass document/search icon is included in `Assets` as PNG, Windows ICO, and macOS ICNS. Windows builds embed the ICO in the executable and main window. The Mac packaging script copies the ICNS into the app bundle and registers it in Info.plist. No additional runtime dependency is required.
+
+## v1.0.2 development: saved BENs
+
+Open **Saved BENs / Watchlists** to save favorite BENs, refresh a list, import CSV,
+review changes, and reopen results offline. See [the portfolio guide](docs/PORTFOLIO_GUIDE.md).
+These features require the unreleased v1.0.2 build from a successful PR #8 Actions run.

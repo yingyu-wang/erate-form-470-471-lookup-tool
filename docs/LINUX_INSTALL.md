@@ -94,3 +94,15 @@ system-wide installation requirement.
 
 References: [Avalonia Linux](https://docs.avaloniaui.net/docs/platform-specific-guides/linux),
 [.NET Linux prerequisites](https://learn.microsoft.com/en-us/dotnet/core/install/linux).
+
+## v1.0.2 development build
+
+The released v1.0.1 instructions above remain valid for that release. To test the new
+portfolio workflow, use a successful **PR #8** GitHub Actions artifact for your
+architecture; package names contain **v1.0.2**. Follow the same extraction and
+installation process, substituting that version in the commands. No v1.0.2
+release is published yet.
+
+Open **Saved BENs / Watchlists** and follow [the portfolio guide](PORTFOLIO_GUIDE.md).
+The guide covers CSV import, refresh, changes, filters, summaries, dates, selection,
+exports, saved/offline results, and Android sharing. It is also included in the package.

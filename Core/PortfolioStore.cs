@@ -218,5 +218,5 @@ public sealed class PortfolioStore
         return changes;
     }
     static string Describe(Filing f) => JsonSerializer.Serialize(new { f.Status,f.Certified,f.Nickname,
-        Services=string.Join("; ",f.Services.Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),f.Pdf,f.AllowableContractDate });
+        Services=string.Join("; ",f.Services.Split(';',StringSplitOptions.TrimEntries|StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)),f.Pdf,f.AllowableContractDate,f.RequestedAmount,f.PreDiscountAmount });
 }

@@ -26,6 +26,8 @@ public sealed class UsacRow
     [JsonPropertyName("filing_status")] public string Status { get; set; } = "";
     [JsonPropertyName("fcc_form_470_status")] public string Status470 { get; set; } = "";
     [JsonPropertyName("allowable_contract_date")] public string AllowableContractDate { get; set; } = "";
+    [JsonPropertyName("funding_request_amount")] public string RequestedAmount { get; set; } = "";
+    [JsonPropertyName("pre_discount_eligible_amount")] public string PreDiscountAmount { get; set; } = "";
     [JsonPropertyName("pdf_url")] public string PdfUrl { get; set; } = "";
     [JsonPropertyName("form_pdf")] public UrlField? Pdf { get; set; }
 }
@@ -34,7 +36,7 @@ public sealed record Entity(string Ben, string Name, string City, string State)
 {
     public override string ToString() => $"{Name} | BEN {Ben} | {City}, {State}";
 }
-public sealed record Filing(string Number, string Ben, string Name, string Nickname, string Certified, string Services, string Pdf, string Status = "Certified", string AllowableContractDate = "");
+public sealed record Filing(string Number, string Ben, string Name, string Nickname, string Certified, string Services, string Pdf, string Status = "Certified", string AllowableContractDate = "", string RequestedAmount = "", string PreDiscountAmount = "");
 public sealed record QueryResult<T>(T Data, DateTimeOffset FetchedAt, bool FromCache);
 public sealed record EntityResults(List<Entity> Matches, bool Limited);
 public sealed record CacheEntry(DateTimeOffset FetchedAt, List<UsacRow> Rows);
@@ -143,7 +145,7 @@ public sealed class UsacClient
         {
             var parameters=new Dictionary<string,string>{["$where"]=filter,["$order"]=form==FilingForm.Form470?"application_number,service_request_id,service_request_rfp_attachment":"application_number,form_version,last_modified_timestamp",["$limit"]="1000",["$offset"]=offset.ToString(CultureInfo.InvariantCulture)};
             if(form==FilingForm.Form471)
-                parameters["$select"]="application_number,epc_organization_id as billed_entity_number,organization_name as billed_entity_name,org_city as billed_entity_city,org_state as billed_entity_state,certified_datetime as certified_date_time,last_modified_timestamp as last_modified_date_time,form_version,nickname as form_nickname,chosen_category_of_service as service_category,form_471_status_name as filing_status,file_url as pdf_url";
+                parameters["$select"]="application_number,epc_organization_id as billed_entity_number,organization_name as billed_entity_name,org_city as billed_entity_city,org_state as billed_entity_state,certified_datetime as certified_date_time,last_modified_timestamp as last_modified_date_time,form_version,nickname as form_nickname,chosen_category_of_service as service_category,form_471_status_name as filing_status,file_url as pdf_url,funding_request_amount,pre_discount_eligible_amount";
             var page=await QueryAsync(parameters,refresh,ct,form==FilingForm.Form471?Form471Endpoint:Endpoint);
             all.AddRange(page.Data);if(page.FetchedAt<fetched) fetched=page.FetchedAt;cached &= page.FromCache;
             if(page.Data.Count<1000) return new(Collapse(all),fetched,cached);
@@ -161,6 +163,6 @@ public sealed class UsacClient
         var current=group.Where(r=>r.Version=="Current").ToList();if(current.Count==0) current=group.ToList();
         var row=current.OrderByDescending(r=>r.Modified,StringComparer.Ordinal).First();
         var services=string.Join("; ",current.Select(r=>string.Join(" / ",new[] {r.Category,r.Service,r.Function}.Where(s=>!string.IsNullOrWhiteSpace(s)))).Distinct().OrderBy(s=>s,StringComparer.Ordinal));
-        return new Filing(row.Number,row.Ben,row.Name,row.Nickname,row.Certified.Length>=10?row.Certified[..10]:row.Certified,services,row.Pdf?.Url??(row.PdfUrl.Length>0?row.PdfUrl:group.Select(r=>r.PdfUrl).FirstOrDefault(u=>u.Length>0)??""),!string.IsNullOrWhiteSpace(row.Status)?row.Status:!string.IsNullOrWhiteSpace(row.Status470)?row.Status470:"Unknown",row.AllowableContractDate);
+        return new Filing(row.Number,row.Ben,row.Name,row.Nickname,row.Certified.Length>=10?row.Certified[..10]:row.Certified,services,row.Pdf?.Url??(row.PdfUrl.Length>0?row.PdfUrl:group.Select(r=>r.PdfUrl).FirstOrDefault(u=>u.Length>0)??""),!string.IsNullOrWhiteSpace(row.Status)?row.Status:!string.IsNullOrWhiteSpace(row.Status470)?row.Status470:"Unknown",row.AllowableContractDate,row.RequestedAmount,row.PreDiscountAmount);
     }).OrderByDescending(r=>r.Certified,StringComparer.Ordinal).ToList();
 }

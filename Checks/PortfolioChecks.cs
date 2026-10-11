@@ -60,6 +60,13 @@ static class PortfolioChecks
             Check(handler.Count==count&&session.Rows.All(r=>r.Outcome=="Not started"),"Canceled batch does not start pending requests");
             Check(PortfolioInsights.ContractDate(Filing("1"))=="2026-10-29"&&PortfolioInsights.ContractDate(Filing("1") with{AllowableContractDate="n/a"})=="Unknown","Source contract dates preserve date precision and missing values");
             Check(!PortfolioSession.ShareText(row with{Filing=Filing("1") with{Pdf="file:///secret"}}).Contains("file:///"),"Share text excludes non-HTTPS links");
+            var amountRow=row with{Query=new("1",2027,FilingForm.Form471),Filing=row.Filing! with{RequestedAmount="1200.50"}};
+            Check(PortfolioInsights.RequestedTotal(new[]{amountRow,amountRow})=="1,200.50","Requested funding counts each application once");
+            Check(PortfolioInsights.RequestedTotal(new[]{amountRow,amountRow with{Filing=amountRow.Filing! with{Number="other",RequestedAmount=""}}})=="Unknown","Missing requested amounts cannot become zero funding");
+            var large=Enumerable.Range(1,5001).Select(n=>new Filing(n.ToString(),"1","District","","2026-10-01","Wireless","","Certified")).ToList();
+            store.SaveLive(keys[0],store.BeginObservation(),new(large,now.AddSeconds(5),false));session.LoadSaved(new[]{keys[0]});
+            foreach(var item in session.Filter("","wireless"))session.Selected.Add(item.Id);
+            Check(session.ExportRows().Count==5002&&session.Rows.Count==5001,"Selection and export cover 5,001 applications beyond visible pages");
             var inFlight=store.BeginObservation();store.ClearHistory();Check(store.Read(key) is null&&store.Lists().Count>0,"Clear history preserves watchlists");
             Check(!store.SaveLive(key,inFlight,new(new(){Filing("9")},now,false)),"An in-flight lookup cannot undo Clear saved history");
             using(var retryHandler=new RetryHandler())using(var retryHttp=new HttpClient(retryHandler))

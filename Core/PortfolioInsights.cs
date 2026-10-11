@@ -15,6 +15,8 @@ public static class PortfolioInsights
     public static string Summary(PortfolioSession session,CaliforniaDirectory directory)
     {
         var text=new StringBuilder(session.HistorySummary());
+        foreach(var group in session.Rows.Where(r=>r.Query.Form==FilingForm.Form471).GroupBy(r=>(r.Query.Ben,r.Query.Year)))
+            text.AppendLine($"\nBEN {group.Key.Ben} · FY{group.Key.Year} · observed Form 471 requested funding: {RequestedTotal(group)} USD.");
         text.AppendLine("\n\nC2 budget snapshots (pre-discount; committed is not disbursed):");
         foreach(var key in session.Rows.Select(r=>(r.Query.Ben,r.Query.Year)).Distinct())
         {
@@ -23,8 +25,20 @@ public static class PortfolioInsights
                 $"{b.Name} · {b.Cycle} · {b.Version}\nTotal {BudgetRow.Money(b.Total)}; committed {BudgetRow.Money(b.Committed)}; pending {BudgetRow.Money(b.Pending)}; reported available {BudgetRow.Money(b.Available)}."));
         }
         text.AppendLine("Budget snapshot: "+directory.LastUpdated);
-        text.AppendLine("Provider and funding-request comparisons: unavailable in this application-level view.");
+        text.AppendLine("Provider comparisons are unavailable in this application-level view. Requested funding sums observed application totals; it is not committed or disbursed funding.");
         return text.ToString();
+    }
+    public static string RequestedTotal(IEnumerable<PortfolioRow> source)
+    {
+        var rows=source.ToList();
+        if(rows.Count==0||rows.Any(r=>r.Outcome is "Failed" or "Cancelled" or "Not started" or "Not saved"))return "Unknown";
+        var total=0m;
+        foreach(var row in rows.Where(r=>r.Outcome=="Success").DistinctBy(r=>r.Id))
+        {
+            if(!decimal.TryParse(row.Filing?.RequestedAmount,NumberStyles.Number,CultureInfo.InvariantCulture,out var amount)||amount<0)return "Unknown";
+            total+=amount;
+        }
+        return total.ToString("N2",CultureInfo.InvariantCulture);
     }
     public static async Task<string> DeadlinesAsync(PortfolioSession session,FilingWindow windows,CancellationToken ct)
     {
