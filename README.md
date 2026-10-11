@@ -2,9 +2,9 @@
 
 <img src="Assets/ERateLookup.png" width="96" alt="E-rate Lookup icon">
 
-A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS uses Avalonia. Both share the lookup, export, budget, and SQLite code.
+A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, and Android preview**
+**Version 1.0.1 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 ## Download and run
 
@@ -16,11 +16,25 @@ Open this repository's **Releases** page and select **v1.0.1**. GitHub's automat
 | `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
 | `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
 | `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.1-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.1-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
 | `ERateLookup-v1.0.1-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
-Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK includes its runtime.
+Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
 Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` on macOS. Keep the Mac .app bundle intact. Mac builds target macOS 14 or later and are unsigned, non-notarized previews. For a blocked app you trust, use the per-app **Open Anyway** option in macOS Privacy & Security.
+
+## Install on Linux
+
+Download the matching **linux-x64** or **linux-arm64** `.tar.gz` from the release,
+extract it, and run `ERateLookup` from the extracted directory. Keep all files
+in that directory together. No .NET installation is required. Ubuntu 24.04 is
+the native build/launch-check baseline; an X11 desktop or XWayland and native
+system libraries are needed. Use **Ctrl-click** for individual row selection.
+
+See [Linux installation and build instructions](docs/LINUX_INSTALL.md) for
+architecture detection, dependencies, commands, checksums, and the optional
+application-menu shortcut with the app icon.
 
 ## Install on Android
 
@@ -68,6 +82,19 @@ bash Publish-Mac.sh osx-arm64
 bash Publish-Mac.sh osx-x64
 ```
 
+### Compile Linux packages
+
+Install .NET SDK 10 and Python 3, then run:
+
+```bash
+bash Publish-Linux.sh linux-x64
+bash Publish-Linux.sh linux-arm64
+```
+
+Self-contained archives appear under `artifacts/`. GitHub Actions builds and
+launch-checks each package on its matching Ubuntu 24.04 x64/ARM64 runner.
+See [Linux instructions](docs/LINUX_INSTALL.md).
+
 ### Compile the Android APK
 
 Install **.NET SDK 10.0.401**, **JDK 21**, and the **Android SDK platform 36 / Build Tools 36.0.0** (Android Studio’s SDK Manager can install the SDK components). Run these commands from the repository root. Replace both absolute paths with your SDK/JDK locations; on Windows, use paths such as `C:/Android/Sdk` and your JDK 21 installation folder.
@@ -105,7 +132,8 @@ Keep executables, ZIPs, caches, and user settings out of the source repository; 
 | --- | --- |
 | `Core/` | USAC queries, cache, seed data, budget display logic, and exports |
 | `Desktop/` | Windows Forms interface |
-| `MacDesktop/` | Avalonia interface for macOS |
+| `MacDesktop/` | Avalonia interface shared by macOS and Linux |
+| `LinuxDesktop/` | Linux entry point, icon, launch check, and shortcut helper |
 | `Android/` | Native Android development preview |
 | `Assets/` | PNG, ICO, and ICNS app icon |
 | `Checks/` | Shared verification program |
@@ -123,3 +151,7 @@ See [Windows user guide](docs/USER_GUIDE.md), [Mac instructions](MACOS_README.md
 ## License
 
 Original project code and documentation are available under the [MIT License](LICENSE). Third-party components and USAC data retain their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Contributors
+
+See [CONTRIBUTORS.md](CONTRIBUTORS.md), including credit for Codex (OpenAI), the AI coding assistant used during development.

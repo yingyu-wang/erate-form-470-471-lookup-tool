@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AssemblyName>ERateLookup</AssemblyName><Version>1.0.1</Version>
+    <SelfContained>true</SelfContained><PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Core.csproj" />
+    <Compile Include="../MacDesktop/MainWindow.cs" Link="MainWindow.cs" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
+    <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.2" />
+    <EmbeddedResource Include="../Desktop/Assets/mint-glass-background.png" LogicalName="mint-glass-background.png" />
+    <EmbeddedResource Include="../Assets/ERateLookup.png" LogicalName="ERateLookup.png" />
+  </ItemGroup>
+</Project>
