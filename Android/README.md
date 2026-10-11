@@ -45,6 +45,8 @@ Increment `ApplicationVersion` for new releases, keep the same application ID/ke
 
 ## Validation scope
 
+The [Android APK build and package checks](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/actions/runs/38103271597) passed for app commit `741e90e665cc12147d40a6d6ee6d6e92326e27d9`. The installable preview APK and installation guide are in that run's **ERateLookup-Android-preview** artifact. See [the validation record](../docs/ANDROID_VALIDATION.md) for hashes and exact test scope.
+
 Shared-core checks cover query filters, result collapsing, bundled data/cache logic, budget rules and CSV/XLSX safety. APK inspection verifies build packaging, not runtime UI or live networking. Before calling Android supported, test on a physical ARM64 phone/tablet: first launch offline/SQLite seed import; CA match selection; Form 470 and 471 queries; budget forecast/missing labels; cancellation/offline cache; selected-only exports and picker cancel; PDF links; rotation, keyboard, large text and TalkBack; and update signing.
 
 Code/docs are MIT-licensed; root third-party/data notices apply and are included in preview packages.
