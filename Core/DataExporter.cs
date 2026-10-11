@@ -5,17 +5,19 @@ namespace ERate470Lookup.Core;
 
 public static class DataExporter
 {
-    public static void WriteCsv(string path,IEnumerable<string[]> rows)
+    public static void WriteCsv(string path,IEnumerable<string[]> rows,CancellationToken ct=default)
     {
+        ct.ThrowIfCancellationRequested();
         using var writer=new StreamWriter(path,false,new UTF8Encoding(true));
-        foreach(var row in rows)writer.WriteLine(string.Join(",",row.Select(value=>
+        foreach(var row in rows) { ct.ThrowIfCancellationRequested(); writer.WriteLine(string.Join(",",row.Select(value=>
         {
             if(value.Length>0&&"=+-@\t\r".Contains(value[0]))value="'"+value;
             return "\""+value.Replace("\"","\"\"")+"\"";
-        })));
+        }))); }
     }
-    public static void WriteExcel(string path,List<string[]> rows)
+    public static void WriteExcel(string path,List<string[]> rows,CancellationToken ct=default)
     {
+        ct.ThrowIfCancellationRequested();
         using var file=new FileStream(path,FileMode.Create,FileAccess.Write);
         using var zip=new ZipArchive(file,ZipArchiveMode.Create);
         WriteText(zip,"[Content_Types].xml","""
@@ -42,6 +44,7 @@ public static class DataExporter
         xml.WriteStartElement("sheetData",ns);
         for(var i=0;i<rows.Count;i++)
         {
+            ct.ThrowIfCancellationRequested();
             xml.WriteStartElement("row",ns);xml.WriteAttributeString("r",(i+1).ToString());
             for(var j=0;j<rows[i].Length;j++)
             {

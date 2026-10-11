@@ -1,6 +1,7 @@
 using System.Net;
 using ERate470Lookup.Core;
 void Check(bool condition,string name){if(!condition)throw new Exception("FAIL: "+name);Console.WriteLine("PASS: "+name);}
+await AndroidBehaviorChecks.RunAsync();
 Check(UsacClient.Literal("O'Brien")=="'O''Brien'","SoQL escaping");
 Check(UsacClient.FilingFilter("133193",2027).Contains("funding_year='2027'"),"Selected funding year");
 var grouped=UsacClient.Collapse(new[]{new UsacRow{Number="1",Version="Original",Function="Old"},new UsacRow{Number="1",Version="Current",Function="Switches"},new UsacRow{Number="1",Version="Current",Function="Switches"},new UsacRow{Number="2",Function="Wireless"}});

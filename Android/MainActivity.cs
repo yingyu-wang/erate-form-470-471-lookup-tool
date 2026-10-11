@@ -37,7 +37,7 @@ public class MainActivity : Activity
     bool ready, busy, complete, destroyed, suppressChanges;
     string cache = "", resultBen = "";
     string? pendingExport;
-    int resultYear;
+    int resultYear, resultPage;
     FilingForm resultForm;
     DateTimeOffset fetched;
     bool? hasCycle470;
@@ -101,7 +101,15 @@ public class MainActivity : Activity
         await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); }, ct);
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
         ready = true;
+        var refreshed = true;
+        if (directory!.NeedsRefresh)
+        {
+            status.Text = "Checking for updated California data…";
+            refreshed = await AndroidBehavior.RefreshIfStaleAsync(directory, ct);
+        }
+        ct.ThrowIfCancellationRequested(); if (destroyed) return;
         status.Text = "Ready. Search the bundled CA directory or enter a BEN. Filings use USAC or a fresh two-hour cache.";
+        if (!refreshed) status.Text += " Online CA refresh unavailable; the saved snapshot remains available. Use Refresh CA data to retry.";
         budget.Text = "California snapshot: " + directory!.LastUpdated;
     }, initializing: true);
 
@@ -114,7 +122,7 @@ public class MainActivity : Activity
 
     void InvalidateResults()
     {
-        complete = false; filings.Clear(); selected.Clear(); resultBen = ""; hasCycle470 = null;
+        complete = false; filings.Clear(); selected.Clear(); resultBen = ""; hasCycle470 = null; resultPage = 0;
         results.RemoveAllViews();
         budget.Text = directory is null ? "" : "California snapshot: " + directory.LastUpdated;
         UpdateControls();
@@ -123,11 +131,11 @@ public class MainActivity : Activity
     async Task RunAsync(Func<CancellationToken, Task> action, bool initializing = false)
     {
         if (busy || (pendingExport is not null && !initializing) || (!ready && !initializing)) return;
-        busy = true; operation = new CancellationTokenSource(); UpdateControls();
-        try { await action(operation.Token); }
+        busy = true; using var current = new CancellationTokenSource(); operation = current; UpdateControls();
+        try { await action(current.Token); }
         catch (OperationCanceledException) { if (!destroyed) status.Text = "Request canceled or timed out. Try again."; }
         catch (Exception ex) { if (!destroyed) status.Text = "Could not complete the request: " + ex.Message; }
-        finally { operation.Dispose(); operation = null; busy = false; if (!destroyed) UpdateControls(); }
+        finally { if (ReferenceEquals(operation, current)) operation = null; busy = false; if (!destroyed) UpdateControls(); }
     }
 
     void UpdateControls()
@@ -185,10 +193,15 @@ public class MainActivity : Activity
         bool? cycle470 = null;
         if (requestedYear >= 2026 && requestedYear <= 2030)
         {
-            try { cycle470 = (await client.HasNewCycleForm470Async(requestedBen, refresh, ct)).Data; }
-            catch (HttpRequestException) { notes += " Budget eligibility cross-check unavailable."; }
+            var optional = await AndroidBehavior.OptionalAsync(async token => (await client.HasNewCycleForm470Async(requestedBen, refresh, token)).Data, ct);
+            if (optional.Available) cycle470 = optional.Value;
+            else notes += " Budget eligibility cross-check unavailable.";
         }
-        if (requestedForm == FilingForm.Form471) notes += "\n" + (await windows!.GetAsync(requestedYear, ct)).Message(DateTimeOffset.UtcNow);
+        if (requestedForm == FilingForm.Form471)
+        {
+            var optional = await AndroidBehavior.OptionalAsync(token => windows!.GetAsync(requestedYear, token), ct);
+            notes += optional.Available ? "\n" + optional.Value!.Message(DateTimeOffset.UtcNow) : " Filing-window check unavailable; check USAC’s announcement. Published filings are still shown.";
+        }
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
         resultBen = requestedBen; resultYear = requestedYear; resultForm = requestedForm;
         filings = response.Data; fetched = response.FetchedAt; hasCycle470 = cycle470;
@@ -217,7 +230,11 @@ public class MainActivity : Activity
     void RenderResults()
     {
         results.RemoveAllViews();
-        foreach (var filing in filings)
+        var pages = AndroidBehavior.PageCount(filings.Count);
+        resultPage = Math.Clamp(resultPage, 0, pages - 1);
+        results.AddView(Label($"Page {resultPage + 1} of {pages} · up to {AndroidBehavior.PageSize} applications per page. Selection and export include all pages."));
+        if (resultPage > 0) AddPageButton("Previous applications", -1);
+        foreach (var filing in AndroidBehavior.Page(filings, resultPage))
         {
             var check = new CheckBox(this) { Text = $"Application {filing.Number}\n{filing.Name}\n{filing.Status} · {filing.Certified}\n{filing.Nickname}\n{filing.Services}", Checked = selected.Contains(filing.Number) };
             check.CheckedChange += (_, e) => { if (e.IsChecked) selected.Add(filing.Number); else selected.Remove(filing.Number); };
@@ -225,6 +242,15 @@ public class MainActivity : Activity
             var pdf = new Button(this) { Text = "Open application PDF" };
             pdf.Click += (_, _) => OpenPdf(filing.Pdf); results.AddView(pdf);
         }
+        if (resultPage + 1 < pages) AddPageButton("Next applications", 1);
+        UpdateControls();
+    }
+
+    void AddPageButton(string title, int offset)
+    {
+        var button = new Button(this) { Text = title };
+        button.Click += (_, _) => { if (!ready || busy || pendingExport is not null) return; resultPage += offset; RenderResults(); };
+        results.AddView(button);
     }
 
     void OpenPdf(string address)
@@ -249,23 +275,25 @@ public class MainActivity : Activity
             var rows = new List<string[]> { new[] { "ExportedUTC", "LookupFetchedUTC", "DirectoryUpdatedUTC", "FundingYear", "BEN", "Customer", "LookupResult", "FormType", "ApplicationNumber", "FilingStatus", "CertifiedDate", "Nickname", "Services", "PDF", "BudgetCycle", "USACBudgetStatus", "BudgetDisplayStatus", "TotalC2BudgetPreDiscount", "CommittedC2BudgetPreDiscount", "PendingC2BudgetPreDiscount", "ReportedRemainingC2BudgetPreDiscount" } };
             var items = filings.Where(f => selected.Contains(f.Number)).ToList();
             if (filings.Count == 0) items.Add(new Filing("", resultBen, b?.Name ?? "", "", "", "", ""));
-            foreach (var f in items) rows.Add(new[] { DateTimeOffset.UtcNow.ToString("O"), fetched.ToString("O"), directory.LastUpdated, resultYear.ToString(CultureInfo.InvariantCulture), resultBen, f.Name,
+            foreach (var f in items) { ct.ThrowIfCancellationRequested(); rows.Add(new[] { DateTimeOffset.UtcNow.ToString("O"), fetched.ToString("O"), directory.LastUpdated, resultYear.ToString(CultureInfo.InvariantCulture), resultBen, f.Name,
                 filings.Count > 0 ? "Filed" : "No certified filing found in published data", ((int)resultForm).ToString(CultureInfo.InvariantCulture), f.Number, filings.Count > 0 ? f.Status : "", f.Certified, f.Nickname, f.Services, f.Pdf,
                 b?.Cycle ?? "Not reported", b?.Version ?? "Not reported", b is null ? "Not reported" : BudgetRow.ForecastView(b.Version, hasCycle470) ? "Forecast" : b.Version,
-                b?.Total ?? "Not reported", b?.Committed ?? "Not reported", b?.Pending ?? "Not reported", b?.Available ?? "Not reported" });
+                b?.Total ?? "Not reported", b?.Committed ?? "Not reported", b?.Pending ?? "Not reported", b?.Available ?? "Not reported" }); }
             var path = Path.Combine(CacheDir!.AbsolutePath, "export-" + Guid.NewGuid().ToString("N") + "." + extension);
-            await Task.Run(() => { if (extension == "csv") DataExporter.WriteCsv(path, rows); else DataExporter.WriteExcel(path, rows); }, ct);
-            if (destroyed) { File.Delete(path); return; }
-            pendingExport = path;
             try
             {
+                await Task.Run(() => { if (extension == "csv") DataExporter.WriteCsv(path, rows, ct); else DataExporter.WriteExcel(path, rows, ct); }, ct);
+                ct.ThrowIfCancellationRequested();
+                if (destroyed) return;
+                pendingExport = path;
                 var intent = new Intent(Intent.ActionCreateDocument);
                 intent.AddCategory(Intent.CategoryOpenable);
                 intent.SetType(extension == "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
                 intent.PutExtra(Intent.ExtraTitle, $"Form{(int)resultForm}_{resultBen}_FY{resultYear}.{extension}");
                 StartActivityForResult(intent, SaveDocumentRequest);
             }
-            catch { File.Delete(path); pendingExport = null; throw; }
+            catch { pendingExport = null; throw; }
+            finally { if (pendingExport != path) { try { File.Delete(path); } catch (IOException) { } } }
         });
     }
 
@@ -273,20 +301,22 @@ public class MainActivity : Activity
     {
         base.OnActivityResult(requestCode, resultCode, data);
         if (requestCode != SaveDocumentRequest || pendingExport is null) return;
-        var path = pendingExport; busy = true; UpdateControls();
+        var path = pendingExport; busy = true;
+        using var current = new CancellationTokenSource(); operation = current; UpdateControls();
         try
         {
             if (resultCode == Result.Ok && data?.Data is { } destination)
             {
                 using var source = File.OpenRead(path);
                 using var target = ContentResolver!.OpenOutputStream(destination, "wt") ?? throw new IOException("The selected location could not be opened.");
-                await source.CopyToAsync(target);
+                await AndroidBehavior.CopyExportAsync(source, target, current.Token);
                 if (!destroyed) status.Text = "Export saved to the selected location.";
             }
             else if (!destroyed) status.Text = "Export canceled.";
         }
+        catch (OperationCanceledException) { if (!destroyed) status.Text = "Export canceled. The selected destination may contain an incomplete file; delete it before retrying."; }
         catch (Exception ex) { if (!destroyed) Alert("Export failed: " + ex.Message); }
-        finally { try { File.Delete(path); } catch (IOException) { } pendingExport = null; busy = false; if (!destroyed) UpdateControls(); }
+        finally { try { File.Delete(path); } catch (IOException) { } pendingExport = null; if (ReferenceEquals(operation, current)) operation = null; busy = false; if (!destroyed) UpdateControls(); }
     }
 
     protected override void OnSaveInstanceState(Bundle outState)

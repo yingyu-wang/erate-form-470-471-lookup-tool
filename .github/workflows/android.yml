@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths: ['Android/**', 'Core/**', 'Checks/**', 'Assets/ERateLookup.png', 'docs/ANDROID_INSTALL.md', 'scripts/*android_apk.py', '.github/workflows/android.yml']
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -51,8 +52,8 @@ jobs:
           apks = list(pathlib.Path('publish/android').glob('*-Signed.apk'))
           if len(apks) != 1: raise SystemExit(f'Expected one universal signed APK, found {len(apks)}')
           out = pathlib.Path('artifacts'); out.mkdir()
-          apk = out/'ERateLookup-v1.1.0-android-preview.apk'; shutil.copy2(apks[0], apk)
-          package = out/'ERateLookup-v1.1.0-android-preview.zip'
+          apk = out/'ERateLookup-v1.0.1-android-preview.apk'; shutil.copy2(apks[0], apk)
+          package = out/'ERateLookup-v1.0.1-android-preview.zip'
           with zipfile.ZipFile(package, 'w', zipfile.ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
               for source, target in [('docs/ANDROID_INSTALL.md','ANDROID_INSTALL.md'), ('LICENSE','LICENSE'), ('THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')]: z.write(source, target)

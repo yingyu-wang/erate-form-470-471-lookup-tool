@@ -3,22 +3,26 @@
 ## Requirements and preview status
 
 - Android 8.0 or newer (API 26+), ARM64 phone/tablet. The APK also includes x64 for emulators; 32-bit-only devices are not supported.
-- The Android v1.1.0 development preview is separate from desktop v1.0.0. It is not on Google Play and has not yet been validated on a physical device.
+- Android v1.0.1 is a development preview included alongside the desktop v1.0.1 packages. It is not on Google Play and has not yet been validated on a physical device.
 - The APK includes .NET and SQLite. You do **not** need a separate runtime, Android Studio, or a computer for the normal installation path.
 - California name search works with bundled data offline after initialization. Live USAC filing queries and PDFs require internet; successful queries can use a fresh two-hour cache.
 
 ## Download the APK
 
+For v1.0.1, open this repository’s **Releases** page and download **ERateLookup-v1.0.1-android-preview.apk** directly. The Android package ZIP includes this guide and notices. Check the shared `SHA256SUMS.txt` if verifying your download.
+
+The following Actions method is also available for development builds.
+
 1. On your Android device, open [this project's GitHub Actions page](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/actions).
 2. Open a successful **Android preview APK** run for the Android pull request/branch. At the bottom, download the **ERateLookup-Android-preview** artifact. GitHub requires sign-in to download workflow artifacts; they expire after 30 days.
-3. Open the downloaded artifact ZIP in Files or your file manager and extract it. The installable file is **ERateLookup-v1.1.0-android-preview.apk**. Do not install GitHub's source-code ZIP. The artifact also contains a package ZIP with this guide, license, notices, and checksums.
+3. Open the downloaded artifact ZIP in Files or your file manager and extract it. The installable file is **ERateLookup-v1.0.1-android-preview.apk**. Do not install GitHub's source-code ZIP. The artifact also contains a package ZIP with this guide, license, notices, and checksums.
 4. Optional: verify the APK against the artifact's **SHA256SUMS.txt** with a trusted checksum tool. This detects an incomplete or altered download; a checksum alone does not verify publisher identity.
 
-An APK will be attached to a GitHub Release only after the preview is ready for distribution. These instructions do not imply a release APK already exists.
+Tagged releases include the preview APK after all platform builds and package checks succeed.
 
 ## Install on a phone or tablet
 
-1. Tap **ERateLookup-v1.1.0-android-preview.apk** in Downloads/Files.
+1. Tap **ERateLookup-v1.0.1-android-preview.apk** in Downloads/Files.
 2. If Android says installation from this source is not allowed, tap **Settings**. Enable **Allow from this source** for the browser or file manager you are using. The usual path is **Settings → Apps → Special app access → Install unknown apps**; wording varies by manufacturer.
 3. Return to the APK and tap **Install**, then **Open**. The launcher name is **E-rate Lookup**.
 4. After installation, turn off **Allow from this source** again if you no longer need it. This does not remove the installed app. Keep Play Protect enabled.
@@ -61,7 +65,7 @@ Install Android platform tools on a computer. Enable Developer options and USB d
 
 ```sh
 adb devices
-adb install -r ERateLookup-v1.1.0-android-preview.apk
+adb install -r ERateLookup-v1.0.1-android-preview.apk
 ```
 
 Only use `-r` for a compatible signing certificate. Do not uninstall an existing copy without first exporting anything you need. Turn USB debugging off after testing.

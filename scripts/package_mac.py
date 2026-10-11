@@ -34,14 +34,14 @@ info = {
     'CFBundleExecutable': 'ERateLookup',
     'CFBundleIdentifier': 'org.eratelookup.desktop',
     'CFBundlePackageType': 'APPL',
-    'CFBundleShortVersionString': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.0',
-    'CFBundleVersion': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.0',
+    'CFBundleShortVersionString': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1',
+    'CFBundleVersion': ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1',
     'LSMinimumSystemVersion': '14.0',
     'NSHighResolutionCapable': True,
 }
 with (contents / 'Info.plist').open('wb') as stream:
     plistlib.dump(info, stream)
-version = ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.0'
+version = ET.parse(root / 'MacDesktop' / 'MacDesktop.csproj').findtext('.//Version') or '1.0.1'
 architecture = 'arm64' if rid == 'osx-arm64' else 'x64'
 archive = root.parent / f'ERateLookup-v{version}-macos-{architecture}.zip'
 with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
