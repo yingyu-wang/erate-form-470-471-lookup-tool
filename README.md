@@ -60,6 +60,20 @@ See the [complete Android installation, update, troubleshooting, and USB guide](
 
 Successful filing queries are cached for two hours by **BEN + funding year + form type**. Each successful query replaces only its own cache entry. Directory and budget snapshots refresh separately when at least 24 hours old, retaining existing records if refresh fails. USAC query failures are shown as errors rather than reported as no filings.
 
+## Planned v1.0.2 work
+
+The [v1.0.2 implementation plan](docs/V1_0_2_PLAN.md) proposes saved district
+watchlists, CSV batch lookup, change highlighting, service/keyword filters,
+source-backed deadlines, district history, customer summaries, offline saved
+results, expanded selected-result exports, and Android sharing. These are planned
+features; the published app remains v1.0.1.
+
+Work starts with shared data contracts, then watchlists/offline snapshots, batch
+lookup/change tracking, review/export tools, history/deadlines, Android sharing,
+and seven-platform-package validation. See the [technical design](docs/V1_0_2_DESIGN.md)
+and [validation/release checklist](docs/V1_0_2_VALIDATION.md) for dependencies,
+acceptance criteria, testing, and documentation requirements.
+
 ## First test
 
 Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verification returned four applications. Select two and check that CSV and Excel contain only those selected filings. Live counts may change as USAC publishes data.
