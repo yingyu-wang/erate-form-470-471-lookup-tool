@@ -1,4 +1,19 @@
-# v1.0.1 — E-rate Form 470 / 471 Lookup Tool
+# E-rate Form 470 / 471 Lookup Tool — release notes
+
+## v1.0.2 — Planned, unreleased
+
+The [implementation plan](docs/V1_0_2_PLAN.md) covers ten proposed improvements:
+saved district watchlists, CSV batch lookup, change highlighting, service/keyword
+filters, source-backed deadlines, district history, customer summaries, offline
+saved results, expanded selected-result exports, and Android sharing.
+
+This is a documentation milestone. None of those new behaviors is shipped by the
+planning PR, and no v1.0.2 binaries or tag are published. Implementation, platform
+validation, and all seven package checks must be completed before release. See
+the [technical design](docs/V1_0_2_DESIGN.md) and
+[validation checklist](docs/V1_0_2_VALIDATION.md).
+
+## v1.0.1 — Published
 
 Unified 1.0.1 release for Windows x64/ARM64, macOS Apple Silicon/Intel, Linux x64/ARM64, and Android preview.
 
