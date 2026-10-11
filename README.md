@@ -23,6 +23,10 @@ Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` o
 
 ## Features
 
+### Android development preview
+
+A native Android phone/tablet app is being developed in [`Android/`](Android/README.md), reusing the shared lookup and export core. The preview targets Android 8.0+ on ARM64 devices and x64 emulators, with the runtime bundled in its APK. See [Android installation instructions](docs/ANDROID_INSTALL.md) for downloading a build, installing it, exporting files, and updating it. Desktop v1.0.0 releases remain separate from the Android v1.1.0 preview.
+
 - Choose Form 470 or Form 471, funding year, and an exact BEN or California customer-name suggestion.
 - Search names locally after two characters, with up to 15 suggestions.
 - View all distinct certified applications in the published dataset, one row per application.
@@ -77,6 +81,7 @@ Keep executables, ZIPs, caches, and user settings out of the source repository; 
 | `Core/` | USAC queries, cache, seed data, budget display logic, and exports |
 | `Desktop/` | Windows Forms interface |
 | `MacDesktop/` | Avalonia interface for macOS |
+| `Android/` | Native Android development preview |
 | `Assets/` | PNG, ICO, and ICNS app icon |
 | `Checks/` | Shared verification program |
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
