@@ -10,6 +10,8 @@
     <ApplicationVersion>1</ApplicationVersion>
     <ApplicationDisplayVersion>1.1.0</ApplicationDisplayVersion>
     <AssemblyName>ERateLookup</AssemblyName>
+    <!-- Preview bundles must launch from the Home Screen without an IDE debugger. -->
+    <MtouchDebug>false</MtouchDebug>
     <!-- Preserve the shared core's reflection-based JSON models in this first port. -->
     <TrimMode>copy</TrimMode>
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>

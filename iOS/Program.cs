@@ -3,7 +3,11 @@ using UIKit;
 namespace ERate470Lookup.iOS;
 public static class Program
 {
-    public static void Main(string[] args) => UIApplication.Main(args, null, typeof(AppDelegate));
+    public static void Main(string[] args)
+    {
+        Console.WriteLine("E-rate: managed entry point reached.");
+        UIApplication.Main(args, null, typeof(AppDelegate));
+    }
 }
 [Register("AppDelegate")]
 public sealed class AppDelegate : UIApplicationDelegate
@@ -17,6 +21,7 @@ public sealed class SceneDelegate : UIWindowSceneDelegate
 
     public override void WillConnect(UIScene scene, UISceneSession session, UISceneConnectionOptions connectionOptions)
     {
+        Console.WriteLine("E-rate: scene connecting.");
         if (scene is not UIWindowScene windowScene) return;
         Window = new UIWindow(windowScene)
         {

@@ -8,6 +8,7 @@ permissions:
 jobs:
   simulator:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -30,8 +31,8 @@ jobs:
           xcrun simctl boot "$DEVICE_ID"
           xcrun simctl bootstatus "$DEVICE_ID" -b
           xcrun simctl install "$DEVICE_ID" iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app
-          xcrun simctl launch "$DEVICE_ID" com.yingyuwang.eratelookup
           swiftc scripts/verify_ios_screenshot.swift -o /tmp/verify-ios-screenshot
+          xcrun simctl launch --stdout="$PWD/ios-app.stdout.log" --stderr="$PWD/ios-app.stderr.log" "$DEVICE_ID" com.yingyuwang.eratelookup --connection-mode none
           VISIBLE=0
           for attempt in {1..12}; do
             sleep 10
@@ -42,13 +43,16 @@ jobs:
               break
             fi
           done
+          cat ios-app.stdout.log ios-app.stderr.log || true
           test "$VISIBLE" = 1
       - name: Package simulator build
         run: ditto -c -k --sequesterRsrc --keepParent iOS/bin/Debug/net10.0-ios/iossimulator-arm64/ERateLookup.app ERateLookup-iOS-simulator.zip
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: ERateLookup-iOS-simulator
           path: |
             ERateLookup-iOS-simulator.zip
             ios-launch.png
-          if-no-files-found: error
+            ios-app.*.log
+          if-no-files-found: warn
