@@ -1,6 +1,6 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.2 — Development build, unreleased
+## v1.0.2 — Saved BEN portfolios
 
 - Dedicated Saved BENs / Watchlists screen on Windows, macOS/Linux Avalonia, and Android.
 - Named lists with saved BENs, names/tags, and validated atomic CSV import.
@@ -15,8 +15,25 @@
 
 See [portfolio usage](docs/PORTFOLIO_GUIDE.md), [source mappings](docs/V1_0_2_SOURCE_CONTRACTS.md),
 and [validation status](docs/V1_0_2_VALIDATION.md). Provider comparisons are unavailable
-in the application-level view. App UI/device checks remain required before publishing.
-There is no v1.0.2 release tag or public release asset yet; use successful PR #8 Actions artifacts for testing.
+in the application-level view. Hands-on desktop and physical Android checks remain outstanding.
+Merged implementation CI passed across all supported build targets; the release workflow
+rebuilds all seven packages from the v1.0.2 tag and publishes them with SHA256 checksums.
+
+### v1.0.2 downloads
+
+| Asset | Platform | Runtime prerequisite |
+| --- | --- | --- |
+| ERateLookup-v1.0.2-win-x64.zip | Windows x64 | .NET 10 Desktop Runtime x64 |
+| ERateLookup-v1.0.2-win-arm64.zip | Windows ARM64 | .NET 10 Desktop Runtime ARM64 |
+| ERateLookup-v1.0.2-macos-arm64.zip | macOS 14+ Apple Silicon | .NET 10 Runtime ARM64 |
+| ERateLookup-v1.0.2-macos-x64.zip | macOS 14+ Intel | .NET 10 Runtime x64 |
+| ERateLookup-v1.0.2-linux-x64.tar.gz | Linux x64 | Runtime bundled; native libraries and X11/XWayland required |
+| ERateLookup-v1.0.2-linux-arm64.tar.gz | Linux ARM64 | Runtime bundled; native libraries and X11/XWayland required |
+| ERateLookup-v1.0.2-android-preview.zip | Android 8.0+ ARM64; x64 emulators | Runtime bundled; extract APK to install |
+
+Android remains a development preview with a generated debug signing key; an update may
+require uninstalling the prior preview, which deletes local app data. Export needed data first.
+Windows and macOS packages are unsigned; macOS packages are not notarized.
 
 ## v1.0.1 — Published
 
