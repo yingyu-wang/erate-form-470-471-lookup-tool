@@ -108,7 +108,8 @@ internal static class Program
         using var http = new HttpClient(new EmptyFilings()); var cache = Path.Combine(folder, "cache");
         var directory = new CaliforniaDirectory(http, cache);
         directory.Replace([new() { Number = "00123", Name = "First District", State = "CA", City = "Test", Type = "School District" }],
-            [new() { Ben = "00456", Name = "Second District", Cycle = "FY2021-2025" }], DateTimeOffset.UtcNow);
+            [new() { Ben = "00456", Name = "Second District", State = "CA", Cycle = "FY2021-2025" }], DateTimeOffset.UtcNow);
+        Check(directory.GetBudget("00456", 2025)?.Name == "Second District", "Budget-name fallback fixture is present in the California snapshot");
         var client = new UsacClient(http, cache);
         foreach (var ben in new[] { "00123", "00456", "00789" })
             await client.GetFilingsAsync(ben, 2025, FilingForm.Form470, false, default);
