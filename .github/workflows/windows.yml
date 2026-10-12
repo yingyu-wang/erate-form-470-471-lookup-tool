@@ -121,7 +121,7 @@ jobs:
             (Resolve-Path $renamed).Path
           }
           if (@($linuxAssets).Count -ne 2) { throw "Expected Linux x64 and ARM64 archives" }
-          $androidAssets = Get-ChildItem "ERateLookup-*-android-preview.zip" | ForEach-Object { $_.FullName }
+          $androidAssets = @(Get-ChildItem "ERateLookup-*-android-preview.zip" | ForEach-Object { $_.FullName })
           if (@($androidAssets).Count -ne 1) { throw "Expected one Android package ZIP" }
           $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets) + @($linuxAssets)) | Sort-Object | ForEach-Object {
             "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $(Split-Path $_ -Leaf)"
