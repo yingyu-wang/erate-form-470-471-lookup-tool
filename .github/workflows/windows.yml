@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+# Tagged releases share one build slot; branch/PR checks have independent slots.
+concurrency:
+  group: ${{ startsWith(github.ref, 'refs/tags/v') && 'eratelookup-release-build' || format('eratelookup-ci-{0}', github.run_id) }}
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
@@ -73,6 +77,10 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [build, mac-build, android-build, linux-build]
+    # Same group as every other publisher targeting this release.
+    concurrency:
+      group: eratelookup-release-publish-${{ github.ref_name }}
+      cancel-in-progress: false
     runs-on: windows-latest
     permissions:
       contents: write

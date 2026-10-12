@@ -15,6 +15,9 @@ permissions:
   actions: read
 jobs:
   publish:
+    concurrency:
+      group: eratelookup-release-publish-${{ inputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

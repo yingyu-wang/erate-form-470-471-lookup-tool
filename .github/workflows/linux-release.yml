@@ -1,6 +1,9 @@
 name: Publish Linux to v1.0.1
 on:
   workflow_dispatch:
+concurrency:
+  group: eratelookup-release-build
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
@@ -13,7 +16,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: eratelookup-release-assets
+      group: eratelookup-release-publish-v1.0.1
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4

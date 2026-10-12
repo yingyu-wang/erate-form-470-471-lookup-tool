@@ -132,6 +132,15 @@ For cloud builds, run the **Android preview APK** workflow in GitHub Actions and
 
 The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds Windows, macOS, and Linux x64/ARM64 packages plus the Android preview, runs the shared/security checks, and attaches the Windows/macOS ZIPs, Linux tar.gz archives, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 
+Tagged release runs use one repository-wide build slot, so a second release waits
+until the active release run finishes. The platform jobs within one release still
+run in parallel. Every publisher (tagged release, existing-CI recovery, and the
+historical Linux updater) also shares a publishing lock for its target tag.
+Active runs are never canceled by these locks. GitHub retains one pending run
+per group; a newer request can replace an older pending request. These safeguards apply to workflow definitions containing the fix;
+rerunning an older tag uses that tag's older workflow. Use the current recovery
+publisher when updating an older release.
+
 ```sh
 git add .
 git commit -m "Describe the change"
@@ -159,7 +168,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
 | `Publish-Linux.sh` / `scripts/package_linux.py` | Creates self-contained Linux tar.gz archives |
 | `.github/workflows/linux.yml` | Native Linux x64/ARM64 builds and window launch checks |
-| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.2 release |
+| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.1 release |
 | `docs/LINUX_INSTALL.md` | Linux installation, dependencies, shortcuts, and compilation |
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
