@@ -1,22 +1,30 @@
 # Saved BENs and district portfolios — v1.0.2
 
-These instructions describe the v1.0.2 development build in PR #8. The published
-v1.0.1 packages do not contain this screen. Download a successful PR #8 GitHub
-Actions artifact for your platform to test it. No v1.0.2 release is published yet.
+Saved BEN portfolios are included in the published [v1.0.2 packages](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
+The main-screen **Add BEN to watchlist** shortcut described below is newer and
+requires a successful PR #9 / subsequent main-branch Actions build; it is not in
+the published v1.0.2 packages.
 
 ## Save your districts
 
 1. Open **Saved BENs / Watchlists** from the main app screen.
 2. Select **Favorites**, or enter a list name and choose **New list**.
 3. Enter a BEN, optional display name, and optional tags. Choose **Save BEN**.
-   Faster: from the main screen, search for the district by partial name, run the
+   In builds with the shortcut: from the main screen, search by partial name, run the
    lookup, then choose **Add BEN to watchlist**. The BEN and customer name are
-   filled in; pick the watchlist and save. No retyping.
+   filled in; pick the watchlist and save. You can also look up a BEN directly;
+   its budget name is suggested when available, otherwise the name stays blank.
+   Editing the customer clears the desktop selection until you run another lookup.
+   On Android, you can save a selected or entered BEN before running the lookup.
 4. Select an existing BEN to edit its name/tags, then choose **Update BEN**.
    To use a different BEN, save it as another entry. **Remove BEN** removes only
    membership in the selected list.
 5. Use **Rename list** or **Delete list** to manage lists. Deleting a list retains
    its saved filing history. Lists and history are local to this device/profile.
+
+If all lists have been deleted, create a list in **Saved BENs / Watchlists** first.
+A saved-data error is reported when you open a watchlist action; ordinary lookup
+remains available. Newer portfolio data is never downgraded or reset automatically.
 
 The portfolio window has its own selection of BENs, years, and forms. Opening it
 does not automatically run network lookups or change your main-screen lookup.

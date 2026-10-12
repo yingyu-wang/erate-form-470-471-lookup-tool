@@ -23,6 +23,10 @@ jobs:
         run: dotnet build ERate470Lookup.sln -c Release
       - name: Run offline checks
         run: dotnet run --project Checks/Checks.csproj -c Release --no-build
+      - name: Windows watchlist UI regression checks
+        if: matrix.rid == 'win-x64'
+        timeout-minutes: 3
+        run: dotnet run --project DesktopChecks/DesktopChecks.csproj -c Release
       - name: Publish Windows ${{ matrix.rid }}
         run: dotnet publish Desktop/ERate470Lookup.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/${{ matrix.rid }}-framework
       - name: Package executable and instructions

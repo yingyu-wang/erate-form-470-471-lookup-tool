@@ -36,7 +36,6 @@ public class MainActivity : Activity
     List<Filing> filings = [];
     bool ready, busy, complete, destroyed, suppressChanges;
     string cache = "", resultBen = "", matchBen = "", matchName = "";
-    PortfolioStore? store;
     string? pendingExport;
     int resultYear, resultPage;
     FilingForm resultForm;
@@ -101,7 +100,7 @@ public class MainActivity : Activity
 
     async Task InitializeAsync() => await RunAsync(async ct =>
     {
-        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); store = new PortfolioStore(cache); }, ct);
+        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); }, ct);
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
         ready = true;
         var refreshed = true;
@@ -186,10 +185,13 @@ public class MainActivity : Activity
     Task AddBenToWatchlistAsync()
     {
         if (destroyed) return Task.CompletedTask;
-        if (store is null) { Alert("Still loading. Try again in a moment."); return Task.CompletedTask; }
+        if (!ready || busy || pendingExport is not null) return Task.CompletedTask;
         var benText = ben.Text?.Trim() ?? "";
         if (benText.Length == 0) { Alert("Identify a BEN first — search by name or enter a BEN."); return Task.CompletedTask; }
+        // The action button reports store errors without disabling ordinary lookups.
+        var store = new PortfolioStore(cache);
         var watchlists = store.Lists();
+        if (watchlists.Count == 0) { Alert("Create a watchlist in Saved BENs / Watchlists first."); return Task.CompletedTask; }
         var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
         layout.SetPadding(Dp(24), Dp(16), Dp(24), Dp(8));
         var spinner = new Spinner(this) { ContentDescription = "Watchlist" };

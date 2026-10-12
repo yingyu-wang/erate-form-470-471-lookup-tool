@@ -37,7 +37,7 @@ public sealed class MainWindow:Window
     private readonly UsacClient client;
     private readonly CaliforniaDirectory directory;
     private readonly FilingWindow windows;
-    private readonly PortfolioStore portfolioStore;
+    private readonly string portfolioDirectory;
     private string selectedName="";
     private readonly string themePath;
     private Bitmap? backdrop;
@@ -57,7 +57,8 @@ public sealed class MainWindow:Window
         Title="E-rate · Form 470 / 471 Lookup";Width=1200;Height=850;MinWidth=900;MinHeight=650;
         FontFamily=new FontFamily(OperatingSystem.IsLinux()?"DejaVu Sans":"Arial");FontSize=14;
         var cache=OperatingSystem.IsMacOS()?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Library","Application Support","ERateLookup","cache"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERateLookup","cache");
-        client=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();windows=new(http,cache);portfolioStore=new(Path.GetDirectoryName(cache)!);
+        portfolioDirectory=Path.GetDirectoryName(cache)!;
+        client=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();windows=new(http,cache);
         themePath=Path.Combine(Path.GetDirectoryName(cache)!,"theme.txt");
         using(var asset=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("mint-glass-background.png"))if(asset is not null)backdrop=new Bitmap(asset);
         year.ItemsSource=Enumerable.Range(2016,12).Reverse().ToList();year.SelectedItem=2027;
@@ -90,7 +91,7 @@ public sealed class MainWindow:Window
         Content=root;buttons.AddRange(new[]{search,refresh,choose});ApplyTheme();ready=true;
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();
         matches.DoubleTapped+=async(_,_)=>await ChooseAsync();
-        customer.TextChanged+=(_,_)=>{typing.Stop();if(!busy)typing.Start();};typing.Tick+=(_,_)=>{typing.Stop();Suggest();};
+        customer.TextChanged+=(_,_)=>{typing.Stop();if(!busy){Reset("Customer changed. Search again.");typing.Start();}};typing.Tick+=(_,_)=>{typing.Stop();Suggest();};
         customer.KeyDown+=async(_,e)=>{if(e.Key==Avalonia.Input.Key.Enter){e.Handled=true;await SearchAsync(false);}};
         year.SelectionChanged+=async(_,_)=>{if(!ready||busy)return;Reset("Funding year changed. Search again.");await WindowNoticeAsync(true);};
         form.SelectionChanged+=async(_,_)=>{if(!ready||busy)return;selectedForm=form.SelectedIndex==1?FilingForm.Form471:FilingForm.Form470;numberColumn.Header=$"Form {(int)selectedForm}";servicesColumn.Header=selectedForm==FilingForm.Form471?"Service category":"Requested services";Reset("Form type changed. Search again.");await WindowNoticeAsync(true);};
@@ -154,10 +155,10 @@ public sealed class MainWindow:Window
         });
     }
     private async Task ChooseAsync()
-    {if(busy||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;selectedName=entity.Name;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben));}
-    private async Task LookupAsync(string ben)
+    {if(busy||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));}
+    private async Task LookupAsync(string ben,string name="")
     {
-        complete=false;results=[];grid.ItemsSource=null;selectedBen=ben;hasCycle470=null;ShowBudget();status.Text=$"Checking Form {(int)selectedForm}, BEN {ben}, FY{selectedYear}…";
+        complete=false;results=[];grid.ItemsSource=null;selectedBen=ben;selectedName=name;hasCycle470=null;ShowBudget();status.Text=$"Checking Form {(int)selectedForm}, BEN {ben}, FY{selectedYear}…";
         var result=await client.GetFilingsAsync(ben,selectedYear,selectedForm,force,lifetime.Token);
         results=result.Data;fetched=result.FetchedAt;complete=true;grid.ItemsSource=results;foreach(var row in results)grid.SelectedItems.Add(row);
         var note="";
@@ -201,35 +202,38 @@ public sealed class MainWindow:Window
     private async Task AddBenToWatchlistAsync()
     {
         if(selectedBen.Length==0){await MessageAsync("Identify a BEN first — search by name or enter a BEN, then run a lookup.");return;}
-        var watchlists=portfolioStore.Lists();
-        var dialog=new Window{Title="Add BEN to watchlist",Width=400,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};
-        var panel=new StackPanel{Margin=new Thickness(20),Spacing=10};
-        var picker=new ComboBox{ItemsSource=watchlists,SelectedIndex=watchlists.Count>0?0:-1};
-        var nameBox=new TextBox{Text=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"",Watermark="Display name (optional)"};
-        var tagsBox=new TextBox{Watermark="Tags (optional)"};
-        var error=Text("");error.Foreground=Brushes.DarkRed;
-        var buttons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
-        var save=Button("Save");var cancel=Button("Cancel");
-        save.Click+=(_,_)=>{
-            try
-            {
-                if(picker.SelectedItem is not Watchlist list)throw new InvalidOperationException("No watchlist available.");
-                portfolioStore.SaveEntry(list.Id,new WatchlistEntry(selectedBen,nameBox.Text??"",tagsBox.Text??""));
-                dialog.Close(true);
-            }
-            catch(Exception ex){error.Text=ex.Message;}
-        };
-        cancel.Click+=(_,_)=>dialog.Close(false);
-        buttons.Children.Add(save);buttons.Children.Add(cancel);
-        panel.Children.Add(Text("Watchlist"));panel.Children.Add(picker);
-        panel.Children.Add(Text("Display name"));panel.Children.Add(nameBox);
-        panel.Children.Add(Text("Tags"));panel.Children.Add(tagsBox);
-        panel.Children.Add(error);panel.Children.Add(buttons);
-        dialog.Content=panel;
         try
         {
+            var portfolioStore=new PortfolioStore(portfolioDirectory);
+            var watchlists=portfolioStore.Lists();
+            if(watchlists.Count==0){await MessageAsync("Create a watchlist in Saved BENs / Watchlists first.");return;}
+            var ben=selectedBen;
+            var dialog=new Window{Title=$"Add BEN {ben} to watchlist",Width=400,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};
+            var panel=new StackPanel{Margin=new Thickness(20),Spacing=10};
+            var picker=new ComboBox{ItemsSource=watchlists,SelectedIndex=watchlists.Count>0?0:-1};
+            var nameBox=new TextBox{Text=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"",PlaceholderText="Display name (optional)"};
+            var tagsBox=new TextBox{PlaceholderText="Tags (optional)"};
+            var error=Text("");error.Foreground=Brushes.DarkRed;
+            var buttons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
+            var save=Button("Save");var cancel=Button("Cancel");
+            save.Click+=(_,_)=>{
+                try
+                {
+                    if(picker.SelectedItem is not Watchlist list)throw new InvalidOperationException("No watchlist available.");
+                    portfolioStore.SaveEntry(list.Id,new WatchlistEntry(ben,nameBox.Text??"",tagsBox.Text??""));
+                    dialog.Close(true);
+                }
+                catch(Exception ex){error.Text=ex.Message;}
+            };
+            cancel.Click+=(_,_)=>dialog.Close(false);
+            buttons.Children.Add(save);buttons.Children.Add(cancel);
+            panel.Children.Add(Text("Watchlist"));panel.Children.Add(picker);
+            panel.Children.Add(Text("Display name"));panel.Children.Add(nameBox);
+            panel.Children.Add(Text("Tags"));panel.Children.Add(tagsBox);
+            panel.Children.Add(error);panel.Children.Add(buttons);
+            dialog.Content=panel;
             if(await dialog.ShowDialog<bool>(this))
-                status.Text=$"BEN {selectedBen} saved. Open Saved BENs / Watchlists to refresh it.";
+                status.Text=$"BEN {ben} saved. Open Saved BENs / Watchlists to refresh it.";
         }
         catch(Exception ex){await MessageAsync(ex.Message);}
     }

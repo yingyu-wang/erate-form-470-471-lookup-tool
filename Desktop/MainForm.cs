@@ -27,7 +27,7 @@ public sealed class MainForm : Form
     private readonly UsacClient client;
     private readonly CaliforniaDirectory directory;
     private readonly FilingWindow filingWindow;
-    private readonly PortfolioStore portfolioStore;
+    private readonly string portfolioDirectory;
     private string selectedName="";
     private readonly Label windowBanner=new(){AutoSize=true,MaximumSize=new Size(1020,0)};
     private readonly Button windowInfo=new(){Text="Form 471 window info",AutoSize=true};
@@ -52,7 +52,7 @@ public sealed class MainForm : Form
     private string selectedBen="";
     private bool refreshRequested;
     private bool busy;
-    public MainForm()
+    public MainForm(string? dataDirectory = null)
     {
         using(var iconStream=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ERateLookup.ico"))
             if(iconStream is not null) Icon=new Icon(iconStream);
@@ -60,11 +60,12 @@ public sealed class MainForm : Form
         BackColor=Color.FromArgb(232,244,240);DoubleBuffered=true;
         ForeColor=Color.FromArgb(23,48,44);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("ERate470Lookup/2.0");
-        var cache=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERate470LookupDotNet","cache");
+        portfolioDirectory=dataDirectory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERate470LookupDotNet");
+        var cache=Path.Combine(portfolioDirectory,"cache");
         settingsPath=Path.Combine(Path.GetDirectoryName(cache)!,"theme.txt");
         using(var asset=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("mint-glass-background.png"))
             if(asset is not null){using var loaded=Image.FromStream(asset);backgroundAsset=new Bitmap(loaded);}
-        client=new(http,cache);filingWindow=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();portfolioStore=new(Path.GetDirectoryName(cache)!);state.Text="CA";state.ReadOnly=true;
+        client=new(http,cache);filingWindow=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();state.Text="CA";state.ReadOnly=true;
         for(var y=2027;y>=2016;y--) year.Items.Add(y);year.SelectedItem=2027;
         layout=new(){BackColor=Color.Transparent,Dock=DockStyle.Fill,Padding=new Padding(24),ColumnCount=1,RowCount=10};Controls.Add(layout);
         layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.Absolute,0));layout.RowStyles.Add(new(SizeType.Percent,100));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));layout.RowStyles.Add(new(SizeType.AutoSize));
@@ -95,7 +96,7 @@ public sealed class MainForm : Form
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();matches.DoubleClick+=async(_,_)=>await ChooseAsync();
         grid.SelectionChanged+=(_,_)=>{details.Text=SelectedFiling()?.Nickname??"";UpdateSelection();};
         selectAll.Click+=(_,_)=>grid.SelectAll();unselectAll.Click+=(_,_)=>grid.ClearSelection();grid.CellDoubleClick+=(_,_)=>OpenForm();open.Click+=(_,_)=>OpenForm();export.Click+=(_,_)=>Export();AcceptButton=search;
-        customer.TextChanged+=(_,_)=>{typingTimer.Stop();if(!busy)typingTimer.Start();};
+        customer.TextChanged+=(_,_)=>{typingTimer.Stop();if(!busy){ResetLookup("Customer changed. Search again.");typingTimer.Start();}};
         typingTimer.Tick+=(_,_)=>{typingTimer.Stop();Suggest();};
         year.SelectedIndexChanged+=async(_,_)=>{ResetLookup("Funding year changed. Search again.");await ShowWindowNoticeAsync(true);};
         formPicker.SelectedIndexChanged+=async(_,_)=>
@@ -112,7 +113,7 @@ public sealed class MainForm : Form
         themePicker.SelectedIndexChanged+=(_,_)=>ApplyTheme(themePicker.SelectedItem as string??"Mint Glass",true);
         var saved="Mint Glass";try{if(File.Exists(settingsPath))saved=File.ReadAllText(settingsPath).Trim();}catch(IOException){}catch(UnauthorizedAccessException){}
         themePicker.SelectedItem=themePicker.Items.Contains(saved)?saved:"Mint Glass";
-        FormClosing+=(_,_)=>{typingTimer.Stop();lifetime.Cancel();};FormClosed+=(_,_)=>{backgroundAsset?.Dispose();typingTimer.Dispose();http.Dispose();lifetime.Dispose();};
+        FormClosing+=(_,_)=>{typingTimer.Stop();lifetime.Cancel();};FormClosed+=(_,_)=>{backgroundAsset?.Dispose();typingTimer.Dispose();http.Dispose();lifetime.Dispose();};UpdateSelection();
     }
     protected override void OnPaintBackground(PaintEventArgs e)
     {
@@ -192,7 +193,7 @@ public sealed class MainForm : Form
         if(busy)return;var text=customer.Text.Trim();var region=state.Text.Trim();
         if(text.Length==0||(!text.All(char.IsAsciiDigit)&&text.Length<2)){MessageBox.Show(this,"Enter a BEN or at least two characters of a customer name.");return;}
         if(region.Length!=0&&(region.Length!=2||!region.All(char.IsAsciiLetter))){MessageBox.Show(this,"Use a two-letter state abbreviation.");return;}
-        selectedYear=(int)year.SelectedItem!;refreshRequested=force;typingTimer.Stop();results=[];lookupComplete=false;grid.DataSource=null;details.Text="";selectedBen="";ShowMatches(false);
+        selectedYear=(int)year.SelectedItem!;refreshRequested=force;typingTimer.Stop();ResetLookup("Searching…");
         await ExecuteAsync(async()=>
         {
             if(text.All(char.IsAsciiDigit)){await LookupAsync(text);return;}
@@ -205,11 +206,11 @@ public sealed class MainForm : Form
     private async Task ChooseAsync()
     {
         if(busy||matches.SelectedItem is not Entity entity)return;
-        selectedYear=(int)year.SelectedItem!;selectedName=entity.Name;ShowMatches(false);await ExecuteAsync(()=>LookupAsync(entity.Ben));
+        selectedYear=(int)year.SelectedItem!;ShowMatches(false);await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));
     }
-    private async Task LookupAsync(string ben)
+    private async Task LookupAsync(string ben,string name="")
     {
-        lookupComplete=false;results=[];grid.DataSource=null;details.Text="";selectedBen=ben;hasCycle470=null;ShowBudget(ben);status.Text=$"Checking BEN {ben}, funding year {selectedYear}…";
+        lookupComplete=false;results=[];grid.DataSource=null;details.Text="";selectedBen=ben;selectedName=name;hasCycle470=null;ShowBudget(ben);status.Text=$"Checking BEN {ben}, funding year {selectedYear}…";
         var response=await client.GetFilingsAsync(ben,selectedYear,selectedForm,refreshRequested,lifetime.Token);
         results=response.Data;lookupComplete=true;lookupFetched=response.FetchedAt;grid.DataSource=results;grid.SelectAll();UpdateSelection();
         string cycleCheckNote="";
@@ -256,6 +257,8 @@ public sealed class MainForm : Form
         if(selectedBen.Length==0){MessageBox.Show(this,"Identify a BEN first — search by name or enter a BEN, then run a lookup.");return;}
         try
         {
+            var portfolioStore=new PortfolioStore(portfolioDirectory);
+            if(portfolioStore.Lists().Count==0){MessageBox.Show(this,"Create a watchlist in Saved BENs / Watchlists first.");return;}
             var suggested=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"";
             using var dialog=new AddToWatchlistDialog(portfolioStore,selectedBen,suggested);
             if(dialog.ShowDialog(this)==DialogResult.OK)status.Text=$"BEN {selectedBen} saved to \"{dialog.ChosenListName}\". Open Saved BENs / Watchlists to refresh it.";
