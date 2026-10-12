@@ -62,9 +62,20 @@ public sealed class PortfolioSession
             {
                 var result=await client.GetFilingsAsync(query.Ben,query.Year,query.Form,true,ct);
                 ct.ThrowIfCancellationRequested();
-                if(!Store.SaveLive(query,seq,result,ct)) throw new InvalidOperationException("A newer lookup is already saved; this observation was not applied.");
-                Rows.AddRange(ToRows(Store.Read(query)!,"Live"));
-                Store.RecordOutcome(query,seq,result.Data.Count==0?"SuccessEmpty":"Success");
+                if(Store.SaveLive(query,seq,result,ct))
+                {
+                    Rows.AddRange(ToRows(Store.Read(query)!,"Live"));
+                    Store.RecordOutcome(query,seq,result.Data.Count==0?"SuccessEmpty":"Success");
+                }
+                else
+                {
+                    // A newer observation was saved concurrently, or saved history was
+                    // cleared mid-flight: show the current baseline instead of a failure.
+                    var current=Store.Read(query);
+                    if(current is null) Rows.Add(new(query,null,null,"Not saved","","No complete saved lookup. Refresh live when connected."));
+                    else Rows.AddRange(ToRows(current,"Live"));
+                    Store.RecordOutcome(query,seq,"Superseded");
+                }
             }
             catch(OperationCanceledException) when(ct.IsCancellationRequested)
             {Store.RecordOutcome(query,seq,"Cancelled");Rows.Add(new(query,null,null,"Cancelled","","Previous saved results retained. Use Open saved to view them."));}
@@ -109,12 +120,12 @@ public sealed class PortfolioSession
     }
     public List<string[]> ExportRows(CaliforniaDirectory? directory=null)
     {
-        var rows=new List<string[]> {new[]{"ExportedUTC","LookupFetchedUTC","DirectoryUpdatedUTC","FundingYear","BEN","Customer","LookupResult","FormType","ApplicationNumber","FilingStatus","CertifiedDate","Nickname","Services","PDF","BudgetCycle","USACBudgetStatus","BudgetDisplayStatus","TotalC2BudgetPreDiscount","CommittedC2BudgetPreDiscount","PendingC2BudgetPreDiscount","ReportedRemainingC2BudgetPreDiscount","LookupOutcome","Change","SourceAndNotes","AllowableContractDate","RequestedFundingUSD","PreDiscountEligibleUSD"}};
+        var rows=new List<string[]> {new[]{"ExportedUTC","LookupFetchedUTC","DirectoryUpdatedUTC","FundingYear","BEN","Customer","FormType","ApplicationNumber","FilingStatus","CertifiedDate","Nickname","Services","PDF","BudgetCycle","USACBudgetStatus","BudgetDisplayStatus","TotalC2BudgetPreDiscount","CommittedC2BudgetPreDiscount","PendingC2BudgetPreDiscount","ReportedRemainingC2BudgetPreDiscount","LookupOutcome","Change","SourceAndNotes","AllowableContractDate","RequestedFundingUSD","PreDiscountEligibleUSD"}};
         var exported=DateTimeOffset.UtcNow.ToString("O");
         foreach(var r in Rows.Where(r=>Selected.Contains(r.Id)))
         {
             var b=directory?.GetBudget(r.Query.Ben,r.Query.Year);
-            rows.Add(new[]{exported,r.Observed?.ToString("O")??"",directory?.LastUpdated??"Unknown",r.Query.Year.ToString(CultureInfo.InvariantCulture),r.Query.Ben,r.Filing?.Name??"",r.Outcome,((int)r.Query.Form).ToString(CultureInfo.InvariantCulture),r.Filing?.Number??"",r.Filing?.Status??"",r.Filing?.Certified??"",r.Filing?.Nickname??"",r.Filing?.Services??"",r.Filing?.Pdf??"",b?.Cycle??"Not reported",b?.Version??"Not reported",b is null?"Not reported":BudgetRow.ForecastView(b.Version,null)?"Forecast":b.Version,b?.Total??"Not reported",b?.Committed??"Not reported",b?.Pending??"Not reported",b?.Available??"Not reported",r.Outcome,r.Change,r.Note,PortfolioInsights.ContractDate(r.Filing),string.IsNullOrWhiteSpace(r.Filing?.RequestedAmount)?"Not reported":r.Filing.RequestedAmount,string.IsNullOrWhiteSpace(r.Filing?.PreDiscountAmount)?"Not reported":r.Filing.PreDiscountAmount});
+            rows.Add(new[]{exported,r.Observed?.ToString("O")??"",directory?.LastUpdated??"Unknown",r.Query.Year.ToString(CultureInfo.InvariantCulture),r.Query.Ben,r.Filing?.Name??"",((int)r.Query.Form).ToString(CultureInfo.InvariantCulture),r.Filing?.Number??"",r.Filing?.Status??"",r.Filing?.Certified??"",r.Filing?.Nickname??"",r.Filing?.Services??"",r.Filing?.Pdf??"",b?.Cycle??"Not reported",b?.Version??"Not reported",b is null?"Not reported":BudgetRow.ForecastView(b.Version,null)?"Forecast":b.Version,b?.Total??"Not reported",b?.Committed??"Not reported",b?.Pending??"Not reported",b?.Available??"Not reported",r.Outcome,r.Change,r.Note,PortfolioInsights.ContractDate(r.Filing),string.IsNullOrWhiteSpace(r.Filing?.RequestedAmount)?"Not reported":r.Filing.RequestedAmount,string.IsNullOrWhiteSpace(r.Filing?.PreDiscountAmount)?"Not reported":r.Filing.PreDiscountAmount});
         }
         if(rows.Count==1)throw new InvalidOperationException("Select at least one result to export.");return rows;
     }

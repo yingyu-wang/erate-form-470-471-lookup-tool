@@ -43,7 +43,7 @@ public static class PortfolioInsights
     public static async Task<string> DeadlinesAsync(PortfolioSession session,FilingWindow windows,CancellationToken ct)
     {
         var text=new StringBuilder("Source-reported dates; verify current EPC/RFP amendments before acting. Date-only values have no asserted time or timezone.\n\n");
-        foreach(var r in session.Rows.Where(r=>r.Query.Form==FilingForm.Form470&&r.Outcome=="Success").OrderBy(r=>ContractDate(r.Filing)))
+        foreach(var r in session.Rows.Where(r=>r.Query.Form==FilingForm.Form470&&r.Outcome=="Success").OrderBy(r=>ContractDate(r.Filing)=="Unknown").ThenBy(r=>ContractDate(r.Filing)))
             text.AppendLine($"BEN {r.Query.Ben} · FY{r.Query.Year} · Form 470 {r.Filing?.Number}\nAllowable contract date: {ContractDate(r.Filing)}\nObserved {r.Observed:O} · {Form470Source}\n");
         foreach(var year in session.Rows.Select(r=>r.Query.Year).Distinct().Order())
         {
