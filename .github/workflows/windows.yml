@@ -30,7 +30,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path package -Force | Out-Null
           Copy-Item publish/${{ matrix.rid }}-framework/ERate470Lookup.exe package/
-          Copy-Item README.md,LICENSE,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
+          Copy-Item README.md,LICENSE,CONTRIBUTORS.md,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
+          Copy-Item docs/PORTFOLIO_GUIDE.md package/
           if ('${{ matrix.rid }}' -eq 'win-arm64') {
             Copy-Item docs/WINDOWS_ARM64.md package/
             (Get-Content package/README.md -Raw).Replace('docs/WINDOWS_ARM64.md', 'WINDOWS_ARM64.md') | Set-Content package/README.md

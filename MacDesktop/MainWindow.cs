@@ -77,6 +77,8 @@ public sealed class MainWindow:Window
         grid.Columns.Add(new DataGridTextColumn{Header="Customer",Binding=new Binding("Name"),Width=new DataGridLength(270)});
         grid.Columns.Add(servicesColumn);Add(grid,5);Add(detail,6);
         var actions=new WrapPanel{Margin=new Thickness(0,10,0,8)};
+        var portfolio=Button("Saved BENs / Watchlists");actions.Children.Add(portfolio);
+        portfolio.Click+=async(_,_)=>{try{await new PortfolioWindow(client,Path.GetDirectoryName(cache)!,directory,windows).ShowDialog(this);}catch(Exception ex){await MessageAsync(ex.Message);}};
         foreach(var b in new[]{open,all,none,export,sync,windowInfo}){buttons.Add(b);actions.Children.Add(b);}
         selection.Margin=new Thickness(8,12,8,0);actions.Children.Add(selection);actions.Children.Add(Text("Theme"));actions.Children.Add(theme);Add(actions,7);
         Add(Text($"Filing cache: 2 hours. Refresh live bypasses it. Names search the local California directory.\nHold {(OperatingSystem.IsMacOS()?"Command (⌘)":"Ctrl")} to select individual rows; Shift selects a range. USAC data may lag EPC submissions."),8);Add(windowNotice,9);

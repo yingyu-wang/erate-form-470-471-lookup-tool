@@ -48,15 +48,18 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "${apks[0]}" > publish/android/apk-badging.txt
           python scripts/verify_android_apk.py "${apks[0]}" --badging-file publish/android/apk-badging.txt
           python - <<'PY'
-          import hashlib, pathlib, shutil, zipfile
+          import hashlib, pathlib, shutil, zipfile, re
           apks = list(pathlib.Path('publish/android').glob('*-Signed.apk'))
           if len(apks) != 1: raise SystemExit(f'Expected one universal signed APK, found {len(apks)}')
           out = pathlib.Path('artifacts'); out.mkdir()
-          apk = out/'ERateLookup-v1.0.1-android-preview.apk'; shutil.copy2(apks[0], apk)
-          package = out/'ERateLookup-v1.0.1-android-preview.zip'
+          versions = re.findall(r'<ApplicationDisplayVersion>([0-9]+\.[0-9]+\.[0-9]+)</ApplicationDisplayVersion>', pathlib.Path('Android/ERateLookup.Android.csproj').read_text())
+          if len(versions) != 1: raise SystemExit('Expected one Android package version')
+          version = versions[0]
+          apk = out/f'ERateLookup-v{version}-android-preview.apk'; shutil.copy2(apks[0], apk)
+          package = out/f'ERateLookup-v{version}-android-preview.zip'
           with zipfile.ZipFile(package, 'w', zipfile.ZIP_DEFLATED) as z:
               z.write(apk, apk.name)
-              for source, target in [('docs/ANDROID_INSTALL.md','ANDROID_INSTALL.md'), ('LICENSE','LICENSE'), ('THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')]: z.write(source, target)
+              for source, target in [('docs/ANDROID_INSTALL.md','ANDROID_INSTALL.md'), ('docs/PORTFOLIO_GUIDE.md','PORTFOLIO_GUIDE.md'), ('LICENSE','LICENSE'), ('CONTRIBUTORS.md','CONTRIBUTORS.md'), ('THIRD_PARTY_NOTICES.md','THIRD_PARTY_NOTICES.md')]: z.write(source, target)
           (out/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name+'\n' for p in [apk, package]))
           PY
       - uses: actions/upload-artifact@v4

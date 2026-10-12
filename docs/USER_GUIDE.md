@@ -4,7 +4,7 @@ Native **C# Windows Forms** application targeting **.NET 10 LTS**. This smaller 
 
 ## GitHub and development
 
-Open `ERate470Lookup.sln` for the full solution. See [GITHUB_SETUP.md](GITHUB_SETUP.md) for repository layout, first upload, syncing changes, and release packaging. Build output and per-user SQLite caches are excluded by `.gitignore`.
+Open `ERate470Lookup.sln` for the full solution. See [GITHUB_SETUP.md](../GITHUB_SETUP.md) for repository layout, first upload, syncing changes, and release packaging. Build output and per-user SQLite caches are excluded by `.gitignore`.
 
 ## End-user requirements and setup
 
@@ -199,7 +199,7 @@ A successful empty response, including FY2027 before Form 471 records are availa
 
 CSV and Excel exports include FormType, ApplicationNumber, and FilingStatus as well as the existing year, BEN, timestamps and C2 fields. The C2 forecast rules continue to use USAC's budget status and the separate new-cycle Form 470 check; selecting Form 471 does not by itself confirm a budget.
 
-See [VS_CODE_GUIDE.md](VS_CODE_GUIDE.md) for local editing, pushing and automated releases.
+See [VS_CODE_GUIDE.md](../VS_CODE_GUIDE.md) for local editing, pushing and automated releases.
 
 ## Form 471 filing window notices
 
@@ -213,8 +213,14 @@ After a successful lookup, all returned filing rows are selected by default. Use
 
 ## macOS source and builds
 
-The same solution now includes **MacDesktop**, an Avalonia C# GUI referencing the existing Core project. Windows remains Windows Forms; shared USAC, database, directory, cache and export source is not duplicated. See [MACOS_README.md](MACOS_README.md) for Apple Silicon / Intel packages and build commands. macOS uses the standard .NET 10 Runtime rather than the Windows-only Desktop Runtime. The included GitHub Actions workflow builds both Mac architectures and Windows and attaches all three packages to tagged releases. macOS packages are unsigned previews and require a launch test on a Mac.
+The same solution now includes **MacDesktop**, an Avalonia C# GUI referencing the existing Core project. Windows remains Windows Forms; shared USAC, database, directory, cache and export source is not duplicated. See [MACOS_README.md](../MACOS_README.md) for Apple Silicon / Intel packages and build commands. macOS uses the standard .NET 10 Runtime rather than the Windows-only Desktop Runtime. The included GitHub Actions workflow builds both Mac architectures and Windows and attaches all three packages to tagged releases. macOS packages are unsigned previews and require a launch test on a Mac.
 
 ## Application icon
 
 The Mint Glass document/search icon is included in `Assets` as PNG, Windows ICO, and macOS ICNS. Windows builds embed the ICO in the executable and main window. The Mac packaging script copies the ICNS into the app bundle and registers it in Info.plist. No additional runtime dependency is required.
+
+## v1.0.2 development: saved BENs
+
+Open **Saved BENs / Watchlists** to save favorite BENs, refresh a list, import CSV,
+review changes, and reopen results offline. See [the portfolio guide](PORTFOLIO_GUIDE.md).
+These features require the unreleased v1.0.2 build from a successful PR #8 Actions run.

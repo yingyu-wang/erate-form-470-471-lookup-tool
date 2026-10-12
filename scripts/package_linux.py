@@ -28,6 +28,7 @@ if package.exists():
 shutil.copytree(binary_dir, package)
 (package / 'ERateLookup').chmod(0o755)
 for source, target in [('docs/LINUX_INSTALL.md', 'LINUX_INSTALL.md'),
+                       ('docs/PORTFOLIO_GUIDE.md', 'PORTFOLIO_GUIDE.md'),
                        ('LICENSE', 'LICENSE'), ('CONTRIBUTORS.md', 'CONTRIBUTORS.md'), ('THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md'),
                        ('Assets/ERateLookup.png', 'ERateLookup.png'),
                        ('LinuxDesktop/install-shortcut.py', 'install-shortcut.py')]:

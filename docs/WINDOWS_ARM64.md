@@ -17,3 +17,9 @@ The executable bundles application assemblies, seed data and native SQLite. The 
 ## Verification
 
 The ARM64 package is cross-published and checked for ARM64 executable architecture, ZIP integrity and native SQLite inclusion. Shared offline checks cover lookup, caching, budgets and export behavior. A physical Windows ARM64 GUI launch and live query are still required; this package is unsigned.
+
+## v1.0.2 development: saved BENs
+
+Open **Saved BENs / Watchlists** to save favorite BENs, refresh a list, import CSV,
+review changes, and reopen results offline. See [the portfolio guide](PORTFOLIO_GUIDE.md).
+These features require the unreleased v1.0.2 build from a successful PR #8 Actions run.

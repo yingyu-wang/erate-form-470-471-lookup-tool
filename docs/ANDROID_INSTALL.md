@@ -71,3 +71,15 @@ adb install -r ERateLookup-v1.0.1-android-preview.apk
 Only use `-r` for a compatible signing certificate. Do not uninstall an existing copy without first exporting anything you need. Turn USB debugging off after testing.
 
 Official references: [Google Pixel app installation](https://support.google.com/pixelphone/answer/7391672), [Android alternative distribution](https://developer.android.com/distribute/marketing-tools/alternative-distribution), [Android developer verification](https://support.google.com/android/answer/17065026), and [Android document picker](https://developer.android.com/training/data-storage/shared/documents-files).
+
+## v1.0.2 development build
+
+The released v1.0.1 instructions above remain valid for that release. To test the new
+portfolio workflow, use a successful **PR #8** GitHub Actions artifact for your
+architecture; package names contain **v1.0.2**. Follow the same extraction and
+installation process, substituting that version in the commands. No v1.0.2
+release is published yet.
+
+Open **Saved BENs / Watchlists** and follow [the portfolio guide](PORTFOLIO_GUIDE.md).
+The guide covers CSV import, refresh, changes, filters, summaries, dates, selection,
+exports, saved/offline results, and Android sharing. It is also included in the package.

@@ -41,16 +41,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir smoke
-          tar -xzf "artifacts/ERateLookup-v1.0.1-$LINUX_RID.tar.gz" -C smoke
-          app="$PWD/smoke/ERateLookup-v1.0.1-$LINUX_RID"
+          shopt -s nullglob
+          archives=(artifacts/ERateLookup-v*-$LINUX_RID.tar.gz)
+          if [ "${#archives[@]}" -ne 1 ]; then echo "Expected one Linux archive" >&2; exit 1; fi
+          tar -xzf "${archives[0]}" -C smoke
+          app="$PWD/smoke/$(basename "${archives[0]}" .tar.gz)"
           file "$app/ERateLookup"
           mkdir -p "$PWD/smoke-data"
           export XDG_DATA_HOME="$PWD/smoke-data"
           python3 "$app/install-shortcut.py"
           desktop-file-validate "$XDG_DATA_HOME/applications/org.eratelookup.desktop.desktop"
           timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
+          timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-portfolio
       - uses: actions/upload-artifact@v4
         with:
           name: ERateLookup-Linux-${{ matrix.rid }}
           path: artifacts/ERateLookup-v*-linux-*.tar.gz
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ERateLookup-Portfolio-screenshot-${{ matrix.rid }}
+          path: portfolio-smoke.png
           retention-days: 30

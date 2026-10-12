@@ -1,6 +1,6 @@
 # Android development preview
 
-Native C# / Android UI sharing the existing `Core` project. Version **1.0.1**, version code **111**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
+Native C# / Android UI sharing the existing `Core` project. Development version **1.0.2**, version code **112**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
 
 Features: offline California name search, nationwide name search, BEN/year/Form 470/471 lookup, two-hour query cache, C2 budget snapshot and forecast labels, directory refresh, cancellation, selected-filing CSV/XLSX export through the Android document picker, and HTTPS PDF opening in another app. The existing PNG icon is reused. Native Android styling replaces the desktop themes.
 
@@ -51,4 +51,13 @@ Shared-core checks cover query filters, result collapsing, bundled data/cache lo
 
 Code/docs are MIT-licensed; root third-party/data notices apply and are included in preview packages.
 
-Version 1.0.1 includes optional-request fallback, 50-item result pages, cancellable export generation/copy, and automatic stale-snapshot refresh with offline fallback. Tagged releases include the preview APK and package ZIP alongside desktop assets.
+Version 1.0.1 includes optional-request fallback, 50-item result pages, cancellable export generation/copy, and automatic stale-snapshot refresh with offline fallback. Tagged releases include the preview package ZIP alongside desktop assets; the APK is inside it.
+
+## v1.0.2 portfolio development
+
+Use the **Saved BENs / Watchlists** button to open the private portfolio activity.
+[Portfolio usage](../docs/PORTFOLIO_GUIDE.md) explains CSV import through the system
+file picker, cross-page selection/export, offline results, and the share chooser.
+Build commands above compile the current 1.0.2 source. For CI tests, use the
+Android artifact from a successful PR #8 Actions run. The public release remains
+v1.0.1. Physical-device/lifecycle checks remain outstanding.

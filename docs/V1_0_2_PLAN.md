@@ -1,7 +1,11 @@
 # v1.0.2 implementation plan
 
-Status: **proposed; features are not implemented by this documentation PR**.
+Status: **approved; implementation in PR #8, release validation in progress**.
+The original plan was approved and merged through PR #7.
 Baseline: v1.0.1 plus the Linux implementation merged in PR #6.
+
+See [usage](PORTFOLIO_GUIDE.md), [verified source contracts](V1_0_2_SOURCE_CONTRACTS.md),
+and [validation status](V1_0_2_VALIDATION.md) for the current build.
 
 The goal is to help users review a portfolio of districts, identify changes, and
 prepare account-planning exports. The proposed v1.0.2 scope covers all ten ideas

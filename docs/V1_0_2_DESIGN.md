@@ -1,6 +1,12 @@
 # v1.0.2 technical design
 
-Status: **proposed design**, not a description of shipped functionality.
+Status: **approved design; development implementation in PR #8**.
+The published release remains v1.0.1. `PortfolioSession`, `PortfolioStore`, and
+`PortfolioInsights` currently supply the shared behavior. The storage schema is
+version 2, with atomic imports, current/previous snapshots, persistent change
+events, last-query outcomes, and a cross-process observation sequence.
+Provider comparison remains unavailable; verified application-level requested
+amounts support year comparisons. See [source contracts](V1_0_2_SOURCE_CONTRACTS.md).
 Feature IDs and milestones refer to the [implementation plan](V1_0_2_PLAN.md).
 
 ## Current architecture to preserve
