@@ -1,0 +1,88 @@
+name: Publish existing CI release packages
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful package build run ID
+        required: true
+        default: '38191748596'
+      tag:
+        description: Existing release tag
+        required: true
+        default: v1.0.2
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    concurrency:
+      group: eratelookup-release-publish-${{ inputs.tag }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-win-*
+          merge-multiple: true
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: packages
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-macOS-*
+          merge-multiple: true
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: packages
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ERateLookup-Linux-*
+          merge-multiple: true
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: packages
+      - uses: actions/download-artifact@v4
+        with:
+          name: ERateLookup-Android-preview
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: packages
+      - name: Verify source and package checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          BUILD_RUN_ID: ${{ inputs.run_id }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID" > build-run.json
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          tag = os.environ['RELEASE_TAG']
+          root = pathlib.Path('packages')
+          source_sha = subprocess.check_output(['git','-C','source','rev-parse','HEAD'], text=True).strip()
+          run = json.loads(pathlib.Path('build-run.json').read_text())
+          if run['head_sha'] != source_sha: raise SystemExit('Build commit does not match release tag')
+          for arch in ['x64','arm64']:
+              (root/f'ERateLookup-win-{arch}.zip').rename(root/f'ERateLookup-{tag}-win-{arch}.zip')
+          names = [f'ERateLookup-{tag}-{platform}-{arch}.{ext}' for platform, ext in [('win','zip'),('macos','zip'),('linux','tar.gz')] for arch in ['x64','arm64']]
+          names.append(f'ERateLookup-{tag}-android-preview.zip')
+          for name in names:
+              if not (root/name).is_file() or (root/name).stat().st_size == 0: raise SystemExit(f'Missing package: {name}')
+          (root/'SHA256SUMS.txt').write_text(''.join(hashlib.sha256((root/name).read_bytes()).hexdigest()+'  '+name+'\n' for name in sorted(names)))
+          pathlib.Path('release-assets.txt').write_text('\n'.join(str(root/name) for name in names+['SHA256SUMS.txt'])+'\n')
+          PY
+      - name: Upload seven archives and checksum file
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mapfile -t assets < release-assets.txt
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          gh release edit "$RELEASE_TAG" --title "E-rate Lookup $RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
