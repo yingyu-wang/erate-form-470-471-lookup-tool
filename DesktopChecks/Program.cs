@@ -82,7 +82,8 @@ internal static class Program
                     var searchList = store.CreateList("Search results");
                     SaveFromMain(form, searchList.Id, null, "saveMatches", ["01234", "05678"]);
                     var saved = store.Entries(searchList.Id);
-                    Check(saved.Count == 2 && saved.All(e => e.Name.StartsWith("No filings District") && e.Tags == "Reviewed"),
+                    Check(saved.Count == 2 && saved.Single(e => e.Ben == "01234").Name == "No filings District A [School District]"
+                        && saved.Single(e => e.Ben == "05678").Name == "No filings District B [School District]" && saved.All(e => e.Tags == "Reviewed"),
                         "Selected districts save together with their own names and leading-zero BENs");
                     store.SaveEntry(searchList.Id, new("01234", "Owner supplied name", "Keep"), true);
                     SaveFromMain(form, searchList.Id, null, "saveMatches", ["01234", "05678"]);
@@ -121,6 +122,9 @@ internal static class Program
     static void SaveFromMain(MainForm owner, string listId, string? expectedName, string action = "saveBen", string[]? expectedBens = null, bool cancel = false)
     {
         Exception? failure = null; var visited = false;
+        var beforeComplete = Field<bool>(owner, "lookupComplete");
+        var beforeBen = Field<string>(owner, "selectedBen");
+        var beforeFilings = Field<List<Filing>>(owner, "results").ToArray();
         using var timer = new System.Windows.Forms.Timer { Interval = 100 };
         timer.Tick += (_, _) =>
         {
@@ -143,6 +147,9 @@ internal static class Program
         timer.Start(); Field<Button>(owner, action).PerformClick();
         if (failure is not null) throw failure;
         Check(visited, "Main-window action opens the add dialog");
+        if (action == "saveMatches") Check(Field<bool>(owner, "lookupComplete") == beforeComplete
+            && Field<string>(owner, "selectedBen") == beforeBen && Field<List<Filing>>(owner, "results").SequenceEqual(beforeFilings),
+            "Saving or canceling search matches leaves filing lookup state unchanged");
     }
 
     static void Capture(Form form, string path)
