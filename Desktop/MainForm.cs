@@ -14,9 +14,11 @@ public sealed class MainForm : Form
     private readonly Button search=new(){Text="Search",AutoSize=true};
     private readonly Button refresh=new(){Text="Refresh live",AutoSize=true};
     private readonly Label status=new(){AutoSize=true,MaximumSize=new Size(1000,0),Padding=new Padding(0,8,0,8)};
-    private readonly ListBox matches=new(){Dock=DockStyle.Fill,Height=100};
+    private readonly ListBox matches=new(){Dock=DockStyle.Fill,Height=100,SelectionMode=SelectionMode.MultiExtended};
     private readonly GroupBox matchGroup=new(){Text="Choose a customer",Dock=DockStyle.Fill,Visible=false};
-    private readonly Button choose=new(){Text="Check selected customer",AutoSize=true,Dock=DockStyle.Bottom};
+    private readonly Button choose=new(){Text="Check selected customer",AutoSize=true};
+    private readonly Button saveMatches=new(){Text="Add selected BENs to watchlist",AutoSize=true,Enabled=false};
+    private readonly Label matchSelection=new(){AutoSize=true,Margin=new Padding(8,10,8,0)};
     private readonly DataGridView grid=new(){Dock=DockStyle.Fill,ReadOnly=true,AllowUserToAddRows=false,AllowUserToDeleteRows=false,MultiSelect=true,SelectionMode=DataGridViewSelectionMode.FullRowSelect,AutoGenerateColumns=false,RowHeadersVisible=false,BackgroundColor=Color.White,BorderStyle=BorderStyle.None};
     private readonly Label details=new(){AutoSize=true,MaximumSize=new Size(1000,0)};
     private readonly Button open=new(){Text="Open selected Form 470",AutoSize=true};
@@ -75,7 +77,8 @@ public sealed class MainForm : Form
         formPicker.Items.AddRange(new object[]{FilingForm.Form470,FilingForm.Form471});formPicker.Format+=(_,e)=>e.Value=$"Form {(int)(FilingForm)e.ListItem!}";formPicker.FormattingEnabled=true;formPicker.SelectedIndex=0;
         inputs.Controls.Add(new Label(){Text="Form",AutoSize=true},3,0);inputs.Controls.Add(formPicker,3,1);
         inputs.Controls.Add(customer,0,1);inputs.Controls.Add(year,1,1);inputs.Controls.Add(state,2,1);inputs.Controls.Add(search,4,1);inputs.Controls.Add(refresh,5,1);layout.Controls.Add(inputs,0,1);layout.Controls.Add(status,0,2);
-        matchGroup.Controls.Add(matches);matchGroup.Controls.Add(choose);layout.Controls.Add(budget,0,3);layout.Controls.Add(matchGroup,0,4);layout.Controls.Add(grid,0,5);layout.Controls.Add(details,0,6);
+        var matchActions=new FlowLayoutPanel{Dock=DockStyle.Bottom,AutoSize=true};matchActions.Controls.Add(choose);matchActions.Controls.Add(saveMatches);matchActions.Controls.Add(matchSelection);
+        matchGroup.Controls.Add(matches);matchGroup.Controls.Add(matchActions);layout.Controls.Add(budget,0,3);layout.Controls.Add(matchGroup,0,4);layout.Controls.Add(grid,0,5);layout.Controls.Add(details,0,6);
         foreach(var c in new[]{("Number","Form 470",120),("Certified","Certified date",115),("Status","Status",145),("Name","Customer",230),("Services","Requested services",400)}) grid.Columns.Add(new DataGridViewTextBoxColumn(){Name=c.Item1,DataPropertyName=c.Item1,HeaderText=c.Item2,Width=c.Item3,AutoSizeMode=c.Item1=="Services"?DataGridViewAutoSizeColumnMode.Fill:DataGridViewAutoSizeColumnMode.None});
         var actions=new FlowLayoutPanel(){AutoSize=true,Dock=DockStyle.Fill};
         var portfolio=new Button{Text="Saved BENs / Watchlists",AutoSize=true};actions.Controls.Add(portfolio);
@@ -87,13 +90,14 @@ public sealed class MainForm : Form
         status.ForeColor=Color.FromArgb(33,76,66);status.Font=new Font("Segoe UI",10,FontStyle.Bold);status.BackColor=Color.Transparent;
         grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(222,239,234);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(20,60,50);grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=36;
         grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(208,232,223);grid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(14,54,43);grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(245,250,247);grid.GridColor=Color.FromArgb(225,234,229);grid.RowTemplate.Height=32;
-        foreach(var button in new[]{search,refresh,choose,open,export,selectAll,unselectAll,syncDirectory,windowInfo,saveBen})
+        foreach(var button in new[]{search,refresh,choose,open,export,selectAll,unselectAll,syncDirectory,windowInfo,saveBen,saveMatches})
         {
             button.FlatStyle=FlatStyle.Flat;button.FlatAppearance.BorderColor=Color.FromArgb(167,198,184);button.BackColor=Color.FromArgb(245,252,248);button.ForeColor=Color.FromArgb(24,70,55);button.Font=new Font("Segoe UI",10,FontStyle.Bold);button.Padding=new Padding(8,3,8,3);
         }
         search.BackColor=Color.FromArgb(30,104,82);search.ForeColor=Color.White;
         status.Text="Enter a BEN or customer name. Funding year defaults to 2027.";
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();matches.DoubleClick+=async(_,_)=>await ChooseAsync();
+        matches.SelectedIndexChanged+=(_,_)=>UpdateMatchSelection();saveMatches.Click+=(_,_)=>AddMatchesToWatchlist();
         grid.SelectionChanged+=(_,_)=>{details.Text=SelectedFiling()?.Nickname??"";UpdateSelection();};
         selectAll.Click+=(_,_)=>grid.SelectAll();unselectAll.Click+=(_,_)=>grid.ClearSelection();grid.CellDoubleClick+=(_,_)=>OpenForm();open.Click+=(_,_)=>OpenForm();export.Click+=(_,_)=>Export();AcceptButton=search;
         customer.TextChanged+=(_,_)=>{typingTimer.Stop();if(!busy){ResetLookup("Customer changed. Search again.");typingTimer.Start();}};
@@ -169,7 +173,7 @@ public sealed class MainForm : Form
     {
         if(busy)return;
         grid.DataSource=null;results=[];lookupComplete=false;details.Text="";selectedBen="";selectedName="";hasCycle470=null;
-        budget.Text="Select a customer or enter a BEN to view its C2 budget.";status.Text=message;ShowMatches(false);UpdateSelection();
+        matches.DataSource=null;budget.Text="Select a customer or enter a BEN to view its C2 budget.";status.Text=message;ShowMatches(false);UpdateSelection();
     }
     private void UpdateSelection()
     {
@@ -178,8 +182,10 @@ public sealed class MainForm : Form
         selectAll.Enabled=unselectAll.Enabled=!busy&&lookupComplete&&results.Count>0;
         saveBen.Enabled=!busy&&selectedBen.Length>0;
     }
-    private void SetBusy(bool value){busy=value;search.Enabled=refresh.Enabled=choose.Enabled=customer.Enabled=state.Enabled=year.Enabled=formPicker.Enabled=open.Enabled=export.Enabled=!value;UseWaitCursor=value;UpdateSelection();}
-    private void ShowMatches(bool value){matchGroup.Visible=value;layout.RowStyles[4].Height=value?155:0;}
+    private void UpdateMatchSelection()
+    {var count=matches.SelectedItems.Count;matchSelection.Text=$"{count} selected · Ctrl/Shift for multiple";saveMatches.Enabled=!busy&&matchGroup.Visible&&count>0;choose.Enabled=!busy&&matchGroup.Visible&&count==1;}
+    private void SetBusy(bool value){busy=value;search.Enabled=refresh.Enabled=customer.Enabled=state.Enabled=year.Enabled=formPicker.Enabled=open.Enabled=export.Enabled=matches.Enabled=!value;UseWaitCursor=value;UpdateSelection();UpdateMatchSelection();}
+    private void ShowMatches(bool value){matchGroup.Visible=value;layout.RowStyles[4].Height=value?175:0;UpdateMatchSelection();}
     private async Task ExecuteAsync(Func<Task> action)
     {
         if(busy)return;SetBusy(true);
@@ -199,13 +205,13 @@ public sealed class MainForm : Form
             if(text.All(char.IsAsciiDigit)){await LookupAsync(text);return;}
             var local=directory.Search(text);matches.DataSource=local;
             if(local.Count==0){status.Text="No local California name match. Try a shorter name, refresh the directory, or enter the filing BEN directly.";return;}
-            ShowMatches(true);status.Text=$"Choose a California customer to check FY {selectedYear}."+(local.Count==15?" Showing up to 15 matches; type more letters to narrow the list.":"");
+            ShowMatches(true);status.Text="Select one or more districts to save, or select one customer to look up filings."+(local.Count==15?" Showing up to 15 matches; type more letters to narrow the list.":"");
 
         });
     }
     private async Task ChooseAsync()
     {
-        if(busy||matches.SelectedItem is not Entity entity)return;
+        if(busy||matches.SelectedItems.Count!=1||matches.SelectedItem is not Entity entity)return;
         selectedYear=(int)year.SelectedItem!;ShowMatches(false);await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));
     }
     private async Task LookupAsync(string ben,string name="")
@@ -228,7 +234,7 @@ public sealed class MainForm : Form
     {
         if(busy)return;refreshRequested=false;var text=customer.Text.Trim();if(text.Length<2||text.All(char.IsAsciiDigit)){ShowMatches(false);return;}
         selectedYear=(int)year.SelectedItem!;
-        try { var found=directory.Search(text);matches.DataSource=found;ShowMatches(found.Count>0);status.Text=found.Count==0?"No California name match. Try another spelling or enter a filing BEN.":$"{found.Count} local match(es). Choose the filing entity."+(found.Count==15?" Type more letters to narrow the list.":""); }
+        try { var found=directory.Search(text);matches.DataSource=found;ShowMatches(found.Count>0);status.Text=found.Count==0?"No California name match. Try another spelling or enter a filing BEN.":$"{found.Count} local match(es). Select districts to save, or one customer to look up."+(found.Count==15?" Type more letters to narrow the list.":""); }
         catch(Exception ex){status.Text="Local directory search failed: "+ex.Message;}
     }
     private void ShowBudget(string ben)
@@ -264,6 +270,21 @@ public sealed class MainForm : Form
             if(dialog.ShowDialog(this)==DialogResult.OK)status.Text=$"BEN {selectedBen} saved to \"{dialog.ChosenListName}\". Open Saved BENs / Watchlists to refresh it.";
         }
         catch(Exception ex){MessageBox.Show(this,ex.Message,"Add BEN to watchlist");}
+    }
+    private void AddMatchesToWatchlist()
+    {
+        if(busy||!matchGroup.Visible)return;
+        var entries=matches.SelectedItems.Cast<Entity>().DistinctBy(e=>e.Ben).Select(e=>new WatchlistEntry(e.Ben,e.Name,"")).ToList();
+        if(entries.Count==0)return;
+        typingTimer.Stop();
+        try
+        {
+            var store=new PortfolioStore(portfolioDirectory);
+            if(store.Lists().Count==0){MessageBox.Show(this,"Create a watchlist in Saved BENs / Watchlists first.");return;}
+            using var dialog=new AddToWatchlistDialog(store,entries);
+            if(dialog.ShowDialog(this)==DialogResult.OK)status.Text=$"{dialog.AddedCount} BEN(s) added to \"{dialog.ChosenListName}\"; {dialog.SkippedCount} already saved. No filing lookup was needed.";
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Add selected BENs to watchlist");}
     }
     private Filing? SelectedFiling()=>grid.CurrentRow?.DataBoundItem as Filing;
     private void OpenForm()
