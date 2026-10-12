@@ -4,21 +4,21 @@
 
 A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Development version 1.0.2 (unreleased) · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+**Version 1.0.2 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 ## Download and run
 
-Open this repository's **Releases** page and select **v1.0.1**. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
+Open this repository's **Releases** page and select **v1.0.2**. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
-| `ERateLookup-v1.0.1-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
-| `ERateLookup-v1.0.1-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
-| `ERateLookup-v1.0.1-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
-| `ERateLookup-v1.0.1-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
-| `ERateLookup-v1.0.1-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.1-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.1-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
+| `ERateLookup-v1.0.2-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
+| `ERateLookup-v1.0.2-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
+| `ERateLookup-v1.0.2-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
+| `ERateLookup-v1.0.2-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.2-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.2-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.2-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
@@ -38,7 +38,7 @@ application-menu shortcut with the app icon.
 
 ## Install on Android
 
-1. On your phone/tablet, open [release v1.0.1](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.1) and download **ERateLookup-v1.0.1-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.1-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
+1. On your phone/tablet, open [release v1.0.2](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2) and download **ERateLookup-v1.0.2-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.2-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
 2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
 3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
 4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.
@@ -60,18 +60,18 @@ See the [complete Android installation, update, troubleshooting, and USB guide](
 
 Successful filing queries are cached for two hours by **BEN + funding year + form type**. Each successful query replaces only its own cache entry. Directory and budget snapshots refresh separately when at least 24 hours old, retaining existing records if refresh fails. USAC query failures are shown as errors rather than reported as no filings.
 
-## v1.0.2 portfolio development build
+## v1.0.2 saved BEN portfolios
 
 The new **Saved BENs / Watchlists** button opens named district lists, CSV imports,
 selected-BEN or whole-list refresh, offline snapshots, persistent unread changes,
 filters, multi-year summaries, requested-funding comparison, source-backed dates,
 selected exports, and Android sharing. See the [portfolio user guide](docs/PORTFOLIO_GUIDE.md).
 
-These features are in [implementation PR #8](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/8).
-The latest published download remains **v1.0.1**, listed above. To test v1.0.2,
-open a successful PR #8 Actions run and download the matching Windows/macOS,
-Linux, or Android artifact; extract it before running/installing. A passing build
-is not a substitute for the remaining hands-on platform checks.
+These features were merged in [implementation PR #8](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/8).
+Download the matching **v1.0.2** package from [the release page](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
+The release workflow builds and attaches all seven packages plus `SHA256SUMS.txt`; downloads appear after successful packaging.
+CI passed for the merged implementation across Windows/macOS x64 and ARM64, Linux x64 and ARM64, and Android.
+Hands-on desktop and physical-device testing remains outstanding.
 
 The [implementation plan](docs/V1_0_2_PLAN.md), [technical design](docs/V1_0_2_DESIGN.md),
 [source contracts](docs/V1_0_2_SOURCE_CONTRACTS.md), and
@@ -137,11 +137,11 @@ git add .
 git commit -m "Describe the change"
 git push origin main
 # Choose an unused version for the next release:
-git tag v1.0.2
-git push origin v1.0.2
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
-The **Publish Linux to v1.0.1** workflow can add the Linux packages to the existing release from `main`, regenerate the seven-package checksum file, and record the exact Linux source commit. The original v1.0.1 tag remains unchanged.
+The historical **Publish Linux to v1.0.1** workflow added Linux packages to v1.0.1. Starting with v1.0.2, tagged release automation builds all seven packages from the same tagged source.
 
 Keep executables, package archives, caches, and user settings out of the source repository; `.gitignore` excludes them. Compiled files belong in Releases. Each package includes instructions, the MIT license, and third-party notices.
 
@@ -159,7 +159,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
 | `Publish-Linux.sh` / `scripts/package_linux.py` | Creates self-contained Linux tar.gz archives |
 | `.github/workflows/linux.yml` | Native Linux x64/ARM64 builds and window launch checks |
-| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.1 release |
+| `.github/workflows/linux-release.yml` | Adds Linux packages to the existing v1.0.2 release |
 | `docs/LINUX_INSTALL.md` | Linux installation, dependencies, shortcuts, and compilation |
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
