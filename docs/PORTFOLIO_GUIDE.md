@@ -9,6 +9,9 @@ Actions artifact for your platform to test it. No v1.0.2 release is published ye
 1. Open **Saved BENs / Watchlists** from the main app screen.
 2. Select **Favorites**, or enter a list name and choose **New list**.
 3. Enter a BEN, optional display name, and optional tags. Choose **Save BEN**.
+   Faster: from the main screen, search for the district by partial name, run the
+   lookup, then choose **Add BEN to watchlist**. The BEN and customer name are
+   filled in; pick the watchlist and save. No retyping.
 4. Select an existing BEN to edit its name/tags, then choose **Update BEN**.
    To use a different BEN, save it as another entry. **Remove BEN** removes only
    membership in the selected list.

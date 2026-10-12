@@ -4,6 +4,8 @@
 
 - Dedicated Saved BENs / Watchlists screen on Windows, macOS/Linux Avalonia, and Android.
 - Named lists with saved BENs, names/tags, and validated atomic CSV import.
+- Add-to-watchlist from the main screen: after a partial-name search identifies a BEN,
+  save it to a watchlist without retyping the BEN.
 - Cancellable batch refresh across up to five years and both form types, with distinct failure/empty outcomes.
 - Durable offline snapshots and overlap-safe comparison baselines.
 - Persistent unread changes, before/after history, and explicit acknowledgement.

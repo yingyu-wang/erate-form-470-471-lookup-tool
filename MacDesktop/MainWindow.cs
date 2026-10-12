@@ -21,6 +21,7 @@ public sealed class MainWindow:Window
     private readonly ComboBox theme=new(){Width=135};
     private readonly Button search=Button("Search"),refresh=Button("Refresh live"),choose=Button("Check selected customer");
     private readonly Button open=Button("Open selected PDF"),export=Button("Export selected CSV / Excel");
+    private readonly Button saveBen=Button("Add BEN to watchlist");
     private readonly Button all=Button("Select all"),none=Button("Unselect all"),sync=Button("Refresh CA directory / budgets"),windowInfo=Button("Form 471 window info");
     private readonly TextBlock status=Text("Enter a BEN or customer name. Funding year defaults to 2027.");
     private readonly TextBlock budget=Text("Loading California data…"),windowNotice=Text(""),selection=Text("0 selected"),detail=Text("");
@@ -36,6 +37,8 @@ public sealed class MainWindow:Window
     private readonly UsacClient client;
     private readonly CaliforniaDirectory directory;
     private readonly FilingWindow windows;
+    private readonly PortfolioStore portfolioStore;
+    private string selectedName="";
     private readonly string themePath;
     private Bitmap? backdrop;
     private List<Filing> results=[];
@@ -54,7 +57,7 @@ public sealed class MainWindow:Window
         Title="E-rate · Form 470 / 471 Lookup";Width=1200;Height=850;MinWidth=900;MinHeight=650;
         FontFamily=new FontFamily(OperatingSystem.IsLinux()?"DejaVu Sans":"Arial");FontSize=14;
         var cache=OperatingSystem.IsMacOS()?Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),"Library","Application Support","ERateLookup","cache"):Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERateLookup","cache");
-        client=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();windows=new(http,cache);
+        client=new(http,cache);directory=new(http,cache);directory.LoadSeedIfEmpty();windows=new(http,cache);portfolioStore=new(Path.GetDirectoryName(cache)!);
         themePath=Path.Combine(Path.GetDirectoryName(cache)!,"theme.txt");
         using(var asset=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("mint-glass-background.png"))if(asset is not null)backdrop=new Bitmap(asset);
         year.ItemsSource=Enumerable.Range(2016,12).Reverse().ToList();year.SelectedItem=2027;
@@ -79,6 +82,8 @@ public sealed class MainWindow:Window
         var actions=new WrapPanel{Margin=new Thickness(0,10,0,8)};
         var portfolio=Button("Saved BENs / Watchlists");actions.Children.Add(portfolio);
         portfolio.Click+=async(_,_)=>{try{await new PortfolioWindow(client,Path.GetDirectoryName(cache)!,directory,windows).ShowDialog(this);}catch(Exception ex){await MessageAsync(ex.Message);}};
+        actions.Children.Add(saveBen);
+        saveBen.Click+=async(_,_)=>await AddBenToWatchlistAsync();
         foreach(var b in new[]{open,all,none,export,sync,windowInfo}){buttons.Add(b);actions.Children.Add(b);}
         selection.Margin=new Thickness(8,12,8,0);actions.Children.Add(selection);actions.Children.Add(Text("Theme"));actions.Children.Add(theme);Add(actions,7);
         Add(Text($"Filing cache: 2 hours. Refresh live bypasses it. Names search the local California directory.\nHold {(OperatingSystem.IsMacOS()?"Command (⌘)":"Ctrl")} to select individual rows; Shift selects a range. USAC data may lag EPC submissions."),8);Add(windowNotice,9);
@@ -111,13 +116,14 @@ public sealed class MainWindow:Window
         budget.FontWeight=FontWeight.Bold;budget.FontSize=15;
     }
     private void Reset(string message)
-    {complete=false;results=[];grid.ItemsSource=null;selectedBen="";hasCycle470=null;matchPanel.IsVisible=false;status.Text=message;budget.Text="Choose a customer to view its C2 budget.";UpdateSelection();}
+    {complete=false;results=[];grid.ItemsSource=null;selectedBen="";selectedName="";hasCycle470=null;matchPanel.IsVisible=false;status.Text=message;budget.Text="Choose a customer to view its C2 budget.";UpdateSelection();}
     private void UpdateSelection()
     {
         selection.Text=$"{grid.SelectedItems.Count} of {results.Count} selected";
         detail.Text=(grid.SelectedItem as Filing)?.Nickname??"";
         all.IsEnabled=none.IsEnabled=!busy&&complete&&results.Count>0;
         export.IsEnabled=!busy&&complete;open.IsEnabled=!busy&&grid.SelectedItems.Count>0;
+        saveBen.IsEnabled=!busy&&selectedBen.Length>0;
     }
     private void SetBusy(bool value)
     {busy=value;customer.IsEnabled=year.IsEnabled=form.IsEnabled=search.IsEnabled=refresh.IsEnabled=choose.IsEnabled=!value;grid.IsEnabled=!value;UpdateSelection();}
@@ -148,7 +154,7 @@ public sealed class MainWindow:Window
         });
     }
     private async Task ChooseAsync()
-    {if(busy||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben));}
+    {if(busy||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;selectedName=entity.Name;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben));}
     private async Task LookupAsync(string ben)
     {
         complete=false;results=[];grid.ItemsSource=null;selectedBen=ben;hasCycle470=null;ShowBudget();status.Text=$"Checking Form {(int)selectedForm}, BEN {ben}, FY{selectedYear}…";
@@ -192,6 +198,41 @@ public sealed class MainWindow:Window
         try{OpenUrl(uri.AbsoluteUri);}catch(Exception ex){await MessageAsync("Could not open the PDF: "+ex.Message);}
     }
     private static void OpenUrl(string url)=>Process.Start(new ProcessStartInfo(url){UseShellExecute=true});
+    private async Task AddBenToWatchlistAsync()
+    {
+        if(selectedBen.Length==0){await MessageAsync("Identify a BEN first — search by name or enter a BEN, then run a lookup.");return;}
+        var watchlists=portfolioStore.Lists();
+        var dialog=new Window{Title="Add BEN to watchlist",Width=400,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};
+        var panel=new StackPanel{Margin=new Thickness(20),Spacing=10};
+        var picker=new ComboBox{ItemsSource=watchlists,SelectedIndex=watchlists.Count>0?0:-1};
+        var nameBox=new TextBox{Text=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"",Watermark="Display name (optional)"};
+        var tagsBox=new TextBox{Watermark="Tags (optional)"};
+        var error=Text("");error.Foreground=Brushes.DarkRed;
+        var buttons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
+        var save=Button("Save");var cancel=Button("Cancel");
+        save.Click+=(_,_)=>{
+            try
+            {
+                if(picker.SelectedItem is not Watchlist list)throw new InvalidOperationException("No watchlist available.");
+                portfolioStore.SaveEntry(list.Id,new WatchlistEntry(selectedBen,nameBox.Text??"",tagsBox.Text??""));
+                dialog.Close(true);
+            }
+            catch(Exception ex){error.Text=ex.Message;}
+        };
+        cancel.Click+=(_,_)=>dialog.Close(false);
+        buttons.Children.Add(save);buttons.Children.Add(cancel);
+        panel.Children.Add(Text("Watchlist"));panel.Children.Add(picker);
+        panel.Children.Add(Text("Display name"));panel.Children.Add(nameBox);
+        panel.Children.Add(Text("Tags"));panel.Children.Add(tagsBox);
+        panel.Children.Add(error);panel.Children.Add(buttons);
+        dialog.Content=panel;
+        try
+        {
+            if(await dialog.ShowDialog<bool>(this))
+                status.Text=$"BEN {selectedBen} saved. Open Saved BENs / Watchlists to refresh it.";
+        }
+        catch(Exception ex){await MessageAsync(ex.Message);}
+    }
     private async Task<bool> MessageAsync(string message,string? action=null)
     {
         var dialog=new Window{Title="E-rate Lookup",Width=620,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};

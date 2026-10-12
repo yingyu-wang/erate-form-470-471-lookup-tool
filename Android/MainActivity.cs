@@ -35,7 +35,8 @@ public class MainActivity : Activity
     CancellationTokenSource? operation;
     List<Filing> filings = [];
     bool ready, busy, complete, destroyed, suppressChanges;
-    string cache = "", resultBen = "";
+    string cache = "", resultBen = "", matchBen = "", matchName = "";
+    PortfolioStore? store;
     string? pendingExport;
     int resultYear, resultPage;
     FilingForm resultForm;
@@ -73,6 +74,7 @@ public class MainActivity : Activity
         page.AddView(Row(ActionButton("Look up", () => LookupAsync(false)), ActionButton("Refresh filings", () => LookupAsync(true))));
         page.AddView(ActionButton("Refresh CA data", RefreshDirectoryAsync));
         page.AddView(ActionButton("Saved BENs / Watchlists", () => { StartActivity(new Intent(this, typeof(PortfolioActivity))); return Task.CompletedTask; }));
+        page.AddView(ActionButton("Add BEN to watchlist", AddBenToWatchlistAsync));
         status = Label("Loading bundled California data…"); status.SetTextIsSelectable(true); page.AddView(status);
         budget = Label(""); budget.SetTextIsSelectable(true); page.AddView(budget);
         cancel = ActionButton("Cancel request", () => { operation?.Cancel(); return Task.CompletedTask; }, false);
@@ -99,7 +101,7 @@ public class MainActivity : Activity
 
     async Task InitializeAsync() => await RunAsync(async ct =>
     {
-        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); }, ct);
+        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); store = new PortfolioStore(cache); }, ct);
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
         ready = true;
         var refreshed = true;
@@ -176,9 +178,45 @@ public class MainActivity : Activity
         foreach (var entity in matches)
         {
             var button = new Button(this) { Text = entity.ToString(), ContentDescription = entity.ToString() };
-            button.Click += (_, _) => { if (busy || pendingExport is not null) return; ben.Text = entity.Ben; suggestions.RemoveAllViews(); status.Text = "BEN selected. Choose year and form, then Look up."; };
+            button.Click += (_, _) => { if (busy || pendingExport is not null) return; ben.Text = entity.Ben; matchBen = entity.Ben; matchName = entity.Name; suggestions.RemoveAllViews(); status.Text = "BEN selected. Choose year and form, then Look up."; };
             suggestions.AddView(button);
         }
+    }
+
+    Task AddBenToWatchlistAsync()
+    {
+        if (destroyed) return Task.CompletedTask;
+        if (store is null) { Alert("Still loading. Try again in a moment."); return Task.CompletedTask; }
+        var benText = ben.Text?.Trim() ?? "";
+        if (benText.Length == 0) { Alert("Identify a BEN first — search by name or enter a BEN."); return Task.CompletedTask; }
+        var watchlists = store.Lists();
+        var layout = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        layout.SetPadding(Dp(24), Dp(16), Dp(24), Dp(8));
+        var spinner = new Spinner(this) { ContentDescription = "Watchlist" };
+        spinner.Adapter = new ArrayAdapter<string>(this, global::Android.Resource.Layout.SimpleSpinnerItem, watchlists.Select(l => l.Name).ToArray());
+        layout.AddView(spinner);
+        var suggested = benText == matchBen && matchName.Length > 0 ? matchName : "";
+        if (suggested.Length == 0 && directory is not null && int.TryParse(year.Text, out var y)) suggested = directory.GetBudget(benText, y)?.Name ?? "";
+        var nameBox = new EditText(this) { Hint = "Display name (optional)", Text = suggested };
+        nameBox.SetSingleLine(true);
+        var tagsBox = new EditText(this) { Hint = "Tags (optional)" };
+        tagsBox.SetSingleLine(true);
+        layout.AddView(nameBox);
+        layout.AddView(tagsBox);
+        new AlertDialog.Builder(this)!.SetTitle($"Add BEN {benText} to watchlist")!.SetView(layout)
+            !.SetPositiveButton("Save", (_, _) =>
+            {
+                try
+                {
+                    if (spinner.SelectedItemPosition < 0 || spinner.SelectedItemPosition >= watchlists.Count) throw new InvalidOperationException("No watchlist available.");
+                    var list = watchlists[spinner.SelectedItemPosition];
+                    store.SaveEntry(list.Id, new WatchlistEntry(benText, nameBox.Text ?? "", tagsBox.Text ?? ""));
+                    status.Text = $"BEN {benText} saved to \"{list.Name}\". Open Saved BENs / Watchlists to refresh it.";
+                }
+                catch (Exception ex) { if (!destroyed) Alert("Could not save: " + ex.Message); }
+            })
+            !.SetNegativeButton("Cancel", (_, _) => { })!.Show();
+        return Task.CompletedTask;
     }
 
     Task LookupAsync(bool refresh) => RunAsync(async ct =>
