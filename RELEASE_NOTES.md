@@ -1,15 +1,20 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## Unreleased — main-window watchlist shortcut
+## Unreleased — search-result watchlist saving
 
-- Add an identified BEN to a chosen watchlist directly from the main screen, with
-  its district name and optional tags. Available on Windows, macOS, Linux, and Android.
+- Select one or more partial-name search matches and choose **Add selected BENs
+  to watchlist**, without running a filing lookup. Works even with no published
+  2027 Form 470 or C2 budget. Available on Windows, macOS, Linux, and Android.
+- Confirm the destination, selected districts, and optional tags. Existing BENs
+  are skipped without changing their names/tags; batch additions are atomic.
+- Keep the main-screen shortcut for a directly identified BEN, including empty
+  filing results.
 - Keep ordinary lookup available when saved portfolio data is unreadable or belongs
   to a newer app; show the error when a watchlist action is used.
 - Clear the previous customer when input changes so a direct BEN cannot inherit
   another district's display name.
 
-These changes are available in PR #9 / subsequent main-branch builds. They are
+These changes are available in development Actions builds. They are
 not included in the already published v1.0.2 packages.
 
 ## v1.0.2 — Saved BEN portfolios

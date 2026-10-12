@@ -22,10 +22,12 @@ public sealed class MainWindow:Window
     private readonly Button search=Button("Search"),refresh=Button("Refresh live"),choose=Button("Check selected customer");
     private readonly Button open=Button("Open selected PDF"),export=Button("Export selected CSV / Excel");
     private readonly Button saveBen=Button("Add BEN to watchlist");
+    private readonly Button saveMatches=Button("Add selected BENs to watchlist");
+    private readonly TextBlock matchSelection=Text("");
     private readonly Button all=Button("Select all"),none=Button("Unselect all"),sync=Button("Refresh CA directory / budgets"),windowInfo=Button("Form 471 window info");
     private readonly TextBlock status=Text("Enter a BEN or customer name. Funding year defaults to 2027.");
     private readonly TextBlock budget=Text("Loading California data…"),windowNotice=Text(""),selection=Text("0 selected"),detail=Text("");
-    private readonly ListBox matches=new(){Height=120};
+    private readonly ListBox matches=new(){Height=120,SelectionMode=SelectionMode.Multiple};
     private readonly StackPanel matchPanel=new(){Spacing=8,IsVisible=false};
     private readonly DataGrid grid=new(){AutoGenerateColumns=false,IsReadOnly=true,SelectionMode=DataGridSelectionMode.Extended,GridLinesVisibility=DataGridGridLinesVisibility.Horizontal,MinHeight=180};
     private readonly Border budgetCard=new(){CornerRadius=new CornerRadius(14),Padding=new Thickness(16)};
@@ -74,7 +76,8 @@ public sealed class MainWindow:Window
         Grid.SetColumn(refresh,4);refresh.VerticalAlignment=VerticalAlignment.Bottom;input.Children.Add(refresh);Add(input,1);
         status.FontWeight=FontWeight.Bold;status.Margin=new Thickness(0,0,0,10);Add(status,2);
         budgetCard.Child=budget;budgetCard.Margin=new Thickness(0,0,0,10);Add(budgetCard,3);
-        matchPanel.Children.Add(Text("Choose a California customer"));matchPanel.Children.Add(matches);matchPanel.Children.Add(choose);Add(matchPanel,4);
+        matchPanel.Children.Add(Text($"Select districts to save · {(OperatingSystem.IsMacOS()?"Command (⌘)":"Ctrl")}/Shift for multiple"));matchPanel.Children.Add(matches);
+        var matchActions=new WrapPanel();matchActions.Children.Add(choose);matchActions.Children.Add(saveMatches);matchActions.Children.Add(matchSelection);matchPanel.Children.Add(matchActions);Add(matchPanel,4);
         grid.Columns.Add(numberColumn);
         grid.Columns.Add(new DataGridTextColumn{Header="Certified date",Binding=new Binding("Certified"),Width=new DataGridLength(125)});
         grid.Columns.Add(new DataGridTextColumn{Header="Status",Binding=new Binding("Status"),Width=new DataGridLength(145)});
@@ -91,6 +94,7 @@ public sealed class MainWindow:Window
         Content=root;buttons.AddRange(new[]{search,refresh,choose});ApplyTheme();ready=true;
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();
         matches.DoubleTapped+=async(_,_)=>await ChooseAsync();
+        matches.SelectionChanged+=(_,_)=>UpdateMatchSelection();saveMatches.Click+=async(_,_)=>await AddMatchesToWatchlistAsync();
         customer.TextChanged+=(_,_)=>{typing.Stop();if(!busy){Reset("Customer changed. Search again.");typing.Start();}};typing.Tick+=(_,_)=>{typing.Stop();Suggest();};
         customer.KeyDown+=async(_,e)=>{if(e.Key==Avalonia.Input.Key.Enter){e.Handled=true;await SearchAsync(false);}};
         year.SelectionChanged+=async(_,_)=>{if(!ready||busy)return;Reset("Funding year changed. Search again.");await WindowNoticeAsync(true);};
@@ -117,7 +121,7 @@ public sealed class MainWindow:Window
         budget.FontWeight=FontWeight.Bold;budget.FontSize=15;
     }
     private void Reset(string message)
-    {complete=false;results=[];grid.ItemsSource=null;selectedBen="";selectedName="";hasCycle470=null;matchPanel.IsVisible=false;status.Text=message;budget.Text="Choose a customer to view its C2 budget.";UpdateSelection();}
+    {complete=false;results=[];grid.ItemsSource=null;selectedBen="";selectedName="";hasCycle470=null;matches.ItemsSource=null;matchPanel.IsVisible=false;status.Text=message;budget.Text="Choose a customer to view its C2 budget.";UpdateSelection();UpdateMatchSelection();}
     private void UpdateSelection()
     {
         selection.Text=$"{grid.SelectedItems.Count} of {results.Count} selected";
@@ -127,7 +131,9 @@ public sealed class MainWindow:Window
         saveBen.IsEnabled=!busy&&selectedBen.Length>0;
     }
     private void SetBusy(bool value)
-    {busy=value;customer.IsEnabled=year.IsEnabled=form.IsEnabled=search.IsEnabled=refresh.IsEnabled=choose.IsEnabled=!value;grid.IsEnabled=!value;UpdateSelection();}
+    {busy=value;customer.IsEnabled=year.IsEnabled=form.IsEnabled=search.IsEnabled=refresh.IsEnabled=matches.IsEnabled=!value;grid.IsEnabled=!value;UpdateSelection();UpdateMatchSelection();}
+    private void UpdateMatchSelection()
+    {var count=matches.SelectedItems?.Count??0;matchSelection.Text=$"{count} selected";saveMatches.IsEnabled=!busy&&matchPanel.IsVisible&&count>0;choose.IsEnabled=!busy&&matchPanel.IsVisible&&count==1;}
     private async Task ExecuteAsync(Func<Task> action)
     {
         if(busy)return;SetBusy(true);
@@ -140,7 +146,7 @@ public sealed class MainWindow:Window
     {
         if(busy)return;var text=customer.Text?.Trim()??"";force=false;
         if(text.Length<2||text.All(char.IsAsciiDigit)){matchPanel.IsVisible=false;return;}
-        try{var found=directory.Search(text);matches.ItemsSource=found;matchPanel.IsVisible=found.Count>0;status.Text=found.Count==0?"No local match. Enter the filing BEN or try another spelling.":$"{found.Count} local match(es). Choose the filing entity."+(found.Count==15?" Type more letters to narrow the list.":"");}
+        try{var found=directory.Search(text);matches.ItemsSource=found;matchPanel.IsVisible=found.Count>0;UpdateMatchSelection();status.Text=found.Count==0?"No local match. Enter the filing BEN or try another spelling.":$"{found.Count} local match(es). Select districts to save, or one customer to look up."+(found.Count==15?" Type more letters to narrow the list.":"");}
         catch(Exception ex){status.Text="Local search failed: "+ex.Message;}
     }
     private async Task SearchAsync(bool refresh)
@@ -151,11 +157,11 @@ public sealed class MainWindow:Window
         await ExecuteAsync(async()=>
         {
             if(text.All(char.IsAsciiDigit)){await LookupAsync(text);return;}
-            var found=directory.Search(text);matches.ItemsSource=found;matchPanel.IsVisible=found.Count>0;status.Text=found.Count==0?"No local California match. Try a shorter name or enter a BEN.":"Choose a customer to check the selected form and funding year.";
+            var found=directory.Search(text);matches.ItemsSource=found;matchPanel.IsVisible=found.Count>0;status.Text=found.Count==0?"No local California match. Try a shorter name or enter a BEN.":"Select districts to save, or one customer to look up filings.";
         });
     }
     private async Task ChooseAsync()
-    {if(busy||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));}
+    {if(busy||matches.SelectedItems?.Count!=1||matches.SelectedItem is not Entity entity)return;selectedYear=(int)year.SelectedItem!;matchPanel.IsVisible=false;await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));}
     private async Task LookupAsync(string ben,string name="")
     {
         complete=false;results=[];grid.ItemsSource=null;selectedBen=ben;selectedName=name;hasCycle470=null;ShowBudget();status.Text=$"Checking Form {(int)selectedForm}, BEN {ben}, FY{selectedYear}…";
@@ -204,23 +210,40 @@ public sealed class MainWindow:Window
         if(selectedBen.Length==0){await MessageAsync("Identify a BEN first — search by name or enter a BEN, then run a lookup.");return;}
         try
         {
+            var suggested=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"";
+            await SaveToWatchlistAsync([new(selectedBen,suggested,"")],false);
+        }
+        catch(Exception ex){await MessageAsync(ex.Message);}
+    }
+    private async Task AddMatchesToWatchlistAsync()
+    {
+        if(busy||!matchPanel.IsVisible)return;
+        var entries=matches.SelectedItems?.OfType<Entity>().DistinctBy(e=>e.Ben).Select(e=>new WatchlistEntry(e.Ben,e.Name,"")).ToList()??[];
+        if(entries.Count==0)return;
+        typing.Stop();await SaveToWatchlistAsync(entries,true);
+    }
+    private async Task SaveToWatchlistAsync(IReadOnlyList<WatchlistEntry> entries,bool skipExisting)
+    {
+        try
+        {
             var portfolioStore=new PortfolioStore(portfolioDirectory);
             var watchlists=portfolioStore.Lists();
             if(watchlists.Count==0){await MessageAsync("Create a watchlist in Saved BENs / Watchlists first.");return;}
-            var ben=selectedBen;
-            var dialog=new Window{Title=$"Add BEN {ben} to watchlist",Width=400,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};
+            var dialog=new Window{Title=entries.Count==1?$"Add BEN {entries[0].Ben} to watchlist":$"Add {entries.Count} BENs to watchlist",Width=520,SizeToContent=SizeToContent.Height,CanResize=false,WindowStartupLocation=WindowStartupLocation.CenterOwner};
             var panel=new StackPanel{Margin=new Thickness(20),Spacing=10};
             var picker=new ComboBox{ItemsSource=watchlists,SelectedIndex=watchlists.Count>0?0:-1};
-            var nameBox=new TextBox{Text=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"",PlaceholderText="Display name (optional)"};
+            var nameBox=new TextBox{Text=entries[0].Name,PlaceholderText="Display name (optional)"};
             var tagsBox=new TextBox{PlaceholderText="Tags (optional)"};
             var error=Text("");error.Foreground=Brushes.DarkRed;
             var buttons=new StackPanel{Orientation=Orientation.Horizontal,Spacing=8};
-            var save=Button("Save");var cancel=Button("Cancel");
+            var save=Button("Save");var cancel=Button("Cancel");var added=0;
             save.Click+=(_,_)=>{
                 try
                 {
                     if(picker.SelectedItem is not Watchlist list)throw new InvalidOperationException("No watchlist available.");
-                    portfolioStore.SaveEntry(list.Id,new WatchlistEntry(ben,nameBox.Text??"",tagsBox.Text??""));
+                    var pending=entries.Select(e=>e with{Name=entries.Count==1?nameBox.Text??"":e.Name,Tags=tagsBox.Text??""}).ToList();
+                    if(skipExisting)added=portfolioStore.ImportEntries(list.Id,pending);
+                    else{portfolioStore.SaveEntry(list.Id,pending[0]);added=1;}
                     dialog.Close(true);
                 }
                 catch(Exception ex){error.Text=ex.Message;}
@@ -228,12 +251,13 @@ public sealed class MainWindow:Window
             cancel.Click+=(_,_)=>dialog.Close(false);
             buttons.Children.Add(save);buttons.Children.Add(cancel);
             panel.Children.Add(Text("Watchlist"));panel.Children.Add(picker);
-            panel.Children.Add(Text("Display name"));panel.Children.Add(nameBox);
+            if(entries.Count==1){panel.Children.Add(Text("Display name"));panel.Children.Add(nameBox);}
+            else{panel.Children.Add(Text("Selected districts · existing BENs will be kept"));panel.Children.Add(new ListBox{ItemsSource=entries,Height=Math.Min(180,entries.Count*32)});}
             panel.Children.Add(Text("Tags"));panel.Children.Add(tagsBox);
             panel.Children.Add(error);panel.Children.Add(buttons);
             dialog.Content=panel;
             if(await dialog.ShowDialog<bool>(this))
-                status.Text=$"BEN {ben} saved. Open Saved BENs / Watchlists to refresh it.";
+                status.Text=$"{added} BEN(s) added; {entries.Count-added} already saved. Open Saved BENs / Watchlists to refresh them.";
         }
         catch(Exception ex){await MessageAsync(ex.Message);}
     }

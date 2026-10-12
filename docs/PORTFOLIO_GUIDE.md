@@ -1,21 +1,16 @@
 # Saved BENs and district portfolios — v1.0.2
 
 Saved BEN portfolios are included in the published [v1.0.2 packages](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
-The main-screen **Add BEN to watchlist** shortcut described below is newer and
-requires a successful PR #9 / subsequent main-branch Actions build; it is not in
-the published v1.0.2 packages.
+The main-screen watchlist shortcuts described below are newer than v1.0.2.
+Use a successful Actions build from the search-selection PR or subsequent main
+branch to test them; the published v1.0.2 downloads do not include them.
 
 ## Save your districts
 
 1. Open **Saved BENs / Watchlists** from the main app screen.
 2. Select **Favorites**, or enter a list name and choose **New list**.
 3. Enter a BEN, optional display name, and optional tags. Choose **Save BEN**.
-   In builds with the shortcut: from the main screen, search by partial name, run the
-   lookup, then choose **Add BEN to watchlist**. The BEN and customer name are
-   filled in; pick the watchlist and save. You can also look up a BEN directly;
-   its budget name is suggested when available, otherwise the name stays blank.
-   Editing the customer clears the desktop selection until you run another lookup.
-   On Android, you can save a selected or entered BEN before running the lookup.
+
 4. Select an existing BEN to edit its name/tags, then choose **Update BEN**.
    To use a different BEN, save it as another entry. **Remove BEN** removes only
    membership in the selected list.
@@ -28,6 +23,32 @@ remains available. Newer portfolio data is never downgraded or reset automatical
 
 The portfolio window has its own selection of BENs, years, and forms. Opening it
 does not automatically run network lookups or change your main-screen lookup.
+
+## Save directly from partial-name search results
+
+1. Enter part of a district name and choose **Search** (or use the local suggestions).
+2. Select one or more district entries in the name-match list. On Windows/Linux,
+   use Ctrl-click or Shift-click for multiple entries; on macOS use Command-click
+   or Shift-click. On Android, check the boxes beside the matched districts.
+3. Choose **Add selected BENs to watchlist** beside/below those search results.
+4. Pick the destination watchlist, review the selected BENs and names, optionally
+   enter tags for all newly added entries, and choose **Save**. A single entry's
+   display name can be edited in the confirmation dialog.
+
+This action saves district identities from the directory. **No filing lookup is
+required.** It works when a BEN has no published Form 470 for 2027, no C2 budget,
+or no filings for the selected year. Existing BENs in that watchlist are skipped
+without replacing their saved names/tags. Cancel adds nothing; a failed batch
+adds nothing. The status reports added and already-saved counts.
+
+To look up filings instead, select exactly one district and choose **Check
+selected customer**; on Android tap **Use BEN** and then **Look up**. You can also
+use **Add BEN to watchlist** after a direct BEN lookup, including an empty result;
+its budget name is suggested when available, otherwise the display name is blank.
+Changing search criteria clears the previous result selection. Name suggestions
+remain capped at 15 CA matches; narrow the name if needed. Android's **Search US**
+searches historical published Form 470 entities and can have different coverage
+from the CA directory.
 
 ## Import a customer CSV
 
