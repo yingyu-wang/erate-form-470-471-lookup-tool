@@ -27,11 +27,14 @@ public sealed class MainForm : Form
     private readonly UsacClient client;
     private readonly CaliforniaDirectory directory;
     private readonly FilingWindow filingWindow;
+    private readonly string portfolioDirectory;
+    private string selectedName="";
     private readonly Label windowBanner=new(){AutoSize=true,MaximumSize=new Size(1020,0)};
     private readonly Button windowInfo=new(){Text="Form 471 window info",AutoSize=true};
     private readonly System.Windows.Forms.Timer typingTimer=new(){Interval=250};
     private readonly Label budget=new GlassLabel(){AutoSize=true,MaximumSize=new Size(1020,0),Padding=new Padding(16),Font=new Font("Segoe UI",11,FontStyle.Bold)};
     private readonly Button syncDirectory=new(){Text="Refresh CA directory / budgets",AutoSize=true};
+    private readonly Button saveBen=new(){Text="Add BEN to watchlist",AutoSize=true};
     private bool syncing;
     private bool? hasCycle470;
     private readonly ComboBox themePicker=new(){DropDownStyle=ComboBoxStyle.DropDownList,Width=135};
@@ -49,7 +52,7 @@ public sealed class MainForm : Form
     private string selectedBen="";
     private bool refreshRequested;
     private bool busy;
-    public MainForm()
+    public MainForm(string? dataDirectory = null)
     {
         using(var iconStream=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ERateLookup.ico"))
             if(iconStream is not null) Icon=new Icon(iconStream);
@@ -57,7 +60,8 @@ public sealed class MainForm : Form
         BackColor=Color.FromArgb(232,244,240);DoubleBuffered=true;
         ForeColor=Color.FromArgb(23,48,44);
         http.DefaultRequestHeaders.UserAgent.ParseAdd("ERate470Lookup/2.0");
-        var cache=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERate470LookupDotNet","cache");
+        portfolioDirectory=dataDirectory??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ERate470LookupDotNet");
+        var cache=Path.Combine(portfolioDirectory,"cache");
         settingsPath=Path.Combine(Path.GetDirectoryName(cache)!,"theme.txt");
         using(var asset=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("mint-glass-background.png"))
             if(asset is not null){using var loaded=Image.FromStream(asset);backgroundAsset=new Bitmap(loaded);}
@@ -75,13 +79,15 @@ public sealed class MainForm : Form
         foreach(var c in new[]{("Number","Form 470",120),("Certified","Certified date",115),("Status","Status",145),("Name","Customer",230),("Services","Requested services",400)}) grid.Columns.Add(new DataGridViewTextBoxColumn(){Name=c.Item1,DataPropertyName=c.Item1,HeaderText=c.Item2,Width=c.Item3,AutoSizeMode=c.Item1=="Services"?DataGridViewAutoSizeColumnMode.Fill:DataGridViewAutoSizeColumnMode.None});
         var actions=new FlowLayoutPanel(){AutoSize=true,Dock=DockStyle.Fill};
         var portfolio=new Button{Text="Saved BENs / Watchlists",AutoSize=true};actions.Controls.Add(portfolio);
-        portfolio.Click+=(_,_)=>{try{using var dialog=new PortfolioForm(client,Path.GetDirectoryName(cache)!,directory,filingWindow);dialog.ShowDialog(this);}catch(Exception ex){MessageBox.Show(this,ex.Message,"Portfolio");}};actions.Controls.Add(open);actions.Controls.Add(selectAll);actions.Controls.Add(unselectAll);actions.Controls.Add(selectionCount);actions.Controls.Add(export);actions.Controls.Add(syncDirectory);actions.Controls.Add(windowInfo);
+        portfolio.Click+=(_,_)=>{try{using var dialog=new PortfolioForm(client,Path.GetDirectoryName(cache)!,directory,filingWindow);dialog.ShowDialog(this);}catch(Exception ex){MessageBox.Show(this,ex.Message,"Portfolio");}};
+        actions.Controls.Add(saveBen);
+        saveBen.Click+=(_,_)=>AddBenToWatchlist();actions.Controls.Add(open);actions.Controls.Add(selectAll);actions.Controls.Add(unselectAll);actions.Controls.Add(selectionCount);actions.Controls.Add(export);actions.Controls.Add(syncDirectory);actions.Controls.Add(windowInfo);
         actions.Controls.Add(new Label(){Text="Theme",AutoSize=true,Margin=new Padding(15,10,5,0)});themePicker.Items.AddRange(new object[]{"Mint Glass","Midnight","Classic"});actions.Controls.Add(themePicker);layout.Controls.Add(actions,0,7);
         layout.Controls.Add(new Label(){Text="SQLite cache lasts 2 hours. Refresh live bypasses it. USAC publication may lag EPC submissions.\nNames search the local California entity directory as you type. Budget amounts are pre-discount; committed is not disbursed.",AutoSize=true,ForeColor=Color.DimGray,Margin=new Padding(0,16,0,0)},0,8);
         status.ForeColor=Color.FromArgb(33,76,66);status.Font=new Font("Segoe UI",10,FontStyle.Bold);status.BackColor=Color.Transparent;
         grid.EnableHeadersVisualStyles=false;grid.ColumnHeadersDefaultCellStyle.BackColor=Color.FromArgb(222,239,234);grid.ColumnHeadersDefaultCellStyle.ForeColor=Color.FromArgb(20,60,50);grid.ColumnHeadersDefaultCellStyle.Font=new Font("Segoe UI",10,FontStyle.Bold);grid.ColumnHeadersHeight=36;
         grid.DefaultCellStyle.SelectionBackColor=Color.FromArgb(208,232,223);grid.DefaultCellStyle.SelectionForeColor=Color.FromArgb(14,54,43);grid.AlternatingRowsDefaultCellStyle.BackColor=Color.FromArgb(245,250,247);grid.GridColor=Color.FromArgb(225,234,229);grid.RowTemplate.Height=32;
-        foreach(var button in new[]{search,refresh,choose,open,export,selectAll,unselectAll,syncDirectory,windowInfo})
+        foreach(var button in new[]{search,refresh,choose,open,export,selectAll,unselectAll,syncDirectory,windowInfo,saveBen})
         {
             button.FlatStyle=FlatStyle.Flat;button.FlatAppearance.BorderColor=Color.FromArgb(167,198,184);button.BackColor=Color.FromArgb(245,252,248);button.ForeColor=Color.FromArgb(24,70,55);button.Font=new Font("Segoe UI",10,FontStyle.Bold);button.Padding=new Padding(8,3,8,3);
         }
@@ -90,7 +96,7 @@ public sealed class MainForm : Form
         search.Click+=async(_,_)=>await SearchAsync(false);refresh.Click+=async(_,_)=>await SearchAsync(true);choose.Click+=async(_,_)=>await ChooseAsync();matches.DoubleClick+=async(_,_)=>await ChooseAsync();
         grid.SelectionChanged+=(_,_)=>{details.Text=SelectedFiling()?.Nickname??"";UpdateSelection();};
         selectAll.Click+=(_,_)=>grid.SelectAll();unselectAll.Click+=(_,_)=>grid.ClearSelection();grid.CellDoubleClick+=(_,_)=>OpenForm();open.Click+=(_,_)=>OpenForm();export.Click+=(_,_)=>Export();AcceptButton=search;
-        customer.TextChanged+=(_,_)=>{typingTimer.Stop();if(!busy)typingTimer.Start();};
+        customer.TextChanged+=(_,_)=>{typingTimer.Stop();if(!busy){ResetLookup("Customer changed. Search again.");typingTimer.Start();}};
         typingTimer.Tick+=(_,_)=>{typingTimer.Stop();Suggest();};
         year.SelectedIndexChanged+=async(_,_)=>{ResetLookup("Funding year changed. Search again.");await ShowWindowNoticeAsync(true);};
         formPicker.SelectedIndexChanged+=async(_,_)=>
@@ -107,7 +113,7 @@ public sealed class MainForm : Form
         themePicker.SelectedIndexChanged+=(_,_)=>ApplyTheme(themePicker.SelectedItem as string??"Mint Glass",true);
         var saved="Mint Glass";try{if(File.Exists(settingsPath))saved=File.ReadAllText(settingsPath).Trim();}catch(IOException){}catch(UnauthorizedAccessException){}
         themePicker.SelectedItem=themePicker.Items.Contains(saved)?saved:"Mint Glass";
-        FormClosing+=(_,_)=>{typingTimer.Stop();lifetime.Cancel();};FormClosed+=(_,_)=>{backgroundAsset?.Dispose();typingTimer.Dispose();http.Dispose();lifetime.Dispose();};
+        FormClosing+=(_,_)=>{typingTimer.Stop();lifetime.Cancel();};FormClosed+=(_,_)=>{backgroundAsset?.Dispose();typingTimer.Dispose();http.Dispose();lifetime.Dispose();};UpdateSelection();
     }
     protected override void OnPaintBackground(PaintEventArgs e)
     {
@@ -162,7 +168,7 @@ public sealed class MainForm : Form
     private void ResetLookup(string message)
     {
         if(busy)return;
-        grid.DataSource=null;results=[];lookupComplete=false;details.Text="";selectedBen="";hasCycle470=null;
+        grid.DataSource=null;results=[];lookupComplete=false;details.Text="";selectedBen="";selectedName="";hasCycle470=null;
         budget.Text="Select a customer or enter a BEN to view its C2 budget.";status.Text=message;ShowMatches(false);UpdateSelection();
     }
     private void UpdateSelection()
@@ -170,6 +176,7 @@ public sealed class MainForm : Form
         var count=grid.SelectedRows.Count;
         selectionCount.Text=$"{count} of {results.Count} selected";
         selectAll.Enabled=unselectAll.Enabled=!busy&&lookupComplete&&results.Count>0;
+        saveBen.Enabled=!busy&&selectedBen.Length>0;
     }
     private void SetBusy(bool value){busy=value;search.Enabled=refresh.Enabled=choose.Enabled=customer.Enabled=state.Enabled=year.Enabled=formPicker.Enabled=open.Enabled=export.Enabled=!value;UseWaitCursor=value;UpdateSelection();}
     private void ShowMatches(bool value){matchGroup.Visible=value;layout.RowStyles[4].Height=value?155:0;}
@@ -186,7 +193,7 @@ public sealed class MainForm : Form
         if(busy)return;var text=customer.Text.Trim();var region=state.Text.Trim();
         if(text.Length==0||(!text.All(char.IsAsciiDigit)&&text.Length<2)){MessageBox.Show(this,"Enter a BEN or at least two characters of a customer name.");return;}
         if(region.Length!=0&&(region.Length!=2||!region.All(char.IsAsciiLetter))){MessageBox.Show(this,"Use a two-letter state abbreviation.");return;}
-        selectedYear=(int)year.SelectedItem!;refreshRequested=force;typingTimer.Stop();results=[];lookupComplete=false;grid.DataSource=null;details.Text="";selectedBen="";ShowMatches(false);
+        selectedYear=(int)year.SelectedItem!;refreshRequested=force;typingTimer.Stop();ResetLookup("Searching…");
         await ExecuteAsync(async()=>
         {
             if(text.All(char.IsAsciiDigit)){await LookupAsync(text);return;}
@@ -199,11 +206,11 @@ public sealed class MainForm : Form
     private async Task ChooseAsync()
     {
         if(busy||matches.SelectedItem is not Entity entity)return;
-        selectedYear=(int)year.SelectedItem!;ShowMatches(false);await ExecuteAsync(()=>LookupAsync(entity.Ben));
+        selectedYear=(int)year.SelectedItem!;ShowMatches(false);await ExecuteAsync(()=>LookupAsync(entity.Ben,entity.Name));
     }
-    private async Task LookupAsync(string ben)
+    private async Task LookupAsync(string ben,string name="")
     {
-        lookupComplete=false;results=[];grid.DataSource=null;details.Text="";selectedBen=ben;hasCycle470=null;ShowBudget(ben);status.Text=$"Checking BEN {ben}, funding year {selectedYear}…";
+        lookupComplete=false;results=[];grid.DataSource=null;details.Text="";selectedBen=ben;selectedName=name;hasCycle470=null;ShowBudget(ben);status.Text=$"Checking BEN {ben}, funding year {selectedYear}…";
         var response=await client.GetFilingsAsync(ben,selectedYear,selectedForm,refreshRequested,lifetime.Token);
         results=response.Data;lookupComplete=true;lookupFetched=response.FetchedAt;grid.DataSource=results;grid.SelectAll();UpdateSelection();
         string cycleCheckNote="";
@@ -244,6 +251,19 @@ public sealed class MainForm : Form
         catch(OperationCanceledException){if(!IsDisposed&&!lifetime.IsCancellationRequested)budget.Text="Directory refresh timed out; previous local data retained. Last update: "+directory.LastUpdated;}
         catch(Exception ex){if(!IsDisposed)budget.Text="Directory refresh failed; previous local data retained. Last update: "+directory.LastUpdated+"\n"+ex.Message;}
         finally{syncing=false;if(!IsDisposed)syncDirectory.Enabled=true;}
+    }
+    private void AddBenToWatchlist()
+    {
+        if(selectedBen.Length==0){MessageBox.Show(this,"Identify a BEN first — search by name or enter a BEN, then run a lookup.");return;}
+        try
+        {
+            var portfolioStore=new PortfolioStore(portfolioDirectory);
+            if(portfolioStore.Lists().Count==0){MessageBox.Show(this,"Create a watchlist in Saved BENs / Watchlists first.");return;}
+            var suggested=selectedName.Length>0?selectedName:directory.GetBudget(selectedBen,selectedYear)?.Name??"";
+            using var dialog=new AddToWatchlistDialog(portfolioStore,selectedBen,suggested);
+            if(dialog.ShowDialog(this)==DialogResult.OK)status.Text=$"BEN {selectedBen} saved to \"{dialog.ChosenListName}\". Open Saved BENs / Watchlists to refresh it.";
+        }
+        catch(Exception ex){MessageBox.Show(this,ex.Message,"Add BEN to watchlist");}
     }
     private Filing? SelectedFiling()=>grid.CurrentRow?.DataBoundItem as Filing;
     private void OpenForm()

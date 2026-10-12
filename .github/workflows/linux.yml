@@ -53,6 +53,24 @@ jobs:
           desktop-file-validate "$XDG_DATA_HOME/applications/org.eratelookup.desktop.desktop"
           timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
           timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-portfolio
+          # Portfolio data is optional: rejected or unreadable stores must not block lookup startup.
+          for problem in future corrupt unopenable; do
+            export XDG_DATA_HOME="$PWD/smoke-data-$problem"
+            python3 - "$problem" <<'PY'
+          import os, pathlib, sqlite3, sys
+          folder = pathlib.Path(os.environ['XDG_DATA_HOME']) / 'ERateLookup'
+          folder.mkdir(parents=True)
+          db = folder / 'portfolio.sqlite3'
+          if sys.argv[1] == 'future':
+              with sqlite3.connect(db) as conn:
+                  conn.execute('PRAGMA user_version=99')
+          elif sys.argv[1] == 'corrupt':
+              db.write_text('not a database')
+          else:
+              db.mkdir()
+          PY
+            timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: ERateLookup-Linux-${{ matrix.rid }}
