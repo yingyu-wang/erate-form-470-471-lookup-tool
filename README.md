@@ -65,7 +65,10 @@ Successful filing queries are cached for two hours by **BEN + funding year + for
 The new **Saved BENs / Watchlists** button opens named district lists, CSV imports,
 selected-BEN or whole-list refresh, offline snapshots, persistent unread changes,
 filters, multi-year summaries, requested-funding comparison, source-backed dates,
-selected exports, and Android sharing. See the [portfolio user guide](docs/PORTFOLIO_GUIDE.md).
+selected exports, and Android sharing. The October 12 v1.0.2 rebuild also lets you
+select one or more partial-name search matches and choose **Add selected BENs to
+watchlist**, without requiring a filing lookup or a published 2027 Form 470.
+See the [portfolio user guide](docs/PORTFOLIO_GUIDE.md).
 
 These features were merged in [implementation PR #8](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/8).
 Download the matching **v1.0.2** package from [the release page](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
@@ -149,6 +152,14 @@ git push origin main
 git tag v1.0.3
 git push origin v1.0.3
 ```
+
+To rebuild an existing version from updated source, run **Windows build and
+release** on `main`, supply `release_tag` (for example `v1.0.2`), and supply the
+current lightweight tag's commit SHA as `expected_tag_sha`. Package metadata must
+match that version. After all platform builds and checks succeed, the publisher
+checks the old tag, updates it to the build commit, replaces the seven archives,
+and regenerates `SHA256SUMS.txt`. The release notes record both commit SHAs.
+Leave `release_tag` blank to generate build artifacts without changing a release.
 
 The historical **Publish Linux to v1.0.1** workflow added Linux packages to v1.0.1. Starting with v1.0.2, tagged release automation builds all seven packages from the same tagged source.
 

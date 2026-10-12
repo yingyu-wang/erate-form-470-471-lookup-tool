@@ -6,9 +6,18 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing version to rebuild from this branch (blank = build artifacts only)'
+        required: false
+        type: string
+      expected_tag_sha:
+        description: 'Current tag commit SHA, required when rebuilding an existing release'
+        required: false
+        type: string
 # Tagged releases share one build slot; branch/PR checks have independent slots.
 concurrency:
-  group: ${{ startsWith(github.ref, 'refs/tags/v') && 'eratelookup-release-build' || format('eratelookup-ci-{0}', github.run_id) }}
+  group: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && 'eratelookup-release-build' || format('eratelookup-ci-{0}', github.run_id) }}
   cancel-in-progress: false
 permissions:
   contents: read
@@ -83,17 +92,17 @@ jobs:
           path: artifacts/ERateLookup-v*-macos-*.zip
           retention-days: 7
   android-build:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     uses: ./.github/workflows/android.yml
   linux-build:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     uses: ./.github/workflows/linux.yml
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     needs: [build, mac-build, android-build, linux-build]
     # Same group as every other publisher targeting this release.
     concurrency:
-      group: eratelookup-release-publish-${{ github.ref_name }}
+      group: eratelookup-release-publish-${{ inputs.release_tag || github.ref_name }}
       cancel-in-progress: false
     runs-on: windows-latest
     permissions:
@@ -122,20 +131,34 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+          EXPECTED_TAG_SHA: ${{ inputs.expected_tag_sha }}
+          REBUILD_REQUESTED: ${{ inputs.release_tag != '' }}
+          BUILD_SHA: ${{ github.sha }}
         run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag" }
+          $version = $env:RELEASE_TAG.Substring(1)
+          foreach ($project in @('Desktop/ERate470Lookup.csproj', 'MacDesktop/MacDesktop.csproj', 'LinuxDesktop/ERateLookup.Linux.csproj')) {
+            [xml]$metadata = Get-Content "source/$project" -Raw
+            if ([string]$metadata.Project.PropertyGroup.Version -ne $version) { throw "Release tag does not match $project version" }
+          }
+          [xml]$android = Get-Content 'source/Android/ERateLookup.Android.csproj' -Raw
+          if ([string]$android.Project.PropertyGroup.ApplicationDisplayVersion -ne $version) { throw "Release tag does not match Android version" }
           $windowsAssets = Get-ChildItem "ERateLookup-win-*.zip" | ForEach-Object {
             $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
             $renamed = "ERateLookup-$env:RELEASE_TAG-win-$architecture.zip"
             Move-Item $_.FullName $renamed
             (Resolve-Path $renamed).Path
           }
+          if (@($windowsAssets).Count -ne 2) { throw "Expected Windows x64 and ARM64 archives" }
           $macAssets = Get-ChildItem "ERateLookup-v*-macos-*.zip" | ForEach-Object {
             $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
             $renamed = "ERateLookup-$env:RELEASE_TAG-macos-$architecture.zip"
             if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
             (Resolve-Path $renamed).Path
           }
+          if (@($macAssets).Count -ne 2) { throw "Expected macOS x64 and ARM64 archives" }
           $linuxAssets = Get-ChildItem "ERateLookup-v*-linux-*.tar.gz" | ForEach-Object {
             $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
             $renamed = "ERateLookup-$env:RELEASE_TAG-linux-$architecture.tar.gz"
@@ -149,6 +172,19 @@ jobs:
             "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $(Split-Path $_ -Leaf)"
           }
           $checksums | Set-Content SHA256SUMS.txt
+          if ($env:REBUILD_REQUESTED -eq 'true') {
+            if ($env:EXPECTED_TAG_SHA -notmatch '^[0-9a-f]{40}$') { throw "Supply the expected current tag commit SHA" }
+            $tagState = gh api "repos/$env:GH_REPO/git/ref/tags/$env:RELEASE_TAG" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw "Could not read the existing release tag" }
+            if ($tagState.object.type -ne 'commit') { throw "Manual rebuild supports lightweight tags only" }
+            $previousSha = [string]$tagState.object.sha
+            if ($previousSha -ne $env:EXPECTED_TAG_SHA -and $previousSha -ne $env:BUILD_SHA) { throw "Release tag changed; inspect it before retrying" }
+            gh api --method PATCH "repos/$env:GH_REPO/git/refs/tags/$env:RELEASE_TAG" -f "sha=$env:BUILD_SHA" -F force=true
+            if ($LASTEXITCODE -ne 0) { throw "Could not align the release tag with the successful build" }
+            $provenance = "`n`nRebuilt $env:RELEASE_TAG from commit $env:BUILD_SHA. Previous tag commit: $env:EXPECTED_TAG_SHA. All seven archives and SHA256SUMS.txt were regenerated."
+            Add-Content source/RELEASE_NOTES.md $provenance
+            Add-Content $env:GITHUB_STEP_SUMMARY $provenance
+          }
           gh release view "$env:RELEASE_TAG" --json tagName 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets "SHA256SUMS.txt" --clobber

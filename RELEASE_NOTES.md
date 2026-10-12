@@ -1,6 +1,6 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## Unreleased — search-result watchlist saving
+## v1.0.2 — rebuilt October 12, 2026: search-result watchlist saving
 
 - Select one or more partial-name search matches and choose **Add selected BENs
   to watchlist**, without running a filing lookup. Works even with no published
@@ -14,10 +14,11 @@
 - Clear the previous customer when input changes so a direct BEN cannot inherit
   another district's display name.
 
-These changes are available in development Actions builds. They are
-not included in the already published v1.0.2 packages.
+The October 12 rebuild includes PRs #9–#11 and regenerates all seven platform
+archives and SHA256SUMS.txt. Download the rebuilt v1.0.2 packages to use these
+controls; earlier v1.0.2 downloads have the previous UI.
 
-## v1.0.2 — Saved BEN portfolios
+### Saved BEN portfolios
 
 - Dedicated Saved BENs / Watchlists screen on Windows, macOS/Linux Avalonia, and Android.
 - Named lists with saved BENs, names/tags, and validated atomic CSV import.

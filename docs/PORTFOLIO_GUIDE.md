@@ -1,9 +1,9 @@
 # Saved BENs and district portfolios — v1.0.2
 
 Saved BEN portfolios are included in the published [v1.0.2 packages](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
-The main-screen watchlist shortcuts described below are newer than v1.0.2.
-Use a successful Actions build from the search-selection PR or subsequent main
-branch to test them; the published v1.0.2 downloads do not include them.
+The **October 12, 2026 v1.0.2 rebuild** includes the main-screen search-result
+watchlist shortcuts below. If you downloaded v1.0.2 earlier, download it again
+to get the updated UI.
 
 ## Save your districts
 
