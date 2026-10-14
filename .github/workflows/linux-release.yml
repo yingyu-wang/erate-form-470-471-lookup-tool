@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: write
     concurrency:
-      group: eratelookup-release-publish-v1.0.1
+      group: eratelookup-release-publish-v1.0.3
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -40,7 +40,7 @@ jobs:
           from pathlib import Path
           import hashlib
           root = Path('all-packages')
-          expected = {f'ERateLookup-v1.0.1-{p}' for p in (
+          expected = {f'ERateLookup-v1.0.3-{p}' for p in (
               'win-x64.zip', 'win-arm64.zip', 'macos-x64.zip', 'macos-arm64.zip',
               'android-preview.zip', 'linux-x64.tar.gz', 'linux-arm64.tar.gz')}
           actual = {p.name for p in root.iterdir()}
