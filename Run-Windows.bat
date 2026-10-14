@@ -2,7 +2,7 @@
 cd /d "%~dp0"
 where dotnet >nul 2>nul
 if errorlevel 1 goto missing
-dotnet run --project Desktop\ERate470Lookup.csproj
+dotnet run --project Desktop\ERateLookup.csproj
 if errorlevel 1 pause
 exit /b
 :missing

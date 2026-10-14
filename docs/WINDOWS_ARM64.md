@@ -9,10 +9,10 @@ This package targets native Windows ARM64 (for example, a Snapdragon Windows PC)
 Install the .NET 10 SDK and run `Publish-Windows-ARM64.bat` on Windows, or run:
 
 ```sh
-dotnet publish Desktop/ERate470Lookup.csproj -c Release -r win-arm64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-arm64-framework
+dotnet publish Desktop/ERateLookup.csproj -c Release -r win-arm64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-arm64-framework
 ```
 
-The executable bundles application assemblies, seed data and native SQLite. The .NET Desktop Runtime is not bundled. Windows and macOS packages share the same lookup/export core.
+That command writes `publish/win-arm64-framework/ERateLookup.exe`. The published v1.0.1 archive still contains `ERate470Lookup.exe`. The executable bundles application assemblies, seed data and native SQLite. The .NET Desktop Runtime is not bundled. Windows and macOS packages share the same lookup/export core.
 
 ## Verification
 

@@ -76,7 +76,7 @@ when a directory refresh fails. Deleting this directory removes cached data/sett
 Install .NET SDK 10 and Python 3, then run from the repository root:
 
 ```bash
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 bash Publish-Linux.sh linux-x64
 bash Publish-Linux.sh linux-arm64
 ```

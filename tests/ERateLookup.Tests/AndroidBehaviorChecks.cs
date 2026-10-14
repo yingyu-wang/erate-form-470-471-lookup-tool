@@ -1,8 +1,11 @@
 using System.Net;
-using ERate470Lookup.AndroidApp;
-using ERate470Lookup.Core;
+using ERateLookup.Core;
+using Xunit;
 
-static class AndroidBehaviorChecks
+
+namespace ERateLookup.Tests;
+
+public class AndroidBehaviorChecks
 {
     static void Check(bool passed, string name)
     {
@@ -10,7 +13,8 @@ static class AndroidBehaviorChecks
         Console.WriteLine("PASS: " + name);
     }
 
-    public static async Task RunAsync()
+    [Fact]
+    public async Task AndroidScenario()
     {
         foreach (var error in new Exception[] { new HttpRequestException(), new TaskCanceledException(), new System.Text.Json.JsonException(), new IOException() })
         {

@@ -4,11 +4,11 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Themes.Fluent;
 using Avalonia.Threading;
-using ERate470Lookup.MacDesktop;
-using ERate470Lookup.Core;
+using ERateLookup.MacDesktop;
+using ERateLookup.Core;
 using Avalonia.Media.Imaging;
 
-namespace ERate470Lookup.LinuxDesktop;
+namespace ERateLookup.LinuxDesktop;
 internal static class Program
 {
     internal static bool SmokeTest;

@@ -4,7 +4,7 @@ Native **C# Windows Forms** application targeting **.NET 10 LTS**. This smaller 
 
 ## GitHub and development
 
-Open `ERate470Lookup.sln` for the full solution. See [GITHUB_SETUP.md](../GITHUB_SETUP.md) for repository layout, first upload, syncing changes, and release packaging. Build output and per-user SQLite caches are excluded by `.gitignore`.
+Open `ERateLookup.sln` for the full solution. See [GITHUB_SETUP.md](../GITHUB_SETUP.md) for repository layout, first upload, syncing changes, and release packaging. Build output and per-user SQLite caches are excluded by `.gitignore`.
 
 ## End-user requirements and setup
 
@@ -12,7 +12,7 @@ Open `ERate470Lookup.sln` for the full solution. See [GITHUB_SETUP.md](../GITHUB
    **https://dotnet.microsoft.com/en-us/download/dotnet/10.0**
 2. On that page, scroll to **Run apps – Runtime**, locate **.NET Desktop Runtime**, and choose the **Windows x64 installer**. Install the latest stable 10.0.x patch. The Desktop Runtime includes the base .NET runtime; one installer is sufficient.
 3. Extract this ZIP to a folder.
-4. Double-click **ERate470Lookup.exe**. There is no installer for the app itself; it is a portable, framework-dependent executable. The runtime is a one-time prerequisite on each PC.
+4. Double-click **ERateLookup.exe**. There is no installer for the app itself; it is a portable, framework-dependent executable. The runtime is a one-time prerequisite on each PC.
 5. Choose **Form 470** or **Form 471**. Leave funding year at **2027**, or choose another year. Type at least two letters for local California suggestions, or enter an exact filing BEN.
 
 Use the **Desktop Runtime**, which includes Windows Forms support. The base .NET Runtime or ASP.NET Core Runtime alone does not supply the desktop framework. The SDK is only needed to build or edit the project, and the older .NET Framework 4.x does not satisfy this prerequisite.
@@ -42,15 +42,15 @@ The **SDK** is required to build or use the source launcher. A framework-depende
 
 On Windows x64 with the .NET 10 SDK installed, double-click **Publish-Windows.bat**. It creates:
 
-`publish\win-x64-framework\ERate470Lookup.exe`
+`publish\win-x64-framework\ERateLookup.exe`
 
 This build **does not bundle the .NET runtime**. It retains the app, SQLite native library and seed data in the single-file publish. The separately installed Desktop Runtime is required to run it. SQLite's native component may extract to the user's temporary directory at launch. Do not enable trimming for WinForms.
 
 Command equivalents:
 
 ```powershell
-dotnet run --project Desktop/ERate470Lookup.csproj
-dotnet publish Desktop/ERate470Lookup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-x64-framework
+dotnet run --project Desktop/ERateLookup.csproj
+dotnet publish Desktop/ERateLookup.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/win-x64-framework
 ```
 
 For Windows ARM64, rebuild using `win-arm64` and use the matching ARM64 Desktop Runtime. Only the x64 executable is included in this package.
@@ -76,8 +76,8 @@ For Windows ARM64, rebuild using `win-arm64` and use the matching ARM64 Desktop 
 | `Core/UsacClient.cs` | HTTP client, typed API records, SoQL filters, pagination, SQLite database cache, grouping |
 | `Desktop/MainForm.cs` | Windows Forms GUI, async search, matching entities, PDF launch, CSV / Excel export |
 | `Desktop/Program.cs` | Desktop entry point |
-| `Desktop/ERate470Lookup.csproj` | .NET 10 Windows desktop project |
-| `Checks/` | Client verification runner |
+| `Desktop/ERateLookup.csproj` | .NET 10 Windows desktop project |
+| `tests/ERateLookup.Tests/` | Shared xUnit suite, including the nightly live USAC checks |
 | `Run-Windows.bat` | Build/run source on Windows |
 | `Publish-Windows.bat` | Publish a runtime-dependent portable EXE |
 | `VALIDATION.md` | Actual checks and known limits |
@@ -103,11 +103,12 @@ Official sources:
 ## Client checks
 
 ```powershell
-dotnet run --project Checks/Checks.csproj
-dotnet run --project Checks/Checks.csproj -- --live
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
+$env:ERATE_LIVE_USAC = '1'
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category=Live
 ```
 
-The second command adds a live FY2027 test for BEN 133193. Network access and public USAC data availability are required. Open `Desktop/ERate470Lookup.csproj` in a compatible Visual Studio installation to edit the GUI project. Source-only developers can use any editor and the CLI.
+The live command checks published filings for known BENs, including FY2027 Form 470 for BEN 133193. Network access and public USAC data availability are required. The nightly GitHub workflow runs that same filter. Open `Desktop/ERateLookup.csproj` in a compatible Visual Studio installation to edit the GUI project. Source-only developers can use any editor and the CLI. Windows watchlist UI tests live in `tests/ERateLookup.Desktop.Tests` and run on Windows.
 
 ## Cache schema
 

@@ -22,7 +22,7 @@ Open this repository's **Releases** page and select **v1.0.2**. GitHub's automat
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
-Extract the ZIP, then run `ERate470Lookup.exe` on Windows or `ERateLookup.app` on macOS. Keep the Mac .app bundle intact. Mac builds target macOS 14 or later and are unsigned, non-notarized previews. For a blocked app you trust, use the per-app **Open Anyway** option in macOS Privacy & Security.
+Extract the ZIP, then run `ERateLookup.exe` on Windows or `ERateLookup.app` on macOS. Keep the Mac .app bundle intact. Mac builds target macOS 14 or later and are unsigned, non-notarized previews. For a blocked app you trust, use the per-app **Open Anyway** option in macOS Privacy & Security.
 
 ## Install on Linux
 
@@ -86,10 +86,10 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Build from source
 
-Install the .NET 10 SDK. Open this folder in VS Code or open `ERate470Lookup.sln` in Visual Studio.
+Install the .NET 10 SDK. Open this folder in VS Code or open `ERateLookup.sln` in Visual Studio.
 
 ```sh
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 ```
 
 On Windows, use `Run-Windows.bat` to launch from source or `Publish-Windows.bat` to create the framework-dependent EXE under `publish/win-x64-framework`. For Windows on ARM, use `Publish-Windows-ARM64.bat`; its native ARM64 executable is written to `publish/win-arm64-framework`. See [Windows ARM64 instructions](docs/WINDOWS_ARM64.md).
@@ -122,7 +122,7 @@ Install **.NET SDK 10.0.401**, **JDK 21**, and the **Android SDK platform 36 / B
 ```sh
 dotnet workload install android --version 10.0.401
 dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies -p:AndroidSdkDirectory="/absolute/path/android-sdk" -p:JavaSdkDirectory="/absolute/path/jdk-21" -p:AcceptAndroidSDKLicenses=True
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 python -m unittest discover -s scripts -p test_verify_android_apk.py -v
 dotnet publish Android/ERateLookup.Android.csproj -c Release -p:AndroidSdkDirectory="/absolute/path/android-sdk" -p:JavaSdkDirectory="/absolute/path/jdk-21" -o publish/android
 ```
@@ -156,10 +156,15 @@ git push origin v1.0.3
 To rebuild an existing version from updated source, run **Windows build and
 release** on `main`, supply `release_tag` (for example `v1.0.2`), and supply the
 current lightweight tag's commit SHA as `expected_tag_sha`. Package metadata must
-match that version. After all platform builds and checks succeed, the publisher
-checks the old tag, updates it to the build commit, replaces the seven archives,
-and regenerates `SHA256SUMS.txt`. The release notes record both commit SHAs.
-Leave `release_tag` blank to generate build artifacts without changing a release.
+match that version. After all platform builds and checks succeed, the
+`align-release-tag` job waits for approval in the `release-tag-move` environment
+and then moves the lightweight tag onto the build commit. The publisher checks
+that the tag already points at that commit, replaces the seven archives, and
+regenerates `SHA256SUMS.txt`. The release notes record both commit SHAs. Create
+the environment and required reviewers before the first rebuild; see
+[GITHUB_SETUP.md](GITHUB_SETUP.md). Leave `release_tag` blank to generate build
+artifacts without changing a release. Nightly live USAC checks run separately
+and do not publish.
 
 The historical **Publish Linux to v1.0.1** workflow added Linux packages to v1.0.1. Starting with v1.0.2, tagged release automation builds all seven packages from the same tagged source.
 
@@ -175,7 +180,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 | `LinuxDesktop/` | Linux entry point, icon, launch check, and shortcut helper |
 | `Android/` | Native Android development preview |
 | `Assets/` | PNG, ICO, and ICNS app icon |
-| `Checks/` | Shared verification program |
+| `tests/` | xUnit projects. Live USAC cases run only when `ERATE_LIVE_USAC=1`, including the nightly workflow |
 | `scripts/package_mac.py` | Creates Mac app bundles and ZIP files |
 | `Publish-Linux.sh` / `scripts/package_linux.py` | Creates self-contained Linux tar.gz archives |
 | `.github/workflows/linux.yml` | Native Linux x64/ARM64 builds and window launch checks |

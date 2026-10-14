@@ -16,7 +16,7 @@ it does not require rebuilding the unchanged app.
 ## Automated checks to add with implementation
 
 Use deterministic fixtures, an injected clock, fake HTTP responses, and temporary
-databases in `Checks/`. Keep existing shared and Android security checks passing.
+databases in `tests/ERateLookup.Tests`. Keep existing shared and Android security checks passing.
 Routine tests must not depend on live USAC data or a particular filing count.
 
 | Area | Required scenarios |
@@ -34,7 +34,7 @@ Routine tests must not depend on live USAC data or a particular filing count.
 Developer commands after implementation:
 
 ```sh
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 python -m unittest discover -s scripts -p test_verify_android_apk.py -v
 ```
 

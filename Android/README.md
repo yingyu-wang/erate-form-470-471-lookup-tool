@@ -19,7 +19,7 @@ dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies \
   -p:AndroidSdkDirectory=/absolute/path/android-sdk \
   -p:JavaSdkDirectory=/absolute/path/jdk-21 \
   -p:AcceptAndroidSDKLicenses=True
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 dotnet publish Android/ERateLookup.Android.csproj -c Release \
   -p:AndroidSdkDirectory=/absolute/path/android-sdk \
   -p:JavaSdkDirectory=/absolute/path/jdk-21

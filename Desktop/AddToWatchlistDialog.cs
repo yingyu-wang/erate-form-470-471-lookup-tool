@@ -1,6 +1,6 @@
-using ERate470Lookup.Core;
+using ERateLookup.Core;
 
-namespace ERate470Lookup.Desktop;
+namespace ERateLookup.Desktop;
 
 /// <summary>
 /// Adds the BEN identified in the main window to a watchlist without retyping it.
@@ -68,9 +68,9 @@ public sealed class AddToWatchlistDialog : Form
             DialogResult = DialogResult.OK;
             Close();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Microsoft.Data.Sqlite.SqliteException)
         {
-            // Keep the dialog open so the user can fix the entry and retry.
+            AppLog.Error(ex, "Add BEN to watchlist");
             MessageBox.Show(this, ex.Message, "Add BEN to watchlist");
         }
     }

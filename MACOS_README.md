@@ -35,7 +35,7 @@ Install the .NET 10 SDK and Python 3. In Terminal, from the folder containing Co
 
 ```bash
 dotnet run --project MacDesktop/MacDesktop.csproj
-dotnet run --project Checks/Checks.csproj -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
 bash Publish-Mac.sh osx-arm64
 # For an Intel build instead:
 bash Publish-Mac.sh osx-x64
