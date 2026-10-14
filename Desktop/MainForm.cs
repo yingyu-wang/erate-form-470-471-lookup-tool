@@ -118,7 +118,24 @@ public sealed class MainForm : Form
         themePicker.SelectedIndexChanged += (_, _) => ApplyTheme(themePicker.SelectedItem as string ?? "Mint Glass", true);
         var saved = "Mint Glass"; try { if (File.Exists(settingsPath)) saved = File.ReadAllText(settingsPath).Trim(); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         themePicker.SelectedItem = themePicker.Items.Contains(saved) ? saved : "Mint Glass";
-        FormClosing += (_, _) => { typingTimer.Stop(); lifetime.Cancel(); }; FormClosed += (_, _) => { backgroundAsset?.Dispose(); typingTimer.Dispose(); client.Dispose(); http.Dispose(); lifetime.Dispose(); }; UpdateSelection();
+        FormClosing += (_, _) => { typingTimer.Stop(); lifetime.Cancel(); }; FormClosed += (_, _) => ReleaseRuntime(); UpdateSelection();
+    }
+    int runtimeReleased;
+    void ReleaseRuntime()
+    {
+        if (Interlocked.Exchange(ref runtimeReleased, 1) != 0) return;
+        typingTimer.Stop();
+        backgroundAsset?.Dispose();
+        typingTimer.Dispose();
+        client.Dispose();
+        http.Dispose();
+        lifetime.Cancel();
+        lifetime.Dispose();
+    }
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) ReleaseRuntime();
+        base.Dispose(disposing);
     }
     protected override void OnPaintBackground(PaintEventArgs e)
     {

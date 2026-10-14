@@ -56,6 +56,7 @@ public class MainFormWatchlistTests
                 Check(Field<Button>(window, "search").Enabled, $"Lookup opens with {problem} portfolio data");
                 Check(before is null ? Directory.Exists(path) : before.SequenceEqual(File.ReadAllBytes(path)),
                     $"Opening lookup leaves {problem} portfolio untouched");
+                window.Close();
             }
 
             var data = Path.Combine(root, "normal");
@@ -135,7 +136,14 @@ public class MainFormWatchlistTests
             if (failure is not null) throw failure;
             Console.WriteLine("All Windows UI regression checks passed.");
         }
-        finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
     }
 
     static void SaveFromMain(MainForm owner, string listId, string? expectedName, string action = "saveBen", string[]? expectedBens = null, bool cancel = false)
