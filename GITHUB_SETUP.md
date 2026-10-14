@@ -93,4 +93,4 @@ Create the environment before the first rebuild:
 3. Add required reviewers, including the repository owner.
 4. Limit deployment branches to `main`.
 
-Until that environment exists with required reviewers, a rebuild can move the tag without a separate approval. Tagged releases that are created by pushing a `v*` tag do not use this environment. Nightly live USAC checks are `.github/workflows/nightly-usac.yml` (`schedule` plus `workflow_dispatch`, contents read-only) and do not publish anything.
+Until that environment exists with required reviewers, a rebuild can move the tag without a separate approval. Tagged releases that are created by pushing a `v*` tag do not use this environment. Nightly live USAC checks are `.github/workflows/nightly-usac.yml` (`schedule` plus `workflow_dispatch`, contents read-only) and do not publish anything. That workflow retries the live filter three times, waiting about 30 seconds and then 60 seconds. If USAC is still unreachable, the job stays green and its summary says it was skipped. An assertion or build failure still fails the run.
