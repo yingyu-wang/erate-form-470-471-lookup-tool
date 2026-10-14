@@ -3,14 +3,14 @@
 ## Development setup
 Install [VS Code](https://code.visualstudio.com/), [Git for Windows](https://git-scm.com/downloads/win), and the Windows x64 [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). End users only need the .NET 10 Desktop Runtime x64; developers need the SDK. Install the official OpenAI Codex extension if you want Codex to edit and run the project, and sign in. Microsoft C# tooling is also useful for editing.
 
-Extract this package. In VS Code, use File > Open Folder and choose the directory containing ERate470Lookup.sln, Core, Desktop, and Checks. Open Terminal > New Terminal. Run:
+Extract this package. In VS Code, use File > Open Folder and choose the directory containing ERateLookup.sln, Core, Desktop, and tests. Open Terminal > New Terminal. Run:
 
 ```powershell
 dotnet --version
 git --version
-dotnet build ERate470Lookup.sln -c Release
-dotnet run --project Checks/Checks.csproj -c Release
-dotnet run --project Desktop/ERate470Lookup.csproj
+dotnet build ERateLookup.sln -c Release
+dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
+dotnet run --project Desktop/ERateLookup.csproj
 ```
 
 Check both form modes, year switching, local name suggestions, empty results, refresh, exports, and themes on Windows. Automated checks do not establish that the GUI displays correctly.
@@ -54,10 +54,10 @@ git push
 ```
 
 ## Local publishing alternative
-Run .\Publish-Windows.bat from PowerShell. It writes publish/win-x64-framework/ERate470Lookup.exe. Package it with the README and upload it as a GitHub Release asset if you prefer a manual release. The app remains runtime-dependent and does not include a .NET runtime.
+Run .\Publish-Windows.bat from PowerShell. It writes publish/win-x64-framework/ERateLookup.exe. Package it with the README and upload it as a GitHub Release asset if you prefer a manual release. The app remains runtime-dependent and does not include a .NET runtime.
 
 ## Using Codex
-Open the Codex sidebar in this project. Ask it to inspect the solution, implement your change, run Checks/Checks.csproj, build the Desktop project and review failures. For GitHub operations, explicitly tell it to commit/push or tag a tested commit. Codex needs GitHub authentication on your PC independently of your ChatGPT sign-in. It cannot report hosted workflow success until the actual run has completed.
+Open the Codex sidebar in this project. Ask it to inspect the solution, implement your change, run `dotnet test`, build the Desktop project and review failures. For GitHub operations, explicitly tell it to commit/push or tag a tested commit. Codex needs GitHub authentication on your PC independently of your ChatGPT sign-in. It cannot report hosted workflow success until the actual run has completed.
 
 ## macOS in VS Code
 

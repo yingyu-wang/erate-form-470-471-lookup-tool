@@ -1,4 +1,5 @@
-namespace ERate470Lookup.Desktop;
+namespace ERateLookup.Desktop;
+
 internal static class Program
 {
     [STAThread]
@@ -6,6 +7,6 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
         try { Application.Run(new MainForm()); }
-        catch(Exception ex) { MessageBox.Show("Application could not start: "+ex.Message,"E-rate Form 470 Lookup",MessageBoxButtons.OK,MessageBoxIcon.Error); }
+        catch (Exception ex) { ERateLookup.Core.AppLog.Error(ex, "Application start"); MessageBox.Show("Application could not start: " + ex.Message, "E-rate Lookup", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 }

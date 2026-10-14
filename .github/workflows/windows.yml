@@ -28,21 +28,24 @@ jobs:
       matrix:
         rid: [win-x64, win-arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: '10.0.x'
       - name: Build solution
-        run: dotnet build ERate470Lookup.sln -c Release
-      - name: Run offline checks
-        run: dotnet run --project Checks/Checks.csproj -c Release --no-build
+        run: dotnet build ERateLookup.sln -c Release
+      - name: Verify formatting
+        if: matrix.rid == 'win-x64'
+        run: dotnet format ERateLookup.sln --verify-no-changes
+      - name: Run offline tests
+        run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --no-build --filter Category!=Live
       - name: Windows watchlist UI regression checks
         if: matrix.rid == 'win-x64'
         timeout-minutes: 3
-        run: dotnet run --project DesktopChecks/DesktopChecks.csproj -c Release
+        run: dotnet test tests/ERateLookup.Desktop.Tests/ERateLookup.Desktop.Tests.csproj -c Release --no-build
       - name: Upload search-result UI screenshots
         if: always() && matrix.rid == 'win-x64'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ERateLookup-search-watchlist-screenshots
           path: |
@@ -51,12 +54,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Publish Windows ${{ matrix.rid }}
-        run: dotnet publish Desktop/ERate470Lookup.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/${{ matrix.rid }}-framework
+        run: dotnet publish Desktop/ERateLookup.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/${{ matrix.rid }}-framework
       - name: Package executable and instructions
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path package -Force | Out-Null
-          Copy-Item publish/${{ matrix.rid }}-framework/ERate470Lookup.exe package/
+          Copy-Item publish/${{ matrix.rid }}-framework/ERateLookup.exe package/
           Copy-Item README.md,LICENSE,CONTRIBUTORS.md,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md package/
           Copy-Item docs/PORTFOLIO_GUIDE.md package/
           if ('${{ matrix.rid }}' -eq 'win-arm64') {
@@ -64,7 +67,7 @@ jobs:
             (Get-Content package/README.md -Raw).Replace('docs/WINDOWS_ARM64.md', 'WINDOWS_ARM64.md') | Set-Content package/README.md
           }
           Compress-Archive -Path package/* -DestinationPath ERateLookup-${{ matrix.rid }}.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ERateLookup-${{ matrix.rid }}
           path: ERateLookup-${{ matrix.rid }}.zip
@@ -75,18 +78,18 @@ jobs:
       matrix:
         rid: [osx-arm64, osx-x64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: '10.0.x'
-      - name: Run shared core checks
-        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Run shared tests
+        run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
       - name: Build macOS bundle
         run: |
           bash Publish-Mac.sh ${{ matrix.rid }}
           mkdir -p artifacts
           cp ../ERateLookup-v*-macos-*.zip artifacts/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ERateLookup-macOS-${{ matrix.rid }}
           path: artifacts/ERateLookup-v*-macos-*.zip
@@ -97,9 +100,36 @@ jobs:
   linux-build:
     if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     uses: ./.github/workflows/linux.yml
-  release:
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
+  align-release-tag:
+    if: inputs.release_tag != ''
     needs: [build, mac-build, android-build, linux-build]
+    runs-on: ubuntu-latest
+    environment: release-tag-move
+    permissions:
+      contents: write
+    steps:
+      - name: Move the existing release tag onto this build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_TAG_SHA: ${{ inputs.expected_tag_sha }}
+          BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Invalid release tag" >&2; exit 1; fi
+          if [[ ! "$EXPECTED_TAG_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "Supply the expected current tag commit SHA" >&2; exit 1; fi
+          tag_state=$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG")
+          type=$(jq -r '.object.type' <<<"$tag_state")
+          sha=$(jq -r '.object.sha' <<<"$tag_state")
+          if [[ "$type" != "commit" ]]; then echo "Manual rebuild supports lightweight tags only" >&2; exit 1; fi
+          if [[ "$sha" != "$EXPECTED_TAG_SHA" && "$sha" != "$BUILD_SHA" ]]; then echo "Release tag changed; inspect it before retrying" >&2; exit 1; fi
+          if [[ "$sha" != "$BUILD_SHA" ]]; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" -f "sha=$BUILD_SHA" -F force=true
+          fi
+  release:
+    if: always() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && needs.build.result == 'success' && needs.mac-build.result == 'success' && needs.android-build.result == 'success' && needs.linux-build.result == 'success' && (needs.align-release-tag.result == 'success' || needs.align-release-tag.result == 'skipped')
+    needs: [build, mac-build, android-build, linux-build, align-release-tag]
     # Same group as every other publisher targeting this release.
     concurrency:
       group: eratelookup-release-publish-${{ inputs.release_tag || github.ref_name }}
@@ -108,22 +138,22 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ERateLookup-win-*
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ERateLookup-macOS-*
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ERateLookup-Android-preview
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: ERateLookup-Linux-*
           merge-multiple: true
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: source
       - name: Create release with Windows, Mac, Linux, and Android downloads
@@ -139,7 +169,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag" }
           $version = $env:RELEASE_TAG.Substring(1)
-          foreach ($project in @('Desktop/ERate470Lookup.csproj', 'MacDesktop/MacDesktop.csproj', 'LinuxDesktop/ERateLookup.Linux.csproj')) {
+          foreach ($project in @('Desktop/ERateLookup.csproj', 'MacDesktop/MacDesktop.csproj', 'LinuxDesktop/ERateLookup.Linux.csproj')) {
             [xml]$metadata = Get-Content "source/$project" -Raw
             if ([string]$metadata.Project.PropertyGroup.Version -ne $version) { throw "Release tag does not match $project version" }
           }
@@ -177,10 +207,7 @@ jobs:
             $tagState = gh api "repos/$env:GH_REPO/git/ref/tags/$env:RELEASE_TAG" | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0) { throw "Could not read the existing release tag" }
             if ($tagState.object.type -ne 'commit') { throw "Manual rebuild supports lightweight tags only" }
-            $previousSha = [string]$tagState.object.sha
-            if ($previousSha -ne $env:EXPECTED_TAG_SHA -and $previousSha -ne $env:BUILD_SHA) { throw "Release tag changed; inspect it before retrying" }
-            gh api --method PATCH "repos/$env:GH_REPO/git/refs/tags/$env:RELEASE_TAG" -f "sha=$env:BUILD_SHA" -F force=true
-            if ($LASTEXITCODE -ne 0) { throw "Could not align the release tag with the successful build" }
+            if ([string]$tagState.object.sha -ne $env:BUILD_SHA) { throw "Release tag does not point at this build. The release-tag-move environment must approve the move before publishing." }
             $provenance = "`n`nRebuilt $env:RELEASE_TAG from commit $env:BUILD_SHA. Previous tag commit: $env:EXPECTED_TAG_SHA. All seven archives and SHA256SUMS.txt were regenerated."
             Add-Content source/RELEASE_NOTES.md $provenance
             Add-Content $env:GITHUB_STEP_SUMMARY $provenance

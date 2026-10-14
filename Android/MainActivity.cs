@@ -7,13 +7,13 @@ using Android.OS;
 using Android.Text;
 using Android.Views;
 using Android.Widget;
-using ERate470Lookup.Core;
+using ERateLookup.Core;
 using Uri = System.Uri;
 using Path = System.IO.Path;
-using Entity = ERate470Lookup.Core.Entity;
+using Entity = ERateLookup.Core.Entity;
 using OperationCanceledException = System.OperationCanceledException;
 
-namespace ERate470Lookup.AndroidApp;
+namespace ERateLookup.AndroidApp;
 
 [Activity(Name = "com.yingyuwang.eratelookup.android.MainActivity", Label = "E-rate Lookup", MainLauncher = true,
     Exported = true, ConfigurationChanges = ConfigChanges.Orientation | ConfigChanges.ScreenSize | ConfigChanges.KeyboardHidden,
@@ -33,6 +33,7 @@ public class MainActivity : Activity
     UsacClient? client;
     CaliforniaDirectory? directory;
     FilingWindow? windows;
+    LookupViewModel? screen;
     CancellationTokenSource? operation;
     List<Filing> filings = [];
     bool ready, busy, complete, destroyed, suppressChanges;
@@ -103,7 +104,7 @@ public class MainActivity : Activity
 
     async Task InitializeAsync() => await RunAsync(async ct =>
     {
-        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); }, ct);
+        await Task.Run(() => { client = new UsacClient(http, cache); directory = new CaliforniaDirectory(http, cache); directory.LoadSeedIfEmpty(); windows = new FilingWindow(http, cache); screen = new LookupViewModel(client, directory, windows, LookupSurface.Android); }, ct);
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
         ready = true;
         var refreshed = true;
@@ -139,7 +140,7 @@ public class MainActivity : Activity
         busy = true; using var current = new CancellationTokenSource(); operation = current; UpdateControls();
         try { await action(current.Token); }
         catch (OperationCanceledException) { if (!destroyed) status.Text = "Request canceled or timed out. Try again."; }
-        catch (Exception ex) { if (!destroyed) status.Text = "Could not complete the request: " + ex.Message; }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Android request"); if (!destroyed) status.Text = "Could not complete the request: " + ex.Message; }
         finally { if (ReferenceEquals(operation, current)) operation = null; busy = false; if (!destroyed) UpdateControls(); }
     }
 
@@ -246,7 +247,7 @@ public class MainActivity : Activity
                     else store.SaveEntry(list.Id, pending[0]);
                     status.Text = $"{added} BEN(s) added to \"{list.Name}\"; {entries.Count - added} already saved. No filing lookup was needed.";
                 }
-                catch (Exception ex) { if (!destroyed) Alert("Could not save: " + ex.Message); }
+                    catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Save watchlist entry"); if (!destroyed) Alert("Could not save: " + ex.Message); }
             })
             !.SetNegativeButton("Cancel", (_, _) => { })!.Show();
         return Task.CompletedTask;
@@ -260,36 +261,18 @@ public class MainActivity : Activity
         var requestedForm = form.SelectedItemPosition == 0 ? FilingForm.Form470 : FilingForm.Form471;
         _ = UsacClient.FilingFilter(requestedBen, requestedYear, requestedForm);
         status.Text = "Querying USAC…";
-        var response = await client!.GetFilingsAsync(requestedBen, requestedYear, requestedForm, refresh, ct);
-        var notes = "";
-        bool? cycle470 = null;
-        if (requestedYear >= 2026 && requestedYear <= 2030)
-        {
-            var optional = await AndroidBehavior.OptionalAsync(async token => (await client.HasNewCycleForm470Async(requestedBen, refresh, token)).Data, ct);
-            if (optional.Available) cycle470 = optional.Value;
-            else notes += " Budget eligibility cross-check unavailable.";
-        }
-        if (requestedForm == FilingForm.Form471)
-        {
-            var optional = await AndroidBehavior.OptionalAsync(token => windows!.GetAsync(requestedYear, token), ct);
-            notes += optional.Available ? "\n" + optional.Value!.Message(DateTimeOffset.UtcNow) : " Filing-window check unavailable; check USAC’s announcement. Published filings are still shown.";
-        }
+        var outcome = await screen!.LookupAsync(requestedBen, requestedYear, requestedForm, refresh, "", ct);
         ct.ThrowIfCancellationRequested(); if (destroyed) return;
-        resultBen = requestedBen; resultYear = requestedYear; resultForm = requestedForm;
-        filings = response.Data; fetched = response.FetchedAt; hasCycle470 = cycle470;
+        resultBen = outcome.Ben; resultYear = outcome.Year; resultForm = outcome.Form;
+        filings = outcome.Filings.ToList(); fetched = outcome.FetchedAt; hasCycle470 = outcome.HasNewCycleForm470;
         foreach (var f in filings) selected.Add(f.Number);
         complete = true; UpdateBudget(); RenderResults();
-        status.Text = (filings.Count == 0 ? "No certified filings found in published data; this does not prove no filing exists." : $"{filings.Count} published Form {(int)resultForm} applications.") + $" BEN {resultBen}, FY{resultYear}. {(response.FromCache ? "Cached" : "Live")}; fetched {fetched.LocalDateTime:g}." + notes;
+        status.Text = outcome.Status;
     });
 
     void UpdateBudget()
     {
-        var b = directory!.GetBudget(resultBen, resultYear);
-        if (b is null) { budget.Text = "C2 budget not reported in the CA snapshot. This is not a zero budget. Snapshot: " + directory.LastUpdated; return; }
-        var forecast = BudgetRow.ForecastView(b.Version, hasCycle470);
-        budget.Text = $"{(forecast ? "Forecast C2 budget" : "C2 budget")} · {b.Cycle}\n{b.Name}\nUSAC status: {b.Version}\nTotal: {BudgetRow.Money(b.Total)}\nCommitted: {BudgetRow.Money(b.Committed)}\nPending: {BudgetRow.Money(b.Pending)}\n{(forecast ? "Forecast remaining (not confirmed)" : "Reported available")}: {BudgetRow.Money(b.Available)}\nPre-discount figures. Committed is not disbursed. Form 470 does not confirm a budget.\nSnapshot: {directory.LastUpdated}";
-        if (hasCycle470 == false) budget.Text += "\nNo certified Form 470 found for 2026 or 2027.";
-        if (decimal.TryParse(b.Available, NumberStyles.Number, CultureInfo.InvariantCulture, out var remaining) && remaining < 0) budget.Text += "\nNegative remaining balance: review with USAC.";
+        budget.Text = screen!.BudgetText(resultBen, resultYear, hasCycle470);
     }
 
     Task RefreshDirectoryAsync() => RunAsync(async ct =>
@@ -343,14 +326,8 @@ public class MainActivity : Activity
     {
         await RunAsync(async ct =>
         {
-            var b = directory!.GetBudget(resultBen, resultYear);
-            var rows = new List<string[]> { new[] { "ExportedUTC", "LookupFetchedUTC", "DirectoryUpdatedUTC", "FundingYear", "BEN", "Customer", "LookupResult", "FormType", "ApplicationNumber", "FilingStatus", "CertifiedDate", "Nickname", "Services", "PDF", "BudgetCycle", "USACBudgetStatus", "BudgetDisplayStatus", "TotalC2BudgetPreDiscount", "CommittedC2BudgetPreDiscount", "PendingC2BudgetPreDiscount", "ReportedRemainingC2BudgetPreDiscount" } };
-            var items = filings.Where(f => selected.Contains(f.Number)).ToList();
-            if (filings.Count == 0) items.Add(new Filing("", resultBen, b?.Name ?? "", "", "", "", ""));
-            foreach (var f in items) { ct.ThrowIfCancellationRequested(); rows.Add(new[] { DateTimeOffset.UtcNow.ToString("O"), fetched.ToString("O"), directory.LastUpdated, resultYear.ToString(CultureInfo.InvariantCulture), resultBen, f.Name,
-                filings.Count > 0 ? "Filed" : "No certified filing found in published data", ((int)resultForm).ToString(CultureInfo.InvariantCulture), f.Number, filings.Count > 0 ? f.Status : "", f.Certified, f.Nickname, f.Services, f.Pdf,
-                b?.Cycle ?? "Not reported", b?.Version ?? "Not reported", b is null ? "Not reported" : BudgetRow.ForecastView(b.Version, hasCycle470) ? "Forecast" : b.Version,
-                b?.Total ?? "Not reported", b?.Committed ?? "Not reported", b?.Pending ?? "Not reported", b?.Available ?? "Not reported" }); }
+            ct.ThrowIfCancellationRequested();
+            var rows = screen!.ExportRows(resultYear, resultForm, resultBen, "", fetched, filings, selected, hasCycle470);
             var path = Path.Combine(CacheDir!.AbsolutePath, "export-" + Guid.NewGuid().ToString("N") + "." + extension);
             try
             {
@@ -387,7 +364,7 @@ public class MainActivity : Activity
             else if (!destroyed) status.Text = "Export canceled.";
         }
         catch (OperationCanceledException) { if (!destroyed) status.Text = "Export canceled. The selected destination may contain an incomplete file; delete it before retrying."; }
-        catch (Exception ex) { if (!destroyed) Alert("Export failed: " + ex.Message); }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Export filings"); if (!destroyed) Alert("Export failed: " + ex.Message); }
         finally { try { File.Delete(path); } catch (IOException) { } pendingExport = null; if (ReferenceEquals(operation, current)) operation = null; busy = false; if (!destroyed) UpdateControls(); }
     }
 
@@ -397,7 +374,7 @@ public class MainActivity : Activity
         outState.PutInt("form", form.SelectedItemPosition); outState.PutString("pendingExport", pendingExport);
         base.OnSaveInstanceState(outState);
     }
-    protected override void OnDestroy() { destroyed = true; operation?.Cancel(); http.Dispose(); base.OnDestroy(); }
+    protected override void OnDestroy() { destroyed = true; operation?.Cancel(); client?.Dispose(); http.Dispose(); base.OnDestroy(); }
     void Alert(string message) => new AlertDialog.Builder(this)!.SetTitle("E-rate Lookup")!.SetMessage(message)!.SetPositiveButton("OK", (_, _) => { })!.Show();
     int Dp(int value) => (int)(value * Resources!.DisplayMetrics!.Density + 0.5f);
     LinearLayout Column() => new(this) { Orientation = Orientation.Vertical };
@@ -410,7 +387,7 @@ public class MainActivity : Activity
     Button ActionButton(string title, Func<Task> action, bool gate = true)
     {
         var button = new Button(this) { Text = title, ContentDescription = title }; button.SetAllCaps(false);
-        button.Click += async (_, _) => { try { await action(); } catch (Exception ex) { if (!destroyed) Alert(ex.Message); } };
+        button.Click += async (_, _) => { try { await action(); } catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, title); if (!destroyed) Alert(ex.Message); } };
         if (gate) controls.Add(button); return button;
     }
     LinearLayout Row(params View[] views) { var row = new LinearLayout(this) { Orientation = Orientation.Horizontal }; foreach (var view in views) row.AddView(view, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WrapContent, 1)); return row; }

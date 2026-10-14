@@ -2,10 +2,10 @@ name: Linux Avalonia packages
 on:
   pull_request:
     branches: [main]
-    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'Checks/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
+    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'tests/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
   push:
     branches: [main]
-    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'Checks/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
+    paths: ['LinuxDesktop/**', 'MacDesktop/**', 'Core/**', 'tests/**', 'Assets/**', 'Desktop/Assets/**', 'Publish-Linux.sh', 'scripts/package_linux.py', 'docs/LINUX_INSTALL.md', '.github/workflows/linux.yml']
   workflow_call:
   workflow_dispatch:
 permissions:
@@ -23,16 +23,16 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: '10.0.x'
       - name: Install GUI launch-check dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb xauth libx11-6 libice6 libsm6 libfontconfig1 fonts-dejavu-core xdg-utils desktop-file-utils
-      - name: Shared offline checks
-        run: dotnet run --project Checks/Checks.csproj -c Release
+      - name: Shared offline tests
+        run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
       - name: Build self-contained package
         run: bash Publish-Linux.sh '${{ matrix.rid }}'
       - name: Check extracted package and launch Avalonia window
@@ -71,12 +71,12 @@ jobs:
           PY
             timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ERateLookup-Linux-${{ matrix.rid }}
           path: artifacts/ERateLookup-v*-linux-*.tar.gz
           retention-days: 30
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ERateLookup-Portfolio-screenshot-${{ matrix.rid }}
           path: portfolio-smoke.png

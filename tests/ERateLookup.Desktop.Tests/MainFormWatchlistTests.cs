@@ -1,10 +1,13 @@
 using System.Net;
 using System.Reflection;
-using ERate470Lookup.Core;
-using ERate470Lookup.Desktop;
+using ERateLookup.Core;
+using ERateLookup.Desktop;
+using Xunit;
 using Microsoft.Data.Sqlite;
 
-internal static class Program
+namespace ERateLookup.Desktop.Tests;
+
+public class MainFormWatchlistTests
 {
     const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Private)!.GetValue(target)!;
@@ -13,9 +16,26 @@ internal static class Program
     static void Check(bool ok, string message)
     { if (!ok) throw new Exception("FAIL: " + message); Console.WriteLine("PASS: " + message); }
 
-    [STAThread]
-    static int Main()
+    [Fact]
+    public void SearchResultWatchlistRegression()
     {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            try { Run(); }
+            catch (Exception ex) { failure = ex; }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromMinutes(2)), "Windows UI regression timed out.");
+        if (failure is not null) throw new Exception(failure.ToString(), failure);
+    }
+
+    static void Run()
+    {
+        var workspace = Environment.GetEnvironmentVariable("GITHUB_WORKSPACE");
+        if (!string.IsNullOrWhiteSpace(workspace))
+            Directory.SetCurrentDirectory(workspace);
         ApplicationConfiguration.Initialize();
         var root = Path.Combine(Path.GetTempPath(), "ERateDesktopChecks-" + Guid.NewGuid());
         try
@@ -113,9 +133,8 @@ internal static class Program
             };
             Application.Run(form);
             if (failure is not null) throw failure;
-            Console.WriteLine("All Windows UI regression checks passed."); return 0;
+            Console.WriteLine("All Windows UI regression checks passed.");
         }
-        catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         finally { SqliteConnection.ClearAllPools(); if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
@@ -169,7 +188,7 @@ internal static class Program
             new() { Number = "05678", Name = "No filings District B", State = "CA", City = "Test", Type = "School District" }],
             [new() { Ben = "00456", Name = "Second District", State = "CA", Cycle = "FY2021-2025" }], DateTimeOffset.UtcNow);
         Check(directory.GetBudget("00456", 2025)?.Name == "Second District", "Budget-name fallback fixture is present in the California snapshot");
-        var client = new UsacClient(http, cache);
+        using var client = new UsacClient(http, cache);
         foreach (var ben in new[] { "00123", "00456", "00789" })
             await client.GetFilingsAsync(ben, 2025, FilingForm.Form470, false, default);
         foreach (var ben in new[] { "01234", "05678" })

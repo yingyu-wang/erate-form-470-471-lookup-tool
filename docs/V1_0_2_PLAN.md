@@ -36,7 +36,7 @@ complete national entity directory. None of these changes introduces iOS support
 
 | Milestone | Deliverables and likely files | Depends on | Exit gate |
 | --- | --- | --- | --- |
-| M0 — Contracts and source verification | Confirm dataset fields, status coverage, deadlines, funding/provider granularity, and stable pagination; design shared models and migration in `Core/`; fixtures in `Checks/`. | Baseline | Source mappings and aggregation rules documented; unsafe inferences ruled out; migrations preserve existing data. |
+| M0 — Contracts and source verification | Confirm dataset fields, status coverage, deadlines, funding/provider granularity, and stable pagination; design shared models and migration in `Core/`; fixtures in `tests/ERateLookup.Tests`. | Baseline | Source mappings and aggregation rules documented; unsafe inferences ruled out; migrations preserve existing data. |
 | M1 — Watchlists and saved snapshots | F01/F08: `Core/PortfolioStore.cs`, shared snapshot models; watchlist and saved-results views in Windows, shared Avalonia, and Android. | M0 | Restart/offline/upgrade checks pass on all supported app interfaces. |
 | M2 — Batch and change tracking | F02/F03: `Core/BatchLookupService.cs`, `Core/ChangeTracker.cs`; CSV preview, refresh progress, Changes view. | M1 | Cancellation, partial failure, rate limiting, and baseline tests pass; long lists remain responsive. |
 | M3 — Review and export | F04/F07/F09: shared filtering and export projection; customer summary and explicit export scope on each interface. | M2 | Same input produces equivalent filtering, summary, and exported rows across platforms. |

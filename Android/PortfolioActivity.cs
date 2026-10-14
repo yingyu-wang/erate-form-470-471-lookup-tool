@@ -5,11 +5,11 @@ using Android.OS;
 using Android.Text;
 using Android.Views;
 using Android.Widget;
-using ERate470Lookup.Core;
+using ERateLookup.Core;
 using Path=System.IO.Path;
 using OperationCanceledException=System.OperationCanceledException;
 
-namespace ERate470Lookup.AndroidApp;
+namespace ERateLookup.AndroidApp;
 
 [Activity(Label="Saved BENs / Watchlists",Exported=false,ConfigurationChanges=ConfigChanges.Orientation|ConfigChanges.ScreenSize|ConfigChanges.KeyboardHidden,WindowSoftInputMode=SoftInput.AdjustResize)]
 public sealed class PortfolioActivity : Activity
@@ -38,7 +38,7 @@ public sealed class PortfolioActivity : Activity
         base.OnCreate(saved);
         var data=Path.Combine(FilesDir!.AbsolutePath,"ERateLookup");
         try{session=new(new UsacClient(http,data),new PortfolioStore(data));directory=new(http,data);directory.LoadSeedIfEmpty();windows=new(http,data);}
-        catch(Exception ex){SetContentView(new TextView(this){Text="Cannot open saved portfolio: "+ex.Message});return;}
+        catch(Exception ex) when(AppExceptions.IsOperational(ex)){AppLog.Error(ex,"Open portfolio");SetContentView(new TextView(this){Text="Cannot open saved portfolio: "+ex.Message});return;}
         var scroll=new ScrollView(this);var root=Column();root.SetPadding(20,40,20,40);scroll.AddView(root);SetContentView(scroll);
         scroll.SetOnApplyWindowInsetsListener(new PortfolioInsets());scroll.RequestApplyInsets();
         root.AddView(Label("Saved BENs / Watchlists",24));
@@ -97,7 +97,9 @@ public sealed class PortfolioActivity : Activity
     {
         if(destroyed||operation is not null||(pendingExport is not null&&!allowPending))return;
         using var current=new CancellationTokenSource();operation=current;foreach(var c in gated)Enable(c,false);
-        try{await action();}catch(Exception ex){if(!destroyed)status.Text=ex is OperationCanceledException?"Canceled. A selected export destination may contain an incomplete file.":ex.Message;}
+        try{await action();}
+        catch(OperationCanceledException){if(!destroyed)status.Text="Canceled. A selected export destination may contain an incomplete file.";}
+        catch(Exception ex) when(AppExceptions.IsOperational(ex)){AppLog.Error(ex,"Portfolio");if(!destroyed)status.Text=ex.Message;}
         finally{operation=null;if(!destroyed)foreach(var c in gated)Enable(c,true);}
     }
     async Task RefreshAsync(bool single)
