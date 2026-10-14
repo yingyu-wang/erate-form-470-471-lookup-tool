@@ -1,5 +1,20 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
+## v1.0.3 — October 14, 2026: hardened lookups, tests, and release workflows
+
+Prepared from [PR #12](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/12). Release files are unsigned by design.
+
+- Shared offline checks and the Windows watchlist checks are xUnit projects. Offline runs use `dotnet test --filter Category!=Live`. A nightly workflow can run the live USAC cases and records `passed`, `passed after retry`, or `skipped due to USAC unreachable`.
+- The current funding year follows the date: July through December are year N, and January through June are year N−1. New-cycle Form 470 queries no longer assume 2026 and 2027.
+- Windows, macOS, Linux, and Android share one lookup view for search validation, lookup, new-cycle notes, budget text, the Form 471 window banner, and export rows.
+- Every Form 471 lookup, including a cache hit, requires `epc_organization_id` to match the requested BEN. A mismatch is an error, not an empty result.
+- Certified and modified dates are parsed before sorting. A parsed value displays as `yyyy-MM-dd`; an unparseable value is kept as published.
+- Workflow actions are pinned to commit SHAs. `contents: write` is limited to jobs that publish or move a tag. Rebuilding an existing release moves the lightweight tag only in the `release-tag-move` environment.
+- The Windows program file is `ERateLookup.exe`. User data stays in `%LOCALAPPDATA%\ERate470LookupDotNet`.
+- Closing the Windows window releases the query-cache file. Expired cache rows are pruned, and operational UI errors are logged.
+- Version 1.0.3 metadata; Android version code 113. All seven package variants remain supported build targets.
+- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key.
+
 ## v1.0.2 — rebuilt October 12, 2026: search-result watchlist saving
 
 - Select one or more partial-name search matches and choose **Add selected BENs
