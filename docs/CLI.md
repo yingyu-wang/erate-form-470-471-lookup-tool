@@ -4,23 +4,16 @@
 terminal. It is a .NET 10 console program in `Cli/`. It does not open the
 Windows Forms, Avalonia, or Android screens.
 
-This page describes the program on `main` after pull request
+This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
 (merge `155477d`). The release version is 1.0.4. Pull request
 [#15](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/15)
-sets `<Version>` to 1.0.4 in `Cli/ERateLookup.Cli.csproj` and the other app
-projects. Until that pull request merges, the CLI project file on `main` is
-still 1.0.3. There is no `--version` flag. `--version` exits 1 with
-`Unknown argument: --version`.
+merged as `0c29de3` and set `<Version>` to 1.0.4. There is no `--version`
+flag. `--version` exits 1 with `Unknown argument: --version`.
 
-The v1.0.4 tag is planned after #15 merges. The tagged release is published by
-`.github/workflows/windows.yml`. That workflow does not package the CLI. Its
-`release` job uploads the Windows, macOS, and Linux desktop archives, the
-Android preview ZIP, and `SHA256SUMS.txt`. It does not download a CLI artifact
-and does not publish `ERateLookup.Cli`. The version check in that job compares
-the Desktop, Mac, Linux, and Android project versions. It does not read
-`Cli/ERateLookup.Cli.csproj`. A v1.0.4 GitHub Release from this workflow will
-not include the command-line program.
+Starting with v1.0.4, the CLI ships as Windows, macOS, and Linux release
+assets. v1.0.4 is being rebuilt so those assets are included. There is no
+Android CLI. Building from source remains an alternative.
 
 Checked on 2026-10-15 against `Cli/CliCommand.cs`, `Cli/Program.cs`, and
 `dotnet run --project Cli/ERateLookup.Cli.csproj -- --help` (SDK 10.0.402,
@@ -43,20 +36,32 @@ product change is the command-line lookup:
 | `README.md` | Short command-line section |
 
 The desktop, Mac, Linux, and Android packages are unchanged by that diff.
-`.github/workflows/windows.yml` still does not build or attach `ERateLookup.Cli`,
-including for the planned v1.0.4 tag.
+A separate change adds the Windows, macOS, and Linux CLI to the release
+files, and v1.0.4 is rebuilt to include them.
 
 ## Install and run
 
-The published [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3)
-assets are the Windows, macOS, and Linux desktop archives, the Android preview
-ZIP, and `SHA256SUMS.txt`. None of them contains this CLI. The v1.0.4 release
-from `windows.yml` will not contain it either, because that workflow does not
-package `ERateLookup.Cli`. Build from source.
+Starting with v1.0.4, the [v1.0.4 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.4)
+includes the CLI for Windows, macOS, and Linux. That release is being rebuilt
+to add those assets. The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3)
+does not include the CLI. There is no Android command-line package.
 
-Build it from a git checkout with the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
-The same commands work on Windows, macOS, and Linux. Run them from the
-repository root.
+The program is framework-dependent. It needs the .NET 10 runtime
+(`Microsoft.NETCore.App`), not the Windows Desktop Runtime the GUI uses. Keep
+every file from the CLI download together: the host, `ERateLookup.Cli.dll`,
+the runtime config, `Core.dll`, and the SQLite files under `runtimes/`.
+
+| System | Host in the release asset |
+| --- | --- |
+| Windows | `ERateLookup.Cli.exe` |
+| macOS | `ERateLookup.Cli` |
+| Linux | `ERateLookup.Cli` |
+
+### Build from source
+
+Build from a git checkout with the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
+when you are not using a release asset. The same commands work on Windows,
+macOS, and Linux. Run them from the repository root.
 
 Show help (stdout, exit 0):
 

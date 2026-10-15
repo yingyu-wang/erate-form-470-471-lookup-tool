@@ -86,7 +86,7 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Command line
 
-`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps. Flags, samples, output formats, exit codes, and build steps are in the [1.0.4 command-line guide](docs/CLI.md). `.github/workflows/windows.yml` does not package `ERateLookup.Cli`, so a v1.0.4 release from that workflow will not include it. The published [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3) archives do not include it either.
+`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps. Flags, samples, output formats, exit codes, and build steps are in the [1.0.4 command-line guide](docs/CLI.md). Starting with v1.0.4, Windows, macOS, and Linux release assets include the CLI; that release is being rebuilt to add them. Building from source remains an alternative. The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3) does not include the CLI.
 
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026
