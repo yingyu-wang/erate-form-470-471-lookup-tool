@@ -72,6 +72,26 @@ jobs:
           name: ERateLookup-${{ matrix.rid }}
           path: ERateLookup-${{ matrix.rid }}.zip
           retention-days: 7
+      # Framework-dependent single-file, same flags as the Windows desktop package. Unsigned.
+      - name: Publish Windows CLI ${{ matrix.rid }}
+        run: dotnet publish Cli/ERateLookup.Cli.csproj -c Release -r ${{ matrix.rid }} --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o publish/cli-${{ matrix.rid }}
+      - name: Package Windows CLI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path cli-package -Force | Out-Null
+          Copy-Item publish/cli-${{ matrix.rid }}/ERateLookup.Cli.exe cli-package/
+          Copy-Item LICENSE,CONTRIBUTORS.md,THIRD_PARTY_NOTICES.md,RELEASE_NOTES.md cli-package/
+          Compress-Archive -Path cli-package/* -DestinationPath ERateLookup-Cli-${{ matrix.rid }}.zip
+          if ('${{ matrix.rid }}' -eq 'win-x64') {
+            & .\cli-package\ERateLookup.Cli.exe --help
+            if ($LASTEXITCODE -ne 0) { throw 'ERateLookup.Cli --help failed' }
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ERateLookup-Cli-${{ matrix.rid }}
+          path: ERateLookup-Cli-${{ matrix.rid }}.zip
+          if-no-files-found: error
+          retention-days: 7
   mac-build:
     runs-on: macos-latest
     strategy:
@@ -94,15 +114,97 @@ jobs:
           name: ERateLookup-macOS-${{ matrix.rid }}
           path: artifacts/ERateLookup-v*-macos-*.zip
           retention-days: 7
+      # Framework-dependent multi-file publish, same style as the macOS desktop package. Unsigned.
+      - name: Publish macOS CLI ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          dotnet publish Cli/ERateLookup.Cli.csproj -c Release -r "$rid" --self-contained false -p:PublishSingleFile=false -p:PublishTrimmed=false -o "publish/cli-$rid"
+          stage="cli-package"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -a "publish/cli-$rid/." "$stage/"
+          find "$stage" -name '*.pdb' -delete
+          cp LICENSE CONTRIBUTORS.md THIRD_PARTY_NOTICES.md RELEASE_NOTES.md "$stage/"
+          chmod 755 "$stage/ERateLookup.Cli"
+          find "$stage" -type f -name '*.dylib' -exec chmod 755 {} +
+          python3 - "$stage" "ERateLookup-Cli-$rid.zip" <<'PY'
+          import os, sys, zipfile
+          from pathlib import Path
+          stage, dest = Path(sys.argv[1]), sys.argv[2]
+          with zipfile.ZipFile(dest, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+              for path in sorted(item for item in stage.rglob('*') if item.is_file()):
+                  info = zipfile.ZipInfo(path.relative_to(stage).as_posix())
+                  info.create_system = 3
+                  info.compress_type = zipfile.ZIP_DEFLATED
+                  info.external_attr = (path.stat().st_mode & 0xFFFF) << 16
+                  archive.writestr(info, path.read_bytes())
+          names = zipfile.ZipFile(dest).namelist()
+          if 'ERateLookup.Cli' not in names or os.path.getsize(dest) == 0:
+              raise SystemExit(f'CLI archive is missing ERateLookup.Cli: {names}')
+          PY
+          host=$(uname -m)
+          if { [ "$rid" = "osx-arm64" ] && [ "$host" = "arm64" ]; } || { [ "$rid" = "osx-x64" ] && [ "$host" = "x86_64" ]; }; then
+            "$stage/ERateLookup.Cli" --help >/dev/null
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ERateLookup-Cli-${{ matrix.rid }}
+          path: ERateLookup-Cli-${{ matrix.rid }}.zip
+          if-no-files-found: error
+          retention-days: 7
   android-build:
     if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     uses: ./.github/workflows/android.yml
   linux-build:
     if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
     uses: ./.github/workflows/linux.yml
+  cli-linux-build:
+    name: CLI (${{ matrix.rid }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, linux-arm64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+      # Self-contained multi-file publish, same style as the Linux desktop package. Unsigned.
+      - name: Publish Linux CLI ${{ matrix.rid }}
+        run: |
+          set -euo pipefail
+          rid='${{ matrix.rid }}'
+          dotnet publish Cli/ERateLookup.Cli.csproj -c Release -r "$rid" --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o "publish/cli-$rid"
+          stage="cli-package/ERateLookup-Cli-$rid"
+          rm -rf cli-package
+          mkdir -p "$stage"
+          cp -a "publish/cli-$rid/." "$stage/"
+          find "$stage" -name '*.pdb' -delete
+          cp LICENSE CONTRIBUTORS.md THIRD_PARTY_NOTICES.md RELEASE_NOTES.md "$stage/"
+          chmod 755 "$stage/ERateLookup.Cli"
+          archive="ERateLookup-Cli-$rid.tar.gz"
+          tar -C cli-package -czf "$archive" "ERateLookup-Cli-$rid"
+          tar -tzf "$archive" > cli-archive-list.txt
+          grep -qx "ERateLookup-Cli-$rid/ERateLookup.Cli" cli-archive-list.txt
+          file "$stage/ERateLookup.Cli" > cli-file.txt
+          if [ "$rid" = "linux-x64" ]; then
+            grep -q 'x86-64' cli-file.txt
+            "$stage/ERateLookup.Cli" --help >/dev/null
+          else
+            grep -q 'aarch64' cli-file.txt
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ERateLookup-Cli-${{ matrix.rid }}
+          path: ERateLookup-Cli-${{ matrix.rid }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
   align-release-tag:
     if: inputs.release_tag != ''
-    needs: [build, mac-build, android-build, linux-build]
+    needs: [build, mac-build, android-build, linux-build, cli-linux-build]
     runs-on: ubuntu-latest
     environment: release-tag-move
     permissions:
@@ -128,8 +230,8 @@ jobs:
             gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$RELEASE_TAG" -f "sha=$BUILD_SHA" -F force=true
           fi
   release:
-    if: always() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && needs.build.result == 'success' && needs.mac-build.result == 'success' && needs.android-build.result == 'success' && needs.linux-build.result == 'success' && (needs.align-release-tag.result == 'success' || needs.align-release-tag.result == 'skipped')
-    needs: [build, mac-build, android-build, linux-build, align-release-tag]
+    if: always() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != '') && needs.build.result == 'success' && needs.mac-build.result == 'success' && needs.android-build.result == 'success' && needs.linux-build.result == 'success' && needs.cli-linux-build.result == 'success' && (needs.align-release-tag.result == 'success' || needs.align-release-tag.result == 'skipped')
+    needs: [build, mac-build, android-build, linux-build, cli-linux-build, align-release-tag]
     # Same group as every other publisher targeting this release.
     concurrency:
       group: eratelookup-release-publish-${{ inputs.release_tag || github.ref_name }}
@@ -153,10 +255,14 @@ jobs:
         with:
           pattern: ERateLookup-Linux-*
           merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: ERateLookup-Cli-*
+          merge-multiple: true
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           path: source
-      - name: Create release with Windows, Mac, Linux, and Android downloads
+      - name: Create release with desktop, command-line, and Android downloads
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,7 +275,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+$') { throw "Invalid release tag" }
           $version = $env:RELEASE_TAG.Substring(1)
-          foreach ($project in @('Desktop/ERateLookup.csproj', 'MacDesktop/MacDesktop.csproj', 'LinuxDesktop/ERateLookup.Linux.csproj')) {
+          foreach ($project in @('Desktop/ERateLookup.csproj', 'MacDesktop/MacDesktop.csproj', 'LinuxDesktop/ERateLookup.Linux.csproj', 'Cli/ERateLookup.Cli.csproj')) {
             [xml]$metadata = Get-Content "source/$project" -Raw
             if ([string]$metadata.Project.PropertyGroup.Version -ne $version) { throw "Release tag does not match $project version" }
           }
@@ -198,7 +304,28 @@ jobs:
           if (@($linuxAssets).Count -ne 2) { throw "Expected Linux x64 and ARM64 archives" }
           $androidAssets = @(Get-ChildItem "ERateLookup-*-android-preview.zip" | ForEach-Object { $_.FullName })
           if (@($androidAssets).Count -ne 1) { throw "Expected one Android package ZIP" }
-          $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets) + @($linuxAssets)) | Sort-Object | ForEach-Object {
+          $cliWindows = Get-ChildItem "ERateLookup-Cli-win-*.zip" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-Cli-$env:RELEASE_TAG-win-$architecture.zip"
+            if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
+            (Resolve-Path $renamed).Path
+          }
+          if (@($cliWindows).Count -ne 2) { throw "Expected Windows CLI x64 and ARM64 archives" }
+          $cliMac = Get-ChildItem "ERateLookup-Cli-osx-*.zip" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-Cli-$env:RELEASE_TAG-macos-$architecture.zip"
+            if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
+            (Resolve-Path $renamed).Path
+          }
+          if (@($cliMac).Count -ne 2) { throw "Expected macOS CLI x64 and ARM64 archives" }
+          $cliLinux = Get-ChildItem "ERateLookup-Cli-linux-*.tar.gz" | ForEach-Object {
+            $architecture = if ($_.Name -match "arm64") { "arm64" } else { "x64" }
+            $renamed = "ERateLookup-Cli-$env:RELEASE_TAG-linux-$architecture.tar.gz"
+            if ($_.Name -ne $renamed) { Move-Item $_.FullName $renamed }
+            (Resolve-Path $renamed).Path
+          }
+          if (@($cliLinux).Count -ne 2) { throw "Expected Linux CLI x64 and ARM64 archives" }
+          $checksums = (@($windowsAssets) + @($macAssets) + @($androidAssets) + @($linuxAssets) + @($cliWindows) + @($cliMac) + @($cliLinux)) | Sort-Object | ForEach-Object {
             "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $(Split-Path $_ -Leaf)"
           }
           $checksums | Set-Content SHA256SUMS.txt
@@ -208,16 +335,16 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Could not read the existing release tag" }
             if ($tagState.object.type -ne 'commit') { throw "Manual rebuild supports lightweight tags only" }
             if ([string]$tagState.object.sha -ne $env:BUILD_SHA) { throw "Release tag does not point at this build. The release-tag-move environment must approve the move before publishing." }
-            $provenance = "`n`nRebuilt $env:RELEASE_TAG from commit $env:BUILD_SHA. Previous tag commit: $env:EXPECTED_TAG_SHA. All seven archives and SHA256SUMS.txt were regenerated."
+            $provenance = "`n`nRebuilt $env:RELEASE_TAG from commit $env:BUILD_SHA. Previous tag commit: $env:EXPECTED_TAG_SHA. Desktop, Android, and command-line archives and SHA256SUMS.txt were regenerated."
             Add-Content source/RELEASE_NOTES.md $provenance
             Add-Content $env:GITHUB_STEP_SUMMARY $provenance
           }
           gh release view "$env:RELEASE_TAG" --json tagName 2>$null | Out-Null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets "SHA256SUMS.txt" --clobber
+            gh release upload "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets @cliWindows @cliMac @cliLinux "SHA256SUMS.txt" --clobber
             if ($LASTEXITCODE -ne 0) { throw "Could not upload release assets" }
             gh release edit "$env:RELEASE_TAG" --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
           } else {
-            gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
+            gh release create "$env:RELEASE_TAG" @windowsAssets @macAssets @androidAssets @linuxAssets @cliWindows @cliMac @cliLinux "SHA256SUMS.txt" --verify-tag --title "E-rate Lookup $env:RELEASE_TAG" --notes-file source/RELEASE_NOTES.md
           }
           if ($LASTEXITCODE -ne 0) { throw "Could not publish release" }
