@@ -14,7 +14,7 @@ args = parser.parse_args()
 badging = args.badging_file.read_text(encoding="utf-8")
 print(badging)
 assert "name='com.yingyuwang.eratelookup.android'" in badging
-assert "versionCode='113'" in badging and "versionName='1.0.3'" in badging
+assert "versionCode='113'" in badging and "versionName='1.0.4'" in badging
 assert "sdkVersion:'26'" in badging
 assert "launchable-activity: name='com.yingyuwang.eratelookup.android.MainActivity'" in badging
 assert "android.permission.INTERNET" in badging

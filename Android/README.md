@@ -1,6 +1,6 @@
 # Android development preview
 
-Native C# / Android UI sharing the existing `Core` project. Development version **1.0.3**, version code **113**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
+Native C# / Android UI sharing the existing `Core` project. Development version **1.0.4**, version code **113**, application ID **com.yingyuwang.eratelookup.android**. Android 8.0+; ARM64 devices and x64 emulators. No iOS support is included.
 
 Features: offline California name search, nationwide name search, BEN/year/Form 470/471 lookup, two-hour query cache, C2 budget snapshot and forecast labels, directory refresh, cancellation, selected-filing CSV/XLSX export through the Android document picker, and HTTPS PDF opening in another app. The existing PNG icon is reused. Native Android styling replaces the desktop themes.
 
