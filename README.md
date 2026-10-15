@@ -86,7 +86,7 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Command line
 
-`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps.
+`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps. Flags, samples, output formats, exit codes, and build steps are in the [command-line guide](docs/CLI.md). The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3) archives do not include this program.
 
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026
@@ -213,13 +213,14 @@ Keep executables, package archives, caches, and user settings out of the source 
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
 | `.github/workflows/cli.yml` | CLI tests and publish on Windows, macOS, and Linux |
+| `docs/CLI.md` | Command-line install, flags, output formats, and exit codes |
 | `docs/ANDROID_INSTALL.md` | Android installation, updates, exports, and troubleshooting |
 
 ## Current limitations
 
 GUI launch and appearance still require hands-on Windows and Mac testing. Linux CI validates native window launch on x64 and ARM64; interactive lookup, selection, export, and browser opening still require hands-on desktop testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
 
-See [Windows user guide](docs/USER_GUIDE.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
+See [Windows user guide](docs/USER_GUIDE.md), [command-line guide](docs/CLI.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
 
 ## License
 
