@@ -1,4 +1,4 @@
-# Command-line lookup — 1.0.3.1
+# Command-line lookup — 1.0.4
 
 `ERateLookup.Cli` looks up published E-rate Form 470 and Form 471 rows from a
 terminal. It is a .NET 10 console program in `Cli/`. It does not open the
@@ -6,10 +6,21 @@ Windows Forms, Avalonia, or Android screens.
 
 This page describes the program on `main` after pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
-(merge `155477d`). That tree is the same as lightweight tag `1.0.3.1`
-(`a58799c`). There is no GitHub Release for `1.0.3.1`.
-`Cli/ERateLookup.Cli.csproj` still has `<Version>1.0.3</Version>`. There is no
-`--version` flag. `--version` exits 1 with `Unknown argument: --version`.
+(merge `155477d`). The release version is 1.0.4. Pull request
+[#15](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/15)
+sets `<Version>` to 1.0.4 in `Cli/ERateLookup.Cli.csproj` and the other app
+projects. Until that pull request merges, the CLI project file on `main` is
+still 1.0.3. There is no `--version` flag. `--version` exits 1 with
+`Unknown argument: --version`.
+
+The v1.0.4 tag is planned after #15 merges. The tagged release is published by
+`.github/workflows/windows.yml`. That workflow does not package the CLI. Its
+`release` job uploads the Windows, macOS, and Linux desktop archives, the
+Android preview ZIP, and `SHA256SUMS.txt`. It does not download a CLI artifact
+and does not publish `ERateLookup.Cli`. The version check in that job compares
+the Desktop, Mac, Linux, and Android project versions. It does not read
+`Cli/ERateLookup.Cli.csproj`. A v1.0.4 GitHub Release from this workflow will
+not include the command-line program.
 
 Checked on 2026-10-15 against `Cli/CliCommand.cs`, `Cli/Program.cs`, and
 `dotnet run --project Cli/ERateLookup.Cli.csproj -- --help` (SDK 10.0.402,
@@ -32,15 +43,16 @@ product change is the command-line lookup:
 | `README.md` | Short command-line section |
 
 The desktop, Mac, Linux, and Android packages are unchanged by that diff.
-Release packaging in `.github/workflows/windows.yml` does not build or attach
-`ERateLookup.Cli`.
+`.github/workflows/windows.yml` still does not build or attach `ERateLookup.Cli`,
+including for the planned v1.0.4 tag.
 
 ## Install and run
 
-The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3)
+The published [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3)
 assets are the Windows, macOS, and Linux desktop archives, the Android preview
-ZIP, and `SHA256SUMS.txt`. None of them contains this CLI. Do not look for
-`ERateLookup.Cli` inside those downloads.
+ZIP, and `SHA256SUMS.txt`. None of them contains this CLI. The v1.0.4 release
+from `windows.yml` will not contain it either, because that workflow does not
+package `ERateLookup.Cli`. Build from source.
 
 Build it from a git checkout with the [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
 The same commands work on Windows, macOS, and Linux. Run them from the
