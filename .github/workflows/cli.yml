@@ -1,0 +1,32 @@
+name: Command-line lookup
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  cli:
+    name: CLI (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test and publish the CLI
+        run: |
+          dotnet test Cli.Tests/ERateLookup.Cli.Tests.csproj -c Release
+          dotnet publish Cli/ERateLookup.Cli.csproj -c Release --self-contained false -o publish/cli
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ERateLookup-Cli-${{ matrix.os }}
+          path: publish/cli
+          retention-days: 7

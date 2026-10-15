@@ -35,6 +35,7 @@ public sealed class UsacRow
     [JsonPropertyName("funding_request_amount")] public string RequestedAmount { get; set; } = "";
     [JsonPropertyName("pre_discount_eligible_amount")] public string PreDiscountAmount { get; set; } = "";
     [JsonPropertyName("pdf_url")] public string PdfUrl { get; set; } = "";
+    [JsonPropertyName("funding_request_number")] public string FundingRequestNumber { get; set; } = "";
     [JsonPropertyName("form_pdf")]
     public UrlField? Pdf
     {

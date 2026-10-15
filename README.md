@@ -84,6 +84,28 @@ The [implementation plan](docs/V1_0_2_PLAN.md), [technical design](docs/V1_0_2_D
 
 Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verification returned four applications. Select two and check that CSV and Excel contain only those selected filings. Live counts may change as USAC publishes data.
 
+## Command line
+
+`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps.
+
+```sh
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2027 --csv --output chula.csv
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --json
+```
+
+BEN 143618 is Chula Vista Elementary School District. `--form` is `470` or `471`. `--app` keeps one application number. `--frn` is Form 471 only and reads USAC’s FRN status dataset. The default output is a text table; `--csv` and `--json` select the other formats. `--output` writes that result to a file. `--help` prints the full usage text.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | At least one published row matched |
+| 1 | Invalid arguments |
+| 2 | The lookup succeeded and nothing matched |
+| 3 | USAC could not be reached |
+| 4 | The lookup failed for another reason |
+
+An empty result is not proof that no filing exists. A published FY2027 Form 470 for BEN 143618 was not in USAC open data when this command was added; FY2026 for that BEN did return certified rows.
+
 ## Build from source
 
 Install the .NET 10 SDK. Open this folder in VS Code or open `ERateLookup.sln` in Visual Studio.
@@ -175,6 +197,8 @@ Keep executables, package archives, caches, and user settings out of the source 
 | Path | Purpose |
 | --- | --- |
 | `Core/` | USAC queries, cache, seed data, budget display logic, and exports |
+| `Cli/` | Windows, macOS, and Linux command-line lookup |
+| `Cli.Tests/` | Offline CLI argument and output tests |
 | `Desktop/` | Windows Forms interface |
 | `MacDesktop/` | Avalonia interface shared by macOS and Linux |
 | `LinuxDesktop/` | Linux entry point, icon, launch check, and shortcut helper |
@@ -188,6 +212,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 | `docs/LINUX_INSTALL.md` | Linux installation, dependencies, shortcuts, and compilation |
 | `.github/workflows/windows.yml` | All-platform tagged release automation |
 | `.github/workflows/android.yml` | Android APK build and package verification |
+| `.github/workflows/cli.yml` | CLI tests and publish on Windows, macOS, and Linux |
 | `docs/ANDROID_INSTALL.md` | Android installation, updates, exports, and troubleshooting |
 
 ## Current limitations
