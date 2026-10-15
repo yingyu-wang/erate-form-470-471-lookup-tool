@@ -9,15 +9,20 @@ public static class DataExporter
     {
         ct.ThrowIfCancellationRequested();
         using var writer = new StreamWriter(path, false, new UTF8Encoding(true));
+        WriteCsv(writer, rows, ct);
+    }
+
+    public static void WriteCsv(TextWriter writer, IEnumerable<string[]> rows, CancellationToken ct = default)
+    {
         foreach (var row in rows)
         {
             ct.ThrowIfCancellationRequested();
             writer.WriteLine(string.Join(",", row.Select(value =>
-        {
-            if (value.Length > 0 && "=+-@\t\r".Contains(value[0]))
-                value = "'" + value;
-            return "\"" + value.Replace("\"", "\"\"") + "\"";
-        })));
+            {
+                if (value.Length > 0 && "=+-@\t\r".Contains(value[0]))
+                    value = "'" + value;
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            })));
         }
     }
     public static void WriteExcel(string path, List<string[]> rows, CancellationToken ct = default)
