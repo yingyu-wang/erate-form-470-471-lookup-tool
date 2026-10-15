@@ -187,7 +187,8 @@ jobs:
           chmod 755 "$stage/ERateLookup.Cli"
           archive="ERateLookup-Cli-$rid.tar.gz"
           tar -C cli-package -czf "$archive" "ERateLookup-Cli-$rid"
-          tar -tzf "$archive" | grep -qx "ERateLookup-Cli-$rid/ERateLookup.Cli"
+          tar -tzf "$archive" > cli-archive-list.txt
+          grep -qx "ERateLookup-Cli-$rid/ERateLookup.Cli" cli-archive-list.txt
           file "$stage/ERateLookup.Cli" > cli-file.txt
           if [ "$rid" = "linux-x64" ]; then
             grep -q 'x86-64' cli-file.txt
