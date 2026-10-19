@@ -34,6 +34,90 @@ public class CliCommandTests
     }
 
     [Fact]
+    public void DiffRequiresForm470()
+    {
+        var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "16057656", "--fy", "2027", "--app", "270000266", "--diff" });
+        Assert.Null(parsed.Error);
+        Assert.NotNull(parsed.Options);
+        Assert.True(parsed.Options.Diff);
+        Assert.Equal("270000266", parsed.Options.ApplicationNumber);
+        Assert.Contains("--diff applies to Form 470.", CliCommand.Parse(new[] { "--form", "471", "--ben", "143618", "--fy", "2027", "--diff" }).Error, StringComparison.Ordinal);
+        Assert.Contains("--diff applies to Form 470.", CliCommand.Parse(new[] { "--form", "both", "--ben", "143618", "--fy", "2027", "--diff" }).Error, StringComparison.Ordinal);
+        Assert.Contains("does not take a value", CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2027", "--diff=yes" }).Error, StringComparison.Ordinal);
+        Assert.Contains("--diff", CliCommand.HelpText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task DiffPrintsAddedRemovedAndChangedServices()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","service_category":"Category 2","service_type":"Internal Connections","function":"Switches","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"2","service_category":"Category 2","service_type":"Internal Connections","function":"Cabling","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","service_category":"Category 2","service_type":"Internal Connections","function":"=Wireless","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"3","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"WAN","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var output = Path.Combine(directory, "diff.csv");
+            var options = Options(FilingForm.Form470, CliFormat.Csv) with { Diff = true, OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var csv = await File.ReadAllTextAsync(output);
+            Assert.Contains("Added", csv, StringComparison.Ordinal);
+            Assert.Contains("Removed", csv, StringComparison.Ordinal);
+            Assert.Contains("Changed", csv, StringComparison.Ordinal);
+            Assert.Contains("'=Wireless", csv, StringComparison.Ordinal);
+            Assert.Contains(Form470Diff.Disclaimer, stderr.ToString(), StringComparison.Ordinal);
+            var url = Uri.UnescapeDataString(handler.Urls[0]);
+            Assert.Contains("jt8s-3q52", url, StringComparison.Ordinal);
+            Assert.DoesNotContain("fcc_form_470_status='Certified'", url, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task IdenticalDiffIsEmptyAndExitsFound()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"200","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"Internet Access","fcc_form_470_status":"Certified"},
+                  {"application_number":"200","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"Internet Access","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Json) with { Diff = true };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Contains("match", stderr.ToString(), StringComparison.Ordinal);
+            using var document = JsonDocument.Parse(stdout.ToString());
+            Assert.Equal(0, document.RootElement.GetProperty("count").GetInt32());
+            Assert.Equal(1, document.RootElement.GetProperty("applicationCount").GetInt32());
+            Assert.Equal(0, document.RootElement.GetProperty("rows").GetArrayLength());
+            Assert.True(document.RootElement.GetProperty("diff").GetBoolean());
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
     public void FrnRequiresForm471()
     {
         var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--frn", "2699003124" });

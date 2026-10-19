@@ -1,12 +1,15 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.6 — unreleased: shared export schema
+## v1.0.6 — unreleased: shared export schema and Form 470 Original vs Current diff
 
-Unreleased. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and until the version is approved. Release files are unsigned by design.
+Unreleased draft for review. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and until the version is approved. Release files are unsigned by design.
 
 - Core has one export schema (`ExportSchema`) and a shared JSON writer (`DataExporter.WriteJson`). The command-line table, CSV, and JSON are built from that schema.
 - Command-line columns and the JSON row shape are unchanged. Category 2 budget columns stay out of the shared base schema. App and portfolio exports still use their current headers and files.
 - The schema records the unified header names (`Name`, `Form`, `Status`, and the other shared columns). A portfolio export is defined as those base columns plus trailing `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
+- `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
+- An ordinary lookup still collapses to the Current version when USAC published one. The diff query does not require `fcc_form_470_status='Certified'`.
+- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions.
 - Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key. This version does not add a signing step.
 
 ## v1.0.5 — draft, October 19, 2026: applicant search and linked forms
