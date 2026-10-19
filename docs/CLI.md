@@ -9,7 +9,8 @@ not create, change, certify, or submit a filing.
 
 Version 1.0.5 adds four lookup features. It does not add a Category 2 budget
 helper, EPC authentication, Form 470 version diffing, or committed-amount
-downloads.
+downloads. Unreleased 1.0.6 adds `--diff` for Form 470 Original vs Current.
+That command is described below. It does not add local snapshot history.
 
 | Feature | Behavior |
 | --- | --- |
@@ -158,6 +159,7 @@ ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <yea
   --fy <year>          Funding year (2016-2100)
   --app <number>       Keep one application number
   --frn <number>       Form 471 funding request number
+  --diff               Compare published Form 470 Original and Current rows
   --csv                Write CSV, including the source link and 470/471 link columns
   --json               Write JSON instead of a text table
   --output <file>      Write the result to this file
@@ -174,6 +176,7 @@ The parser also accepts `-?` as help. The printed help does not list `-?`.
 | `--fy` | Yes | Integer year from 2016 through 2100 |
 | `--app` | No | One application number. Without `--frn`, rows from the filing query are kept only when the application number matches. With `--frn`, it is added to the FRN query. |
 | `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` `--form both --frn ...` exits 1 because a funding-request filter is not a 470-to-471 link. |
+| `--diff` | No | Form 470 only. `--form 471 --diff` and `--form both --diff` exit 1: `--diff applies to Form 470.` Takes no value. |
 | `--csv` | No | CSV body. Takes no value. |
 | `--json` | No | JSON body. Takes no value. |
 | `--output` | No | Writes the body to this path. Parent directories are created. |
@@ -321,6 +324,54 @@ No certified Form 470 or Form 471 found in currently published data for BEN 1436
 The count and the form number follow the query. An empty result is not proof
 that no filing exists. The help text says the same thing.
 
+## Form 470 Original vs Current (`--diff`)
+
+`--diff` compares the published Original and Current `form_version` rows for a
+Form 470 in USAC Open Data dataset `jt8s-3q52`. It is a separate read from the
+normal lookup. `UsacClient.Collapse` still keeps the Current version for an
+ordinary Form 470 or Form 471 lookup.
+
+```sh
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
+```
+
+The query does not add `fcc_form_470_status='Certified'`. A Current row can be
+canceled while the Original row remains certified. Checked on 2026-10-19,
+application `270000194` had Original status `Certified` and Current status
+`Canceled`:
+
+https://opendata.usac.org/resource/jt8s-3q52.json?$select=application_number,form_version,fcc_form_470_status,service_request_id&$where=application_number=%27270000194%27&$order=form_version
+
+Service lines are matched on `service_request_id`. An added or removed service
+is one row. A service present on both versions lists each changed field,
+including category, service type, function, and RFP attachment. Application
+fields include contacts and the published dates. Rows for one service request
+repeat once per RFP document; the diff compares the set of document URLs.
+
+When only one of Original or Current is present, the result is a `VersionGap`
+for `form_version`. Those service lines are not reported as added or removed.
+On 2026-10-19, application `270000594` had Current rows and no Original rows.
+Application `270000266` had both versions.
+
+The command does not store a local history of intermediate revisions. Open
+Data publishes Original and Current, not every edit between them. It does not
+determine whether a change was substantial.
+
+Table, CSV, and JSON use these columns: `ApplicationNumber`, `BEN`, `Name`,
+`Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,
+`Source`. `Change` is `Added`, `Removed`, `Changed`, `VersionGap`, or
+`Unexpected`. JSON adds `diff: true`, `applicationCount`, and `count`. `count`
+is the number of difference rows. An empty difference list with
+`applicationCount` greater than zero means the published versions match. That
+command exits 0. No published Original or Current row exits 2. The body is
+still written. Stderr includes: "This comparison reads published Original and
+Current rows from USAC Open Data dataset jt8s-3q52. It does not determine
+whether a change was substantial."
+
+`--csv` and `--json` still apply. CSV formula-like text is prefixed with `'`.
+The source link is the Open Data URL for that application number on
+`jt8s-3q52`.
+
 ## Exit codes
 
 Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
@@ -328,7 +379,7 @@ Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
 
 | Code | Name in code | When |
 | --- | --- | --- |
-| 0 | Found | At least one row matched. `--help`, `-h`, and `-?` also exit 0. |
+| 0 | Found | At least one row matched. `--help`, `-h`, and `-?` also exit 0. `--diff` also exits 0 when published Original and Current rows match. |
 | 1 | Bad arguments | The parser rejected the command (message and help on stderr). An `ArgumentException` during the lookup also exits 1, with the exception message only. |
 | 2 | No match | USAC answered and the row list is empty. The body is still written. |
 | 3 | USAC unreachable | `HttpRequestException`, `TaskCanceledException`, or `JsonException`. Stderr starts with `USAC could not be reached.` |
