@@ -96,7 +96,7 @@ dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --name "San Diego 
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --json
 ```
 
-Search by BEN, by the published applicant name, or by both. `--form both` lists Form 470 and Form 471 for that applicant and funding year. A published Form 470 does not establish a Form 471. Every table, CSV, and JSON row includes a USAC Open Data source link. `--csv` and `--json` select those formats; the default is a text table. `--output` writes the body to a file. `--help` prints the full usage text.
+Search by BEN, by the published applicant name, or by both. `--form both` lists Form 470 and Form 471 for that applicant and funding year. A published Form 470 does not establish a Form 471. Every table, CSV, and JSON row includes a USAC Open Data source link. The published 1.0.4 CLI already writes JSON (`--json`) and CSV (`--csv`). Version 1.0.5 keeps both. CSV rows also include `Linked`, `Form470Count`, and `Form471Count`. The default output is a text table. `--output` writes the body to a file. `--help` prints the full usage text.
 
 The San Diego Unified School District RFP calls the applicant "San Diego Unified." In the bundled California directory, USAC publishes that district as **San Diego City Unif Sch Dist**, BEN **143662**. Name search matches the published name. It does not translate an RFP title into a BEN.
 

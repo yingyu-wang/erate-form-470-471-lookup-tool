@@ -6,7 +6,7 @@ Draft for review. Do not tag this version until the latest nightly USAC check sa
 
 - Search published Form 470 and Form 471 rows by applicant name, by BEN, or by both. The name match uses the published USAC applicant name.
 - Every command-line row includes its USAC Open Data source link in the table, CSV, and JSON. The source link is not shortened.
-- `--csv` and `--json` still write the lookup body. Both formats include the source link.
+- The published 1.0.4 CLI already writes JSON (`--json`) and CSV (`--csv`). Version 1.0.5 keeps both. CSV rows include `Source`, `Linked`, `Form470Count`, and `Form471Count`. Counts are filled for `--form both` and left blank when that form was not queried.
 - `--form both` reads Form 470 and Form 471 for the same applicant and funding year. Each row keeps its own form and source link. A published Form 470 does not establish a Form 471.
 - An empty result says that it is not proof that no filing exists. If USAC cannot be reached while linking the two forms, the command does not present a partial link.
 - The lookup stays read-only. It does not create, change, certify, or submit a filing.

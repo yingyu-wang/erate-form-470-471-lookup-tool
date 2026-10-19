@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using ERateLookup.Core;
 using Xunit;
@@ -396,8 +397,80 @@ public class CliCommandTests
             var csvCode = await CliCommand.RunAsync(csvOptions, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, csvCode);
             var csv = await File.ReadAllTextAsync(output);
-            Assert.Contains("Source", csv, StringComparison.Ordinal);
-            Assert.Contains("9s6i-myen", csv, StringComparison.Ordinal);
+            var parsed = ParseCsv(csv);
+            var header = parsed[0];
+            Assert.Equal("Source", header[13]);
+            Assert.Equal("Linked", header[14]);
+            Assert.Equal("Form470Count", header[15]);
+            Assert.Equal("Form471Count", header[16]);
+            Assert.Contains("9s6i-myen", parsed[1][13], StringComparison.Ordinal);
+            Assert.Equal("false", parsed[1][14]);
+            Assert.Equal("", parsed[1][15]);
+            Assert.Equal("", parsed[1][16]);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LinkedCsvIncludesSourceAndLinkFields()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "linked.csv");
+        try
+        {
+            var handler = new RoutingHandler(url => url.Contains("9s6i-myen", StringComparison.Ordinal)
+                ? """[{"application_number":"271000001","epc_organization_id":"143662","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","form_version":"Current","filing_status":"Certified","certified_date_time":"2026-02-01T00:00:00.000"}]"""
+                : """[{"application_number":"270000001","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","fcc_form_470_status":"Certified","form_version":"Current","certified_date_time":"2026-07-23T00:00:00.000"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var options = Options(FilingForm.Form470, CliFormat.Csv, 2027) with { Form = null, LinkForms = true, Ben = "143662", OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var parsed = ParseCsv(await File.ReadAllTextAsync(output));
+            Assert.Equal(new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count" }, parsed[0]);
+            Assert.Equal(3, parsed.Count);
+            Assert.Equal("470", parsed[1][0]);
+            Assert.Equal("471", parsed[2][0]);
+            Assert.Equal(UsacSources.Application(FilingForm.Form470, "270000001"), parsed[1][13]);
+            Assert.Equal(UsacSources.Application(FilingForm.Form471, "271000001"), parsed[2][13]);
+            Assert.Equal("true", parsed[1][14]);
+            Assert.Equal("true", parsed[2][14]);
+            Assert.Equal("1", parsed[1][15]);
+            Assert.Equal("1", parsed[1][16]);
+            Assert.Equal("143662", parsed[1][2]);
+            Assert.Equal("2027", parsed[1][1]);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LinkedCsvRecordsAQueriedEmptyFormAsZero()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "linked.csv");
+        try
+        {
+            var handler = new RoutingHandler(url => url.Contains("9s6i-myen", StringComparison.Ordinal)
+                ? "[]"
+                : """[{"application_number":"270000001","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","fcc_form_470_status":"Certified","form_version":"Current"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var options = Options(FilingForm.Form470, CliFormat.Csv, 2027) with { Form = null, LinkForms = true, Ben = "143662", OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var parsed = ParseCsv(await File.ReadAllTextAsync(output));
+            Assert.Equal(2, parsed.Count);
+            Assert.Equal("470", parsed[1][0]);
+            Assert.Equal("true", parsed[1][14]);
+            Assert.Equal("1", parsed[1][15]);
+            Assert.Equal("0", parsed[1][16]);
+            Assert.Equal(UsacSources.Application(FilingForm.Form470, "270000001"), parsed[1][13]);
         }
         finally
         {
@@ -424,6 +497,66 @@ public class CliCommandTests
         {
             Cleanup(directory);
         }
+    }
+
+    static List<string[]> ParseCsv(string csv)
+    {
+        var rows = new List<string[]>();
+        var row = new List<string>();
+        var field = new StringBuilder();
+        var quoted = false;
+        for (var i = 0; i < csv.Length; i++)
+        {
+            var character = csv[i];
+            if (quoted)
+            {
+                if (character == '"')
+                {
+                    if (i + 1 < csv.Length && csv[i + 1] == '"')
+                    {
+                        field.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        quoted = false;
+                    }
+                }
+                else
+                {
+                    field.Append(character);
+                }
+            }
+            else if (character == '"')
+            {
+                quoted = true;
+            }
+            else if (character == ',')
+            {
+                row.Add(field.ToString());
+                field.Clear();
+            }
+            else if (character == '\n')
+            {
+                row.Add(field.ToString());
+                field.Clear();
+                if (row.Count > 1 || row[0].Length > 0)
+                    rows.Add(row.ToArray());
+                row = new List<string>();
+            }
+            else if (character != '\r')
+            {
+                field.Append(character);
+            }
+        }
+
+        if (field.Length > 0 || row.Count > 0)
+        {
+            row.Add(field.ToString());
+            rows.Add(row.ToArray());
+        }
+
+        return rows;
     }
 
     static CliOptions Options(FilingForm form, CliFormat format = CliFormat.Table, int year = 2026) =>

@@ -15,7 +15,7 @@ downloads.
 | --- | --- |
 | Applicant search | `--ben`, `--name`, or both. `--name` matches the published USAC applicant name and needs at least 2 characters. |
 | Source link | Every table, CSV, and JSON row includes a USAC Open Data URL. The table does not shorten that URL. |
-| JSON and CSV | `--json` and `--csv` still select the body format. Both include the source link. |
+| JSON and CSV | The published 1.0.4 CLI already writes JSON with `--json` and CSV with `--csv`. Version 1.0.5 keeps both. CSV columns include `Source`, `Linked`, `Form470Count`, and `Form471Count`. |
 | Link 470 to 471 | `--form both` reads both forms for the same applicant and funding year. Each row keeps its own form and source. A Form 470 does not establish a Form 471. |
 
 San Diego Unified School District is the example behind the name search. The
@@ -27,6 +27,7 @@ a BEN from an RFP title.
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --name "San Diego City" --fy 2027
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --json
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --csv --output sdusd.csv
 ```
 
 An empty result is not proof that no filing exists. If USAC cannot be reached
@@ -157,7 +158,7 @@ ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <yea
   --fy <year>          Funding year (2016-2100)
   --app <number>       Keep one application number
   --frn <number>       Form 471 funding request number
-  --csv                Write CSV instead of a text table
+  --csv                Write CSV, including the source link and 470/471 link columns
   --json               Write JSON instead of a text table
   --output <file>      Write the result to this file
   --help, -h           Show this help
@@ -243,7 +244,14 @@ Columns, in order:
 
 `Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`,
 `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`,
-`RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`
+`RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`, `Linked`,
+`Form470Count`, `Form471Count`
+
+`Linked` is `true` when the command used `--form both` and `false` for a
+single-form lookup. `Form470Count` and `Form471Count` are filled only for
+`--form both`, including a zero when that form was checked and had no published
+rows. A single-form lookup leaves those two counts blank; a blank count means
+that form was not queried.
 
 `Source` is the USAC Open Data URL for that row. Form 470 rows use dataset
 `jt8s-3q52`. Form 471 application rows use `9s6i-myen`. Funding-request rows

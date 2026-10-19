@@ -47,7 +47,7 @@ public static class CliCommand
           --fy <year>          Funding year (2016-2100)
           --app <number>       Keep one application number
           --frn <number>       Form 471 funding request number
-          --csv                Write CSV instead of a text table
+          --csv                Write CSV, including the source link and 470/471 link columns
           --json               Write JSON instead of a text table
           --output <file>      Write the result to this file
           --help, -h           Show this help
@@ -364,9 +364,9 @@ public static class CliCommand
 
         var table = new List<string[]>
         {
-            new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source" }
+            new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count" }
         };
-        foreach (var row in tableRows(options, rows))
+        foreach (var row in TableRows(options, rows, form470Count, form471Count))
             table.Add(row);
 
         if (options.Format == CliFormat.Csv)
@@ -379,8 +379,11 @@ public static class CliCommand
         return RenderTable(table);
     }
 
-    static IEnumerable<string[]> tableRows(CliOptions options, IReadOnlyList<CliRow> rows)
+    static IEnumerable<string[]> TableRows(CliOptions options, IReadOnlyList<CliRow> rows, int? form470Count, int? form471Count)
     {
+        var linked = options.LinkForms ? "true" : "false";
+        var count470 = form470Count?.ToString(CultureInfo.InvariantCulture) ?? "";
+        var count471 = form471Count?.ToString(CultureInfo.InvariantCulture) ?? "";
         foreach (var row in rows)
         {
             yield return
@@ -398,7 +401,10 @@ public static class CliCommand
                 row.RequestedAmount,
                 row.PreDiscountAmount,
                 row.Pdf,
-                row.Source
+                row.Source,
+                linked,
+                count470,
+                count471
             ];
         }
     }
