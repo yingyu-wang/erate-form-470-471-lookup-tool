@@ -278,6 +278,16 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 `--frn` is JSON `null` on the top-level fields. Filing rows leave
 `fundingRequestNumber` as an empty string. `source` is the Open Data URL.
 
+The Windows, macOS, Linux, and Android lookup screens write this same JSON
+shape. Their CSV and Excel files use the column list in the table section
+above. An app lookup sets `linked` to false and omits `form470Count` and
+`form471Count`, because those screens look up one form at a time. In an app
+file, `applicantName` is the customer text on the screen, or `null` when that
+box is empty. The command-line `applicantName` remains the `--name` argument.
+A portfolio JSON row adds `lookupOutcome`, `change`, `sourceAndNotes`, and
+`allowableContractDate` after `source`. The command-line program does not
+write those four fields.
+
 ### What a row contains
 
 Without `--frn`, the CLI calls `UsacClient.GetFilingsAsync` (the desktop

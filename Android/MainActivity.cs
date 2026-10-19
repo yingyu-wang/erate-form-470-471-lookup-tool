@@ -82,7 +82,7 @@ public class MainActivity : Activity
         budget = Label(""); budget.SetTextIsSelectable(true); page.AddView(budget);
         cancel = ActionButton("Cancel request", () => { operation?.Cancel(); return Task.CompletedTask; }, false);
         selectAll = ActionButton("Select / clear all", () => { if (complete) { if (selected.Count == filings.Count) selected.Clear(); else foreach (var f in filings) selected.Add(f.Number); RenderResults(); } return Task.CompletedTask; }, false);
-        export = ActionButton("Save selected CSV / Excel", () => { ChooseExport(); return Task.CompletedTask; }, false);
+        export = ActionButton("Save selected (CSV / Excel / JSON)", () => { ChooseExport(); return Task.CompletedTask; }, false);
         page.AddView(Row(selectAll, cancel)); page.AddView(export);
         results = Column(); page.AddView(results);
         page.AddView(Label("Independent tool; not an official USAC product. Budgets are snapshots, not confirmed eligibility. Internet is required for live filings."));
@@ -319,7 +319,7 @@ public class MainActivity : Activity
     {
         if (!complete || busy || pendingExport is not null) return;
         if (filings.Count > 0 && selected.Count == 0) { Alert("Select at least one filing to export."); return; }
-        new AlertDialog.Builder(this)!.SetTitle("Save selected filings")!.SetItems(new[] { "Excel (.xlsx)", "CSV (.csv)" }, async (_, e) => await PrepareExportAsync(e.Which == 0 ? "xlsx" : "csv"))!.SetNegativeButton("Cancel", (_, _) => { })!.Show();
+        new AlertDialog.Builder(this)!.SetTitle("Save selected filings")!.SetItems(new[] { "Excel (.xlsx)", "CSV (.csv)", "JSON (.json)" }, async (_, e) => await PrepareExportAsync(e.Which switch { 0 => "xlsx", 1 => "csv", _ => "json" }))!.SetNegativeButton("Cancel", (_, _) => { })!.Show();
     }
 
     async Task PrepareExportAsync(string extension)
@@ -327,17 +327,17 @@ public class MainActivity : Activity
         await RunAsync(async ct =>
         {
             ct.ThrowIfCancellationRequested();
-            var rows = screen!.ExportRows(resultYear, resultForm, resultBen, "", fetched, filings, selected, hasCycle470);
+            var prepared = screen!.CreateExport(resultYear, resultForm, resultBen, "", fetched, filings, selected, hasCycle470);
             var path = Path.Combine(CacheDir!.AbsolutePath, "export-" + Guid.NewGuid().ToString("N") + "." + extension);
             try
             {
-                await Task.Run(() => { if (extension == "csv") DataExporter.WriteCsv(path, rows, ct); else DataExporter.WriteExcel(path, rows, ct); }, ct);
+                await Task.Run(() => prepared.Write(path, ct), ct);
                 ct.ThrowIfCancellationRequested();
                 if (destroyed) return;
                 pendingExport = path;
                 var intent = new Intent(Intent.ActionCreateDocument);
                 intent.AddCategory(Intent.CategoryOpenable);
-                intent.SetType(extension == "csv" ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+                intent.SetType(AndroidBehavior.ExportContentType(extension));
                 intent.PutExtra(Intent.ExtraTitle, $"Form{(int)resultForm}_{resultBen}_FY{resultYear}.{extension}");
                 StartActivityForResult(intent, SaveDocumentRequest);
             }

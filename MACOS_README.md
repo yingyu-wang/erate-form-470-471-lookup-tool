@@ -1,6 +1,6 @@
 # E-rate Lookup for macOS — preview build
 
-This app reuses the same C# Core project as the Windows app: live USAC Form 470/471 queries, the local California directory, C2 budgets, SQLite two-hour filing cache, 24-hour directory refresh, filing-window schedule, and CSV/Excel writer. The Windows Forms interface is replaced with an Avalonia interface in MacDesktop; the Windows project remains available in Desktop.
+This app reuses the same C# Core project as the Windows app: live USAC Form 470/471 queries, the local California directory, C2 budgets, SQLite two-hour filing cache, 24-hour directory refresh, filing-window schedule, and CSV/Excel/JSON writer. The Windows Forms interface is replaced with an Avalonia interface in MacDesktop; the Windows project remains available in Desktop.
 
 ## Run the Mac app
 
@@ -9,7 +9,7 @@ This app reuses the same C# Core project as the Windows app: live USAC Form 470/
 3. Download the matching ZIP: `ERateLookup-macOS-osx-arm64.zip` or `ERateLookup-macOS-osx-x64.zip`.
 4. Extract it and open **ERateLookup.app**. The app itself has no installer and may be moved to Applications or another folder. Keep the .app bundle intact; its DLLs and native libraries are inside it.
 5. Enter a BEN or type at least two name characters for local California suggestions. Select Form 470/471 and funding year. Names never query USAC per keystroke. Check a selected customer to retrieve its filings.
-6. All filing rows start selected. Use **Command-click** for individual selections or **Shift-click** for a range, or Select all / Unselect all. CSV and Excel export only selected filings. PDFs open in the browser when available.
+6. All filing rows start selected. Use **Command-click** for individual selections or **Shift-click** for a range, or Select all / Unselect all. CSV, Excel, and JSON export only selected filings. PDFs open in the browser when available.
 
 This is a compiled, unsigned, non-notarized preview, not a Mac-tested release. macOS may block a downloaded app. If you trust this project, use macOS's per-app Open Anyway option in System Settings > Privacy & Security after attempting to open it. Do not disable Gatekeeper globally. For normal broad distribution, sign with an Apple Developer ID and notarize the app on macOS. Those credentials are not included.
 

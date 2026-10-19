@@ -34,7 +34,7 @@ Look for **Microsoft.WindowsDesktop.App 10.0.x** with x64 installation. A newer 
 3. Double-click **Run-Windows.bat**. It builds and launches the desktop app.
 4. Enter a BEN or customer-name fragment. Leave funding year at 2027 or choose another year.
 5. For a name search, local California matches appear as you type (after two characters). Select the entity that files the application and click **Check selected customer**.
-6. Select a filing to open the Form 470 PDF or export the results to CSV or Excel (.xlsx).
+6. Select a filing to open the Form 470 PDF or export the results to CSV, Excel (.xlsx), or JSON.
 
 The **SDK** is required to build or use the source launcher. A framework-dependent binary instead needs the **.NET 10 Desktop Runtime**. The older **.NET Framework 4.x** is not used.
 
@@ -74,7 +74,7 @@ For Windows ARM64, rebuild using `win-arm64` and use the matching ARM64 Desktop 
 | Path | Purpose |
 |---|---|
 | `Core/UsacClient.cs` | HTTP client, typed API records, SoQL filters, pagination, SQLite database cache, grouping |
-| `Desktop/MainForm.cs` | Windows Forms GUI, async search, matching entities, PDF launch, CSV / Excel export |
+| `Desktop/MainForm.cs` | Windows Forms GUI, async search, matching entities, PDF launch, CSV / Excel / JSON export |
 | `Desktop/Program.cs` | Desktop entry point |
 | `Desktop/ERateLookup.csproj` | .NET 10 Windows desktop project |
 | `tests/ERateLookup.Tests/` | Shared xUnit suite, including the nightly live USAC checks |
@@ -174,11 +174,21 @@ See VALIDATION.md for build/check evidence and Windows GUI testing limits.
 
 Name suggestions are capped at **15** matches. A prompt asks for more letters when the limit is reached. Searches require at least two characters and use a 250 ms debounce before local SQLite lookup.
 
-## Export CSV or Excel
+## Export CSV, Excel, or JSON
 
-After a completed lookup, click **Export CSV / Excel** and select the file type in the Save dialog. The export includes UTC export time, lookup fetch time, directory update time, funding year, BEN, customer, filing status, form details and PDF URL, plus the budget cycle, original USAC status, displayed status, total, committed, pending and reported remaining C2 amounts. A successful lookup with no filing can also be exported; a failed lookup cannot be exported as a no-filing result.
+After a completed lookup, click **Export selected (CSV / Excel / JSON)** and select the file type in the Save dialog. CSV and Excel use the same columns as the command-line table:
 
-Excel export creates a genuine `.xlsx` file without requiring Microsoft Excel to be installed. Columns are stored as text to preserve IDs, timestamps, missing-value labels and exact reported amounts. Header filters and a frozen first row are included. Formula-like strings are escaped in CSV and stored as literal text in Excel. No additional runtime or library is required for export.
+`Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`, `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`, `RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`, `Linked`, `Form470Count`, `Form471Count`
+
+`Source` is the USAC Open Data URL for that application. `Linked` is `false`. `Form470Count` and `Form471Count` are blank, because the screen looks up one form at a time. `FundingRequestNumber` is blank on these application rows. Category 2 budget amounts stay on the screen and are not columns in this file.
+
+These files rename the previous app headers: `Customer` is `Name`, `FormType` is `Form`, and `FilingStatus` is `Status`. They no longer include `ExportedUTC`, `LookupFetchedUTC`, `DirectoryUpdatedUTC`, `LookupResult`, or the C2 budget columns.
+
+A successful lookup with no filing can still be exported. That file has one row with a blank application number and a blank source. A failed lookup cannot be exported as a no-filing result.
+
+JSON uses the same envelope as the command line. Names are camelCase. The top-level fields are `form`, `linked`, `ben`, `applicantName`, `fundingYear`, `applicationNumber`, `fundingRequestNumber`, `fetchedAt`, `count`, and `rows`. `linked` is false. The count fields are omitted. `applicantName` is the customer text on the screen, or `null` when that box is empty. Each row has `form`, `applicationNumber`, `fundingRequestNumber`, `status`, `certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`, `requestedAmount`, `preDiscountAmount`, and `source`. A JSON file is UTF-8 and has no BOM.
+
+Excel export creates a genuine `.xlsx` file without requiring Microsoft Excel to be installed. Columns are stored as text to preserve IDs, missing-value labels and exact reported amounts. Header filters and a frozen first row are included. Formula-like strings are escaped in CSV and stored as literal text in Excel. No additional runtime or library is required for export.
 
 ## Visual styling
 
@@ -198,7 +208,7 @@ Form 471 uses USAC's Basic Information dataset (`9s6i-myen`) and the `epc_organi
 
 A successful empty response, including FY2027 before Form 471 records are available, displays **No certified Form 471 found in currently published data**. It does not change years, throw an error, or establish that the filing window is closed. API failures display a failure message and never become a no-filings determination. Successful empty lookups can be exported and expire from cache after two hours. Refresh live always bypasses the cache.
 
-CSV and Excel exports include FormType, ApplicationNumber, and FilingStatus as well as the existing year, BEN, timestamps and C2 fields. The C2 forecast rules continue to use USAC's budget status and the separate new-cycle Form 470 check; selecting Form 471 does not by itself confirm a budget.
+CSV, Excel, and JSON exports include `Form`, `ApplicationNumber`, and `Status`, plus the other base columns listed under **Export CSV, Excel, or JSON**. The C2 forecast rules continue to use USAC's budget status and the separate new-cycle Form 470 check; selecting Form 471 does not by itself confirm a budget. The budget figures stay on the screen and are not columns in the export file.
 
 See [VS_CODE_GUIDE.md](../VS_CODE_GUIDE.md) for local editing, pushing and automated releases.
 
@@ -210,7 +220,7 @@ As checked October 9, 2026, USAC says FY2027 Form 471 opens in early 2027, witho
 
 ## Export selected filings
 
-After a successful lookup, all returned filing rows are selected by default. Use **Unselect all** and hold **Ctrl** while clicking rows to select individual forms; Shift-click selects a range. **Select all** restores every returned form. The selected-count label shows how many rows will be exported. Both CSV and Excel exports include only the selected filing rows, in the original results order. This applies to Form 470 and Form 471. If forms exist but no row is selected, export asks you to select at least one; it does not silently export all rows. Successful no-filing lookups can still export a no-results record. Changing year or form clears previous results and selections.
+After a successful lookup, all returned filing rows are selected by default. Use **Unselect all** and hold **Ctrl** while clicking rows to select individual forms; Shift-click selects a range. **Select all** restores every returned form. The selected-count label shows how many rows will be exported. CSV, Excel, and JSON include only the selected filing rows, in the original results order. This applies to Form 470 and Form 471. If forms exist but no row is selected, export asks you to select at least one; it does not silently export all rows. Successful no-filing lookups can still export one row with a blank application number. Changing year or form clears previous results and selections.
 
 ## macOS source and builds
 

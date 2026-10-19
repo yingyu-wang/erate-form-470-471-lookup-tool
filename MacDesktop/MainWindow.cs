@@ -20,7 +20,7 @@ public sealed class MainWindow : Window
     private readonly ComboBox form = new() { Width = 115 };
     private readonly ComboBox theme = new() { Width = 135 };
     private readonly Button search = Button("Search"), refresh = Button("Refresh live"), choose = Button("Check selected customer");
-    private readonly Button open = Button("Open selected PDF"), export = Button("Export selected CSV / Excel");
+    private readonly Button open = Button("Open selected PDF"), export = Button("Export selected (CSV / Excel / JSON)");
     private readonly Button saveBen = Button("Add BEN to watchlist");
     private readonly Button saveMatches = Button("Add selected BENs to watchlist");
     private readonly TextBlock matchSelection = Text("");
@@ -274,14 +274,14 @@ public sealed class MainWindow : Window
         if (!complete) return;
         var selected = grid.SelectedItems.Cast<Filing>().Select(r => r.Number).ToHashSet(); var items = results.Where(r => selected.Contains(r.Number)).ToList();
         if (results.Count > 0 && items.Count == 0) { await MessageAsync($"Select at least one filing. Use {(OperatingSystem.IsMacOS() ? "Command" : "Ctrl")}-click or Select all."); return; }
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "Export selected filings", SuggestedFileName = $"Form{(int)selectedForm}_{selectedBen}_FY{selectedYear}.xlsx", DefaultExtension = "xlsx", ShowOverwritePrompt = true, FileTypeChoices = new[] { new FilePickerFileType("Excel workbook") { Patterns = new[] { "*.xlsx" } }, new FilePickerFileType("CSV file") { Patterns = new[] { "*.csv" } } } });
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "Export selected filings", SuggestedFileName = $"Form{(int)selectedForm}_{selectedBen}_FY{selectedYear}.xlsx", DefaultExtension = "xlsx", ShowOverwritePrompt = true, FileTypeChoices = new[] { new FilePickerFileType("Excel workbook") { Patterns = new[] { "*.xlsx" }, MimeTypes = new[] { AndroidBehavior.ExcelContentType } }, new FilePickerFileType("CSV file") { Patterns = new[] { "*.csv" }, MimeTypes = new[] { AndroidBehavior.CsvContentType } }, new FilePickerFileType("JSON") { Patterns = new[] { "*.json" }, MimeTypes = new[] { AndroidBehavior.JsonContentType } } } });
         if (file is null) return;
         try
         {
             if (!file.Path.IsFile) throw new IOException("Choose a local file destination.");
             var path = file.Path.LocalPath;
-            var rows = screen.ExportRows(selectedYear, selectedForm, selectedBen, customer.Text ?? "", fetched, results, items.Select(r => r.Number).ToHashSet(), hasCycle470);
-            if (Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase)) DataExporter.WriteCsv(path, rows); else DataExporter.WriteExcel(path, rows);
+            var prepared = screen.CreateExport(selectedYear, selectedForm, selectedBen, customer.Text ?? "", fetched, results, items.Select(r => r.Number).ToHashSet(), hasCycle470);
+            prepared.Write(path);
             status.Text = $"Exported {items.Count} selected filing(s) to {path}";
         }
         catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Export filings"); await MessageAsync("Export failed: " + ex.Message); }

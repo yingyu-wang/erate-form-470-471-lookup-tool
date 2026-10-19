@@ -36,6 +36,13 @@ public class AndroidBehaviorChecks
         Check(pages.All(p => p.Length <= 50) && pages.SelectMany(p => p).SequenceEqual(data), "Large result paging bounds views without losing applications");
         Check(AndroidBehavior.Page(data, int.MaxValue).SequenceEqual(new[] { 5000 }), "Page bounds clamp safely");
         Check(AndroidBehavior.Page(Array.Empty<int>(), 0).Count() == 0, "Empty lookup has a safe page");
+        Check(AndroidBehavior.ExportContentType("csv") == AndroidBehavior.CsvContentType, "CSV export uses text/csv");
+        Check(AndroidBehavior.ExportContentType(".json") == AndroidBehavior.JsonContentType && AndroidBehavior.ExportContentType("JSON") == "application/json", "JSON export uses application/json");
+        Check(AndroidBehavior.ExportContentType("xlsx") == AndroidBehavior.ExcelContentType && AndroidBehavior.ExportContentType("json") != AndroidBehavior.ExcelContentType, "Excel export keeps the spreadsheet MIME and JSON does not reuse it");
+        var rejectedExtension = false;
+        try { AndroidBehavior.ExportContentType("txt"); }
+        catch (ArgumentException) { rejectedExtension = true; }
+        Check(rejectedExtension, "Unknown export extension is rejected");
 
         var folder = Path.Combine(Path.GetTempPath(), "AndroidChecks-" + Guid.NewGuid());
         try

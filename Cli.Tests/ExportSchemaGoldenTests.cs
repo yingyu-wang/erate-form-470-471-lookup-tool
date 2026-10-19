@@ -102,35 +102,45 @@ public class ExportSchemaGoldenTests
             var directoryClient = new CaliforniaDirectory(http, Path.Combine(directory, "directory"));
             var windows = new FilingWindow(http, Path.Combine(directory, "windows"));
             var screen = new LookupViewModel(client, directoryClient, windows, LookupSurface.Windows, () => Clock);
-            var lookup = screen.ExportRows(2026, FilingForm.Form470, "143618", "fallback", filings.FetchedAt, filings.Data, new HashSet<string> { filing.Number }, null);
-            Assert.Equal(
-                new[]
-                {
-                    "ExportedUTC", "LookupFetchedUTC", "DirectoryUpdatedUTC", "FundingYear", "BEN", "Customer", "LookupResult", "FormType", "ApplicationNumber", "FilingStatus", "CertifiedDate", "Nickname", "Services", "PDF", "BudgetCycle", "USACBudgetStatus", "BudgetDisplayStatus", "TotalC2BudgetPreDiscount", "CommittedC2BudgetPreDiscount", "PendingC2BudgetPreDiscount", "ReportedRemainingC2BudgetPreDiscount",
-                },
-                lookup[0]);
-            Assert.Contains("Customer", lookup[0]);
-            Assert.Contains("FormType", lookup[0]);
-            Assert.Contains("FilingStatus", lookup[0]);
-            Assert.DoesNotContain("Name", lookup[0]);
-            Assert.DoesNotContain("Form", lookup[0]);
-            Assert.DoesNotContain("Status", lookup[0]);
-            var legacy = Map(lookup[0], lookup[1]);
-            var shared = Map(ExportSchema.BaseColumns, cells);
-            Assert.Equal(shared["FundingYear"], legacy["FundingYear"]);
-            Assert.Equal(shared["BEN"], legacy["BEN"]);
-            Assert.Equal(shared["Name"], legacy["Customer"]);
-            Assert.Equal(shared["Form"], legacy["FormType"]);
-            Assert.Equal(shared["ApplicationNumber"], legacy["ApplicationNumber"]);
-            Assert.Equal(shared["Status"], legacy["FilingStatus"]);
-            Assert.Equal(shared["CertifiedDate"], legacy["CertifiedDate"]);
-            Assert.Equal(shared["Nickname"], legacy["Nickname"]);
-            Assert.Equal(shared["Services"], legacy["Services"]);
-            Assert.Equal(shared["PDF"], legacy["PDF"]);
-            Assert.Equal("Filed", legacy["LookupResult"]);
-            Assert.Equal("Not reported", legacy["TotalC2BudgetPreDiscount"]);
-            Assert.DoesNotContain("BudgetCycle", shared.Keys);
-            Assert.DoesNotContain("Source", legacy.Keys);
+            var prepared = screen.CreateExport(2026, FilingForm.Form470, "143618", "fallback", filings.FetchedAt, filings.Data, new HashSet<string> { filing.Number }, null);
+            Assert.Equal(ExportSchema.BaseColumns, prepared.Table[0]);
+            Assert.Equal(csv, prepared.Table);
+            Assert.Equal(cells, prepared.Table[1]);
+            Assert.DoesNotContain("Customer", prepared.Table[0]);
+            Assert.DoesNotContain("FormType", prepared.Table[0]);
+            Assert.DoesNotContain("FilingStatus", prepared.Table[0]);
+            Assert.DoesNotContain("BudgetCycle", prepared.Table[0]);
+            Assert.DoesNotContain("LookupResult", prepared.Table[0]);
+            Assert.Equal("false", prepared.Table[1][Array.IndexOf(prepared.Table[0], "Linked")]);
+            Assert.Equal("", prepared.Table[1][Array.IndexOf(prepared.Table[0], "Form470Count")]);
+            Assert.Equal("", prepared.Table[1][Array.IndexOf(prepared.Table[0], "Form471Count")]);
+
+            var appExcelPath = Path.Combine(directory, "app.xlsx");
+            DataExporter.WriteExcel(appExcelPath, prepared.Table);
+            Assert.Equal(prepared.Table, ReadSheet(appExcelPath));
+
+            using var appWriter = new StringWriter();
+            DataExporter.WriteJson(appWriter, prepared.Metadata, prepared.JsonRows);
+            using var appDocument = JsonDocument.Parse(appWriter.ToString());
+            var appRoot = appDocument.RootElement;
+            Assert.False(appRoot.GetProperty("linked").GetBoolean());
+            Assert.False(appRoot.TryGetProperty("form470Count", out _));
+            Assert.False(appRoot.TryGetProperty("form471Count", out _));
+            Assert.Equal("fallback", appRoot.GetProperty("applicantName").GetString());
+            Assert.Equal(appRoot.GetProperty("rows").GetArrayLength(), appRoot.GetProperty("count").GetInt32());
+            var appFetchedAt = appRoot.GetProperty("fetchedAt").GetString();
+            Assert.Equal(filings.FetchedAt.ToString("O", CultureInfo.InvariantCulture), appFetchedAt);
+            var appRow = appRoot.GetProperty("rows")[0];
+            var cliRowElement = root.GetProperty("rows")[0];
+            Assert.Equal(cliRowElement.EnumerateObject().Select(property => property.Name).ToArray(), appRow.EnumerateObject().Select(property => property.Name).ToArray());
+            foreach (var property in cliRowElement.EnumerateObject())
+            {
+                Assert.Equal(property.Value.ToString(), appRow.GetProperty(property.Name).ToString());
+            }
+
+            Assert.False(appRow.TryGetProperty("lookupOutcome", out _));
+            Assert.False(appRow.TryGetProperty("Form", out _));
+            Assert.False(appRow.TryGetProperty("Linked", out _));
         }
         finally
         {

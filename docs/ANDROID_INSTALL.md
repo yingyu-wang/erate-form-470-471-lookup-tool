@@ -30,14 +30,14 @@ Tagged releases include the preview package ZIP after all platform builds and pa
 
 Developer verification rules can add another installation step on some devices/regions. If Android specifically blocks an *unverified developer*, consult [Google's current installation guidance](https://support.google.com/android/answer/17065026) and your device's prompts. Ordinary **Install unknown apps** permission may not be sufficient. Device-management or parental policies may also block installation; contact the device administrator. Do not disable Play Protect to work around a malware warning.
 
-## Save CSV or Excel
+## Save CSV, Excel, or JSON
 
 1. Complete a lookup successfully.
 2. Select the filings you want using their checkboxes, or **Select / clear all**. Changing the BEN, funding year, or form clears previous lookup/export results.
-3. Tap **Save selected CSV / Excel**, choose a format, then select a folder/name in Android's file picker and tap **Save**.
+3. Tap **Save selected (CSV / Excel / JSON)**, choose Excel, CSV, or JSON, then select a folder/name in Android's file picker and tap **Save**.
 4. Open the saved file in Files or an appropriate spreadsheet app. No broad storage permission is needed; access is granted only to your chosen destination.
 
-A successful lookup with no filings can export a record labeled **No certified filing found in published data**. A failed/canceled query cannot be exported as a successful no-results query. A missing budget means **Not reported**, not zero.
+The file uses the same columns as the command-line export, including `Source`, `Linked`, `Form470Count`, and `Form471Count`. `Linked` is `false` and the two counts are blank. JSON uses `application/json`. A successful lookup with no filings can export one row with a blank application number and a blank source. A failed or canceled query cannot be exported as a successful no-results query. Category 2 budget amounts stay on the screen and are not columns in the file. A missing on-screen budget means **Not reported**, not zero.
 
 ## Updating and uninstalling
 

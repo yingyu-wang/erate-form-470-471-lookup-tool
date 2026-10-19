@@ -103,7 +103,8 @@ public sealed class PortfolioForm : Form
     }
     async Task ExportAsync()
     {
-        var rows = session.ExportRows(directory); using var dialog = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv", FileName = "E-rate-portfolio.xlsx" }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        await Task.Run(() => { if (Path.GetExtension(dialog.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase)) DataExporter.WriteCsv(dialog.FileName, rows, operation!.Token); else DataExporter.WriteExcel(dialog.FileName, rows, operation!.Token); }); status.Text = $"Exported {rows.Count - 1} selected results.";
+        var prepared = session.CreateExport(directory); using var dialog = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx|CSV (*.csv)|*.csv|JSON (*.json)|*.json", FileName = "E-rate-portfolio.xlsx" }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        var path = DataExporter.ApplySaveFilterExtension(dialog.FileName, dialog.FilterIndex, ".xlsx", ".csv", ".json");
+        await Task.Run(() => prepared.Write(path, operation!.Token)); status.Text = $"Exported {prepared.Table.Count - 1} selected results.";
     }
 }
