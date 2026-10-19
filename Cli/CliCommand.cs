@@ -12,7 +12,7 @@ public enum CliFormat
     Json
 }
 
-public sealed record CliOptions(
+internal sealed record CliOptions(
     FilingForm? Form,
     bool LinkForms,
     string? Ben,
@@ -23,7 +23,7 @@ public sealed record CliOptions(
     CliFormat Format,
     string? OutputPath);
 
-public sealed record CliParseResult(CliOptions? Options, bool Help, string? Error);
+internal sealed record CliParseResult(CliOptions? Options, bool Help, string? Error);
 
 public static class CliCommand
 {
@@ -69,7 +69,7 @@ public static class CliCommand
           4  The lookup failed for another reason
         """;
 
-    public static CliParseResult Parse(IReadOnlyList<string> args)
+    internal static CliParseResult Parse(IReadOnlyList<string> args)
     {
         if (args.Count == 0)
             return Fail("Form, applicant name or BEN, and funding year are required.");
@@ -190,7 +190,7 @@ public static class CliCommand
         return new CliParseResult(new CliOptions(filing, link, ben, name, year, app, frn, format, output), false, null);
     }
 
-    public static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    internal static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         try
         {
@@ -259,7 +259,7 @@ public static class CliCommand
         }
     }
 
-    public static async Task<QueryResult<List<UsacRow>>> FundingRequestsAsync(UsacClient client, CliOptions options, CancellationToken cancellationToken)
+    internal static async Task<QueryResult<List<UsacRow>>> FundingRequestsAsync(UsacClient client, CliOptions options, CancellationToken cancellationToken)
     {
         var where = UsacClient.ApplicantClause(FilingForm.Form471, options.Ben, options.ApplicantName, "ben");
         where += " AND funding_year=" + UsacClient.Literal(options.FundingYear.ToString(CultureInfo.InvariantCulture));
@@ -538,7 +538,7 @@ public static class CliCommand
     };
 }
 
-public sealed record CliRow(
+internal sealed record CliRow(
     int Form,
     string ApplicationNumber,
     string FundingRequestNumber,

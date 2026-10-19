@@ -9,6 +9,8 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project="$root/tests/ERateLookup.Tests/ERateLookup.Tests.csproj"
 form470_probe='https://opendata.usac.org/resource/jt8s-3q52.json?$limit=1'
 form471_probe='https://opendata.usac.org/resource/9s6i-myen.json?$limit=1'
+# Quoted simple filter from UsacSources.Record. Checked live on 2026-10-19: HTTP 200, 40 rows, all application_number 270000594.
+quoted_source_link='https://opendata.usac.org/resource/jt8s-3q52.json?application_number=%27270000594%27'
 
 write_summary() {
   local outcome="$1"
@@ -63,6 +65,39 @@ run_live_tests() {
   return "$status"
 }
 
+# 0 when the quoted source link returns rows for application 270000594.
+# 1 when USAC answered but the quoted filter did not return that application.
+# 2 when the endpoint is unreachable.
+quoted_source_link_status() {
+  local body http_code curl_status
+  body="$(mktemp)"
+  set +e
+  http_code="$(curl -sS -o "$body" -w '%{http_code}' --max-time 20 --retry 0 "$quoted_source_link")"
+  curl_status=$?
+  set -e
+  if [[ "$curl_status" -ne 0 || -z "$http_code" || "$http_code" == "000" ]]; then
+    rm -f "$body"
+    return 2
+  fi
+  case "$http_code" in
+    408 | 429 | 5*)
+      rm -f "$body"
+      return 2
+      ;;
+    200) ;;
+    *)
+      rm -f "$body"
+      return 1
+      ;;
+  esac
+  if grep -q -e '"application_number":"270000594"' -e '"application_number": "270000594"' "$body"; then
+    rm -f "$body"
+    return 0
+  fi
+  rm -f "$body"
+  return 1
+}
+
 nightly_live_usac() {
   local log_dir
   log_dir="$(mktemp -d)"
@@ -75,12 +110,25 @@ nightly_live_usac() {
     attempts=$((attempts + 1))
     local log="$log_dir/attempt-$attempts.log"
     if run_live_tests "$log"; then
-      if [[ "$attempts" -eq 1 ]]; then
-        write_summary "passed" "$attempts"
-      else
-        write_summary "passed after retry" "$attempts"
+      local quoted=0
+      set +e
+      quoted_source_link_status
+      quoted=$?
+      set -e
+      if [[ "$quoted" -eq 0 ]]; then
+        if [[ "$attempts" -eq 1 ]]; then
+          write_summary "passed" "$attempts"
+        else
+          write_summary "passed after retry" "$attempts"
+        fi
+        return 0
       fi
-      return 0
+      if [[ "$quoted" -eq 1 ]]; then
+        echo "quoted source link did not return rows for application 270000594" >&2
+        write_summary "failed" "$attempts"
+        return 1
+      fi
+      echo "quoted source link was unreachable" >&2
     fi
     if log_is_genuine_failure "$log"; then
       write_summary "failed" "$attempts"

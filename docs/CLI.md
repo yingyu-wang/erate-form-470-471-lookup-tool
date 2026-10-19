@@ -280,10 +280,11 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 
 ### What a row contains
 
-Without `--frn`, the CLI calls `UsacClient.GetFilingsAsync` (the desktop
-lookup). Form 470 reads dataset `jt8s-3q52` and keeps certified rows. Form
-471 reads dataset `9s6i-myen` and keeps rows with a certified timestamp. Rows
-are collapsed to the current version, one application per row.
+Without `--frn`, the CLI calls `UsacClient.SearchFilingsAsync`. A BEN-only
+lookup goes through `GetFilingsAsync`. Both page in `LoadFilingsAsync`. Form
+470 reads dataset `jt8s-3q52` and keeps certified rows. Form 471 reads dataset
+`9s6i-myen` and keeps rows with a certified timestamp. Rows are collapsed to
+the current version, one application per row.
 
 With `--frn`, the CLI calls the FRN status dataset `qdmp-ygft` instead. The
 select list is funding request number, application number, BEN, organization
@@ -327,7 +328,8 @@ Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
 Exit 4 covers a Form 471 identity mismatch (`Form471IdentityMismatchException`),
 the filing-query result limit below, and a file write that throws one of those
 exceptions. The FRN query does not run the Form 471 identity check. Only
-`GetFilingsAsync` does, and only for Form 471.
+`LoadFilingsAsync` does, and only for Form 471. `GetFilingsAsync` and
+`SearchFilingsAsync` both reach that check.
 
 Any other exception is not mapped to these codes.
 
@@ -337,10 +339,16 @@ Any other exception is not mapped to these codes.
   page. It does not exit 4 when that page is full. The filter also includes
   the FRN number, BEN, funding year, and `form_version='Current'`, so a single
   FRN is normally one row.
-- A Form 470 or Form 471 lookup without `--frn` pages 1,000 rows at a time. If
-  every page through offset 49000 is full, `GetFilingsAsync` throws
-  `InvalidOperationException` (`Result limit reached; a complete lookup could
-  not be made.`) and the CLI exits 4.
+- A Form 470 or Form 471 lookup without `--frn` pages 1,000 rows at a time in
+  `LoadFilingsAsync`. Before the first page it reads `count(*)`. A name search
+  with more than 50,000 matching rows throws `InvalidOperationException`
+  (`N rows match; narrow the name or pass --ben`) and the CLI exits 4. A
+  BEN lookup over that cap throws `Result limit reached; a complete lookup
+  could not be made.` and also exits 4. The lookup does not return a partial
+  page set.
+- `LoadFilingsAsync` reads `rowsUpdatedAt` from `/api/views/<id>.json` before
+  the first page and after the last. If that value changes, it throws
+  `InvalidOperationException` and the CLI exits 4.
 - `--fy` accepts 2016 through 2100. A year USAC has not published, including
   FY2027 for some BENs, is an empty published result (exit 2), not a bad
   argument.

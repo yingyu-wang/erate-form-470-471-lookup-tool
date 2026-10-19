@@ -536,6 +536,42 @@ public class CliCommandTests
         }
     }
 
+    [Fact]
+    public async Task BroadSearchOverTheCapExitsLookupFailed()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new CapHandler();
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470) with { Ben = null, ApplicantName = "School" };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitLookupFailed, code);
+            Assert.Equal(string.Empty, stdout.ToString());
+            var message = stderr.ToString();
+            Assert.Contains("Lookup failed; no filing determination was made.", message, StringComparison.Ordinal);
+            Assert.Contains("50001 rows match; narrow the name or pass --ben", message, StringComparison.Ordinal);
+            Assert.DoesNotContain(handler.Urls, url => url.Contains("/api/views/", StringComparison.Ordinal));
+            Assert.DoesNotContain(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public void OptionsAndRowRecordsAreInternal()
+    {
+        Assert.False(typeof(CliOptions).IsPublic);
+        Assert.False(typeof(CliRow).IsPublic);
+        _ = new CliOptions(FilingForm.Form470, false, "143618", null, 2026, null, null, CliFormat.Table, null);
+        _ = new CliRow(470, "260007116", "", "Certified", "2026-01-01", "", "143618", "District", "", "", "", "", "https://opendata.usac.org/resource/jt8s-3q52.json");
+    }
+
     static List<string[]> ParseCsv(string csv)
     {
         var rows = new List<string[]>();
@@ -608,6 +644,20 @@ public class CliCommandTests
             Directory.Delete(directory, true);
     }
 
+    sealed class CapHandler : HttpMessageHandler
+    {
+        public List<string> Urls { get; } = new();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.ToString();
+            Urls.Add(url);
+            var query = Uri.UnescapeDataString(request.RequestUri.Query);
+            var body = query.Contains("count(*)", StringComparison.Ordinal) ? "[{\"count\":\"50001\"}]" : "{\"rowsUpdatedAt\":1}";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        }
+    }
+
     sealed class ScriptedHandler : HttpMessageHandler
     {
         readonly string body;
@@ -622,7 +672,23 @@ public class CliCommandTests
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Urls.Add(request.RequestUri!.ToString());
+            var url = request.RequestUri!.ToString();
+            Urls.Add(url);
+            if (status == HttpStatusCode.OK)
+            {
+                if (request.RequestUri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+                {
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"rowsUpdatedAt\":1}") });
+                }
+
+                var query = Uri.UnescapeDataString(request.RequestUri.Query);
+                if (query.Contains("count(*)", StringComparison.Ordinal))
+                {
+                    var count = body.Trim() == "[]" ? "0" : "1";
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"count\":\"" + count + "\"}]") });
+                }
+            }
+
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
         }
     }
@@ -643,6 +709,19 @@ public class CliCommandTests
         {
             var url = request.RequestUri!.ToString();
             Urls.Add(url);
+            if (request.RequestUri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"rowsUpdatedAt\":1}") });
+            }
+
+            var query = Uri.UnescapeDataString(request.RequestUri.Query);
+            if (query.Contains("count(*)", StringComparison.Ordinal))
+            {
+                var rows = body(url);
+                var count = rows.Trim() == "[]" ? "0" : "1";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"count\":\"" + count + "\"}]") });
+            }
+
             return Task.FromResult(new HttpResponseMessage(status(url)) { Content = new StringContent(body(url)) });
         }
     }

@@ -102,7 +102,7 @@ public class Form471IdentityTests
             using var client = new UsacClient(http, directory);
             await Assert.ThrowsAsync<Form471IdentityMismatchException>(() => client.GetFilingsAsync("101552", 2026, FilingForm.Form471, true, default));
             await Assert.ThrowsAsync<Form471IdentityMismatchException>(() => client.GetFilingsAsync("101552", 2026, FilingForm.Form471, false, default));
-            Assert.Equal(1, handler.Count);
+            Assert.Equal(1, handler.PageRequests);
         }
         finally
         {
@@ -132,10 +132,25 @@ public class Form471IdentityTests
     sealed class FixedHandler(string json) : HttpMessageHandler
     {
         public int Count;
+        public int PageRequests;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Count++;
-            var body = request.RequestUri!.AbsolutePath.Contains("9s6i-myen", StringComparison.Ordinal) ? json : "[]";
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"rowsUpdatedAt\":1}", Encoding.UTF8, "application/json") });
+            }
+
+            if (query.Contains("count(*)", StringComparison.Ordinal))
+            {
+                var count = json.Trim() == "[]" ? "0" : "1";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"count\":\"" + count + "\"}]", Encoding.UTF8, "application/json") });
+            }
+
+            PageRequests++;
+            var body = uri.AbsolutePath.Contains("9s6i-myen", StringComparison.Ordinal) ? json : "[]";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         }
     }
