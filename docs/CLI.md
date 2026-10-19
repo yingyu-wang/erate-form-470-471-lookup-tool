@@ -16,7 +16,7 @@ downloads.
 | Applicant search | `--ben`, `--name`, or both. `--name` matches the published USAC applicant name and needs at least 2 characters. |
 | Source link | Every table, CSV, and JSON row includes a USAC Open Data URL. The table does not shorten that URL. |
 | JSON and CSV | The published 1.0.4 CLI already writes JSON with `--json` and CSV with `--csv`. Version 1.0.5 keeps both. CSV columns include `Source`, `Linked`, `Form470Count`, and `Form471Count`. |
-| Link 470 to 471 | `--form both` reads both forms for the same applicant and funding year. Each row keeps its own form and source. A Form 470 does not establish a Form 471. |
+| Link 470 to 471 | `--form both` reads both forms for the same applicant and funding year. A name-only link is printed only when every row shares one published BEN. Each row keeps its own form and source. A Form 470 does not establish a Form 471. |
 
 San Diego Unified School District is the example behind the name search. The
 RFP title uses "San Diego Unified." The bundled California directory publishes
@@ -346,4 +346,6 @@ Any other exception is not mapped to these codes.
   argument.
 - `--name` searches the published applicant name for the selected form and funding year. It does not search the local California directory and it does not translate an RFP title into a BEN.
 - `--form both` cannot be combined with `--frn`.
+- A name-only `--form both` lookup exits 4 and prints no rows when the published rows do not share one BEN. Pass `--ben` to choose the applicant.
+- An FRN row whose funding-request number is blank keeps its source link on dataset `qdmp-ygft`. The link uses the application number when that number is present.
 - The CLI has no watchlist, budget, or theme flags. A Category 2 budget helper is not part of 1.0.5.

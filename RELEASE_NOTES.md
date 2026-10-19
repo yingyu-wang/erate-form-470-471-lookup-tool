@@ -10,6 +10,8 @@ Draft for review. Do not tag this version until the latest nightly USAC check sa
 - `--form both` reads Form 470 and Form 471 for the same applicant and funding year. Each row keeps its own form and source link. A published Form 470 does not establish a Form 471.
 - An empty result says that it is not proof that no filing exists. If USAC cannot be reached while linking the two forms, the command does not present a partial link.
 - The lookup stays read-only. It does not create, change, certify, or submit a filing.
+- A name-only `--form both` result is printed only when every row shares one published BEN. An FRN row with no funding-request number keeps its source link on the FRN dataset.
+- The source-link fix landed in [PR #19](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/19). An FRN row with a blank funding-request number keeps its link on the FRN dataset (`qdmp-ygft`). The quoted column filter was checked against live USAC Open Data and left unchanged.
 - Version 1.0.5 metadata; Android version code 114. All seven desktop package variants and the command-line packages remain supported build targets.
 - Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key.
 
