@@ -1,5 +1,25 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
+## v1.0.5 — draft, October 19, 2026: applicant search and linked forms
+
+Draft for review. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`. Release files are unsigned by design.
+
+- Search published Form 470 and Form 471 rows by applicant name, by BEN, or by both. The name match uses the published USAC applicant name.
+- Every command-line row includes its USAC Open Data source link in the table, CSV, and JSON. The source link is not shortened.
+- The published 1.0.4 CLI already writes JSON (`--json`) and CSV (`--csv`). Version 1.0.5 keeps both. CSV rows include `Source`, `Linked`, `Form470Count`, and `Form471Count`. Counts are filled for `--form both` and left blank when that form was not queried.
+- `--form both` reads Form 470 and Form 471 for the same applicant and funding year. Each row keeps its own form and source link. A published Form 470 does not establish a Form 471.
+- An empty result says that it is not proof that no filing exists. If USAC cannot be reached while linking the two forms, the command does not present a partial link.
+- The lookup stays read-only. It does not create, change, certify, or submit a filing.
+- Version 1.0.5 metadata; Android version code 114. All seven desktop package variants and the command-line packages remain supported build targets.
+- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key.
+
+Not in this version, and left for follow-on work after 1.0.5 merges:
+
+- A Category 2 budget helper that multiplies a per-student figure by enrollment, labeled as computed and not USAC data.
+- Authentication or token handling for EPC.
+- Diffing Form 470 versions over time.
+- Pulling actual committed amounts.
+
 ## v1.0.3 — October 14, 2026: hardened lookups, tests, and release workflows
 
 Prepared from [PR #12](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/12). Release files are unsigned by design.

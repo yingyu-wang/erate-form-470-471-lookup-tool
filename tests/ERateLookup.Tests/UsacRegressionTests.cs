@@ -65,7 +65,7 @@ public class UsacRegressionTests
             Check(BudgetRow.ForecastView("Preliminary", false), "Missing 470 with unconfirmed status uses forecast view");
             Check(BudgetRow.Money("-12.34").Contains("12.34"), "Negative reported balances remain visible");
             Check(!BudgetRow.ForecastView("Confirmed", null), "Failed filing check does not imply no forms");
-            var seeded = new CaliforniaDirectory(http, Path.Combine(directory, "seeded")); seeded.LoadSeedIfEmpty(); Check(seeded.Search("SAN DIEGO").Count > 0, "Bundled California directory loads");
+            var seeded = new CaliforniaDirectory(http, Path.Combine(directory, "seeded")); seeded.LoadSeedIfEmpty(); Check(seeded.Search("SAN DIEGO").Count > 0, "Bundled California directory loads"); Check(seeded.Search("SAN DIEGO CITY UNIF").Any(entity => entity.Ben == "143662"), "San Diego Unified is published as San Diego City Unif Sch Dist, BEN 143662");
             Check(seeded.Search("SCHOOL").Count == 15, "GUI suggestions capped at 15");
             var exportRows = new List<string[]> { new[] { "BEN", "Name", "ExportedUTC" }, new[] { "00123", "=SUM(A1)", DateTimeOffset.UtcNow.ToString("O") } };
             var csv = Path.Combine(directory, "export.csv"); var excel = Path.Combine(directory, "export.xlsx"); DataExporter.WriteCsv(csv, exportRows); DataExporter.WriteExcel(excel, exportRows);

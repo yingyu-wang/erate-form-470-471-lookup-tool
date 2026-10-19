@@ -133,6 +133,57 @@ public sealed class UsacClient : IDisposable
         };
     }
 
+    public static string SearchFilter(string? ben, string? name, int year, FilingForm form)
+    {
+        if (year < 2016 || year > 2100)
+        {
+            throw new ArgumentException("Invalid funding year.");
+        }
+
+        var applicant = ApplicantClause(form, ben, name);
+        var yearText = Literal(year.ToString(CultureInfo.InvariantCulture));
+        return form switch
+        {
+            FilingForm.Form470 => $"{applicant} AND funding_year={yearText} AND fcc_form_470_status='Certified'",
+            FilingForm.Form471 => $"{applicant} AND funding_year={yearText} AND certified_datetime IS NOT NULL",
+            _ => throw new ArgumentException("Unsupported form type.")
+        };
+    }
+
+    public static string ApplicantClause(FilingForm form, string? ben, string? name, string? benColumn = null)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(ben))
+        {
+            if (ben.Length == 0 || !ben.All(char.IsAsciiDigit))
+            {
+                throw new ArgumentException("BEN must contain digits only.");
+            }
+
+            var column = benColumn ?? (form == FilingForm.Form471 ? "epc_organization_id" : "billed_entity_number");
+            parts.Add($"{column}={Literal(ben)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            var trimmed = name.Trim();
+            if (trimmed.Length < 2)
+            {
+                throw new ArgumentException("Applicant name must contain at least 2 characters.");
+            }
+
+            var column = form == FilingForm.Form471 ? "organization_name" : "billed_entity_name";
+            parts.Add($"contains(upper({column}),{Literal(trimmed.ToUpperInvariant())})");
+        }
+
+        if (parts.Count == 0)
+        {
+            throw new ArgumentException("Applicant name or BEN is required.");
+        }
+
+        return string.Join(" AND ", parts);
+    }
+
     public async Task<QueryResult<List<UsacRow>>> QueryAsync(Dictionary<string, string> parameters, bool refresh, CancellationToken ct, string endpoint = Endpoint)
     {
         var query = EncodeQuery(parameters);
@@ -283,9 +334,27 @@ public sealed class UsacClient : IDisposable
     public Task<QueryResult<List<Filing>>> GetFilingsAsync(string ben, int year, bool refresh, CancellationToken ct) =>
         GetFilingsAsync(ben, year, FilingForm.Form470, refresh, ct);
 
-    public async Task<QueryResult<List<Filing>>> GetFilingsAsync(string ben, int year, FilingForm form, bool refresh, CancellationToken ct)
+    public Task<QueryResult<List<Filing>>> GetFilingsAsync(string ben, int year, FilingForm form, bool refresh, CancellationToken ct) =>
+        LoadFilingsAsync(form, FilingFilter(ben, year, form), ben, refresh, ct);
+
+    public Task<QueryResult<List<Filing>>> SearchFilingsAsync(string? ben, string? name, int year, FilingForm form, bool refresh, CancellationToken ct)
     {
-        var filter = FilingFilter(ben, year, form);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            if (string.IsNullOrEmpty(ben))
+            {
+                throw new ArgumentException("Applicant name or BEN is required.");
+            }
+
+            return GetFilingsAsync(ben, year, form, refresh, ct);
+        }
+
+        var requestedBen = string.IsNullOrEmpty(ben) ? null : ben;
+        return LoadFilingsAsync(form, SearchFilter(requestedBen, name, year, form), requestedBen, refresh, ct);
+    }
+
+    async Task<QueryResult<List<Filing>>> LoadFilingsAsync(FilingForm form, string filter, string? requestedBen, bool refresh, CancellationToken ct)
+    {
         var all = new List<UsacRow>();
         var fetched = DateTimeOffset.MaxValue;
         var cached = true;
@@ -301,16 +370,32 @@ public sealed class UsacClient : IDisposable
                 ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
             };
             if (form == FilingForm.Form471)
+            {
                 parameters["$select"] = Form471Select;
+            }
+
             var page = await QueryAsync(parameters, refresh, ct, form == FilingForm.Form471 ? Form471Endpoint : Endpoint).ConfigureAwait(false);
             all.AddRange(page.Data);
             if (page.FetchedAt < fetched)
+            {
                 fetched = page.FetchedAt;
+            }
+
             cached &= page.FromCache;
             if (page.Data.Count < 1000)
             {
                 if (form == FilingForm.Form471)
-                    Form471Identity.Validate(ben, all);
+                {
+                    if (requestedBen is null)
+                    {
+                        Form471Identity.ValidatePublishedRows(all);
+                    }
+                    else
+                    {
+                        Form471Identity.Validate(requestedBen, all);
+                    }
+                }
+
                 return new QueryResult<List<Filing>>(Collapse(all), fetched, cached);
             }
         }

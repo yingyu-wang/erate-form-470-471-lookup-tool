@@ -63,4 +63,39 @@ public static class Form471Identity
             row.Ben = epc;
         }
     }
+
+    public static void ValidatePublishedRows(IReadOnlyList<UsacRow> rows)
+    {
+        foreach (var row in rows)
+        {
+            var application = string.IsNullOrWhiteSpace(row.Number) ? "(missing application number)" : row.Number;
+            var epc = row.EpcOrganizationId?.Trim() ?? "";
+            var reportedBen = row.Ben?.Trim() ?? "";
+            if (epc.Length == 0)
+            {
+                throw new Form471IdentityMismatchException(
+                    $"Form 471 application {application} did not include epc_organization_id, so the applicant cannot be confirmed. This is not a no-filings result.")
+                {
+                    ApplicationNumber = row.Number,
+                    RequestedBen = "",
+                    EpcOrganizationId = epc,
+                    ReportedBen = reportedBen
+                };
+            }
+
+            if (reportedBen.Length > 0 && !string.Equals(reportedBen, epc, StringComparison.Ordinal))
+            {
+                throw new Form471IdentityMismatchException(
+                    $"Form 471 application {application} billed entity '{reportedBen}' does not match epc_organization_id '{epc}'. The row was not treated as a confirmed applicant.")
+                {
+                    ApplicationNumber = row.Number,
+                    RequestedBen = "",
+                    EpcOrganizationId = epc,
+                    ReportedBen = reportedBen
+                };
+            }
+
+            row.Ben = epc;
+        }
+    }
 }
