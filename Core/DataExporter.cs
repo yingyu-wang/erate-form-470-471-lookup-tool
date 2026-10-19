@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Xml;
 namespace ERateLookup.Core;
 
@@ -104,6 +107,139 @@ public static class DataExporter
         xml.WriteEndElement();
         xml.WriteEndDocument();
     }
+
+    public static void WriteJson<TRow>(string path, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        using var writer = new StreamWriter(path, false, new UTF8Encoding(false));
+        WriteJson(writer, metadata, rows, ct);
+    }
+
+    public static void WriteJson<TRow>(TextWriter writer, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(rows);
+        ct.ThrowIfCancellationRequested();
+        var json = JsonSerializer.Serialize(Document(metadata, rows), JsonOptions);
+        writer.Write(json);
+        writer.Flush();
+    }
+
+    /// <summary>
+    /// Same envelope as <see cref="WriteJson{TRow}"/>, with each row keyed by the supplied column names.
+    /// The command-line JSON path does not call this.
+    /// </summary>
+    public static void WriteColumnJson(string path, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        using var writer = new StreamWriter(path, false, new UTF8Encoding(false));
+        WriteColumnJson(writer, metadata, columns, rows, ct);
+    }
+
+    public static void WriteColumnJson(TextWriter writer, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(rows);
+        var shaped = new Dictionary<string, string>[rows.Count];
+        for (var r = 0; r < rows.Count; r++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var source = rows[r];
+            var shapedRow = new Dictionary<string, string>(columns.Count, StringComparer.Ordinal);
+            for (var c = 0; c < columns.Count; c++)
+            {
+                shapedRow[columns[c]] = source.Length > c ? source[c] : "";
+            }
+
+            shaped[r] = shapedRow;
+        }
+
+        WriteJson(writer, metadata, shaped, ct);
+    }
+
+    static ExportJsonDocument<TRow> Document<TRow>(ExportMetadata metadata, IReadOnlyList<TRow> rows) =>
+        new()
+        {
+            Form = metadata.Form,
+            Linked = metadata.Linked,
+            Form470Count = metadata.Form470Count,
+            Form471Count = metadata.Form471Count,
+            Ben = metadata.Ben,
+            ApplicantName = metadata.ApplicantName,
+            FundingYear = metadata.FundingYear,
+            ApplicationNumber = metadata.ApplicationNumber,
+            FundingRequestNumber = metadata.FundingRequestNumber,
+            FetchedAt = metadata.FetchedAt.ToString("O", CultureInfo.InvariantCulture),
+            Count = rows.Count,
+            Rows = rows,
+        };
+
+    static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
+
+    sealed class ExportJsonDocument<TRow>
+    {
+        public int? Form
+        {
+            get; init;
+        }
+
+        public bool Linked
+        {
+            get; init;
+        }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Form470Count
+        {
+            get; init;
+        }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Form471Count
+        {
+            get; init;
+        }
+
+        public string? Ben
+        {
+            get; init;
+        }
+
+        public string? ApplicantName
+        {
+            get; init;
+        }
+
+        public int FundingYear
+        {
+            get; init;
+        }
+
+        public string? ApplicationNumber
+        {
+            get; init;
+        }
+
+        public string? FundingRequestNumber
+        {
+            get; init;
+        }
+
+        public string FetchedAt { get; init; } = "";
+
+        public int Count
+        {
+            get; init;
+        }
+
+        public IReadOnlyList<TRow> Rows { get; init; } = [];
+    }
+
     private static void WriteText(ZipArchive zip, string name, string text)
     {
         using var stream = zip.CreateEntry(name).Open();
