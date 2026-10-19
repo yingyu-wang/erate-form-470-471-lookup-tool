@@ -1,12 +1,13 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.6 — unreleased: shared export schema
+## v1.0.6 — unreleased: shared export schema and CLI Excel
 
 Unreleased. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and until the version is approved. Release files are unsigned by design.
 
 - Core has one export schema (`ExportSchema`) and a shared JSON writer (`DataExporter.WriteJson`). The command-line table, CSV, and JSON are built from that schema.
 - Command-line columns and the JSON row shape are unchanged. Category 2 budget columns stay out of the shared base schema. App and portfolio exports still use their current headers and files.
 - The schema records the unified header names (`Name`, `Form`, `Status`, and the other shared columns). A portfolio export is defined as those base columns plus trailing `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
+- The command line writes that same table as an Excel workbook with `--xlsx` (alias `--excel`). The flag requires `--output`. `--csv`, `--json`, and `--xlsx` cannot be combined. Workbook cells are inline text, including amounts. A value that CSV prefixes with `'` is stored in the workbook as the original text. The sheet has no formula elements.
 - Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key. This version does not add a signing step.
 
 ## v1.0.5 — draft, October 19, 2026: applicant search and linked forms

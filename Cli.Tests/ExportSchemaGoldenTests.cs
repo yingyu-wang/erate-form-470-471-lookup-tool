@@ -46,7 +46,10 @@ public class ExportSchemaGoldenTests
             Assert.Equal(cells, csv[1]);
 
             var excelPath = Path.Combine(directory, "rows.xlsx");
-            DataExporter.WriteExcel(excelPath, csv);
+            var excelStdout = new StringWriter();
+            var excelCode = await CliCommand.RunAsync(Options(CliFormat.Excel) with { OutputPath = excelPath }, client, excelStdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, excelCode);
+            Assert.Equal("", excelStdout.ToString());
             Assert.Equal(csv, ReadSheet(excelPath));
 
             var metadata = new ExportMetadata

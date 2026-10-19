@@ -31,6 +31,52 @@ public class CliCommandTests
     {
         var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2027", "--csv", "--json" });
         Assert.Contains("--csv", parsed.Error, StringComparison.Ordinal);
+        Assert.Equal("Choose either --csv, --json, or --xlsx.", parsed.Error);
+    }
+
+    [Fact]
+    public void HelpListsCsvJsonAndExcel()
+    {
+        Assert.Contains("--csv", CliCommand.HelpText, StringComparison.Ordinal);
+        Assert.Contains("--json", CliCommand.HelpText, StringComparison.Ordinal);
+        Assert.Contains("--xlsx", CliCommand.HelpText, StringComparison.Ordinal);
+        Assert.Contains("--excel", CliCommand.HelpText, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--csv", "--json")]
+    [InlineData("--csv", "--xlsx")]
+    [InlineData("--json", "--xlsx")]
+    [InlineData("--csv", "--excel")]
+    [InlineData("--json", "--excel")]
+    public void CombiningFormatsIsRejected(string first, string second)
+    {
+        var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", first, second, "--output", "out.bin" });
+        Assert.Null(parsed.Options);
+        Assert.Equal("Choose either --csv, --json, or --xlsx.", parsed.Error);
+    }
+
+    [Fact]
+    public void ExcelRequiresAnOutputPath()
+    {
+        var missing = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--xlsx" });
+        Assert.Null(missing.Options);
+        Assert.Equal("--xlsx requires --output <file.xlsx>.", missing.Error);
+
+        var alias = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--excel" });
+        Assert.Equal("--xlsx requires --output <file.xlsx>.", alias.Error);
+
+        var valued = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--xlsx=out.xlsx" });
+        Assert.Contains("does not take a value", valued.Error, StringComparison.Ordinal);
+
+        var duplicate = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--xlsx", "--excel", "--output", "out.xlsx" });
+        Assert.Contains("Duplicate argument: --excel", duplicate.Error, StringComparison.Ordinal);
+
+        var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--excel", "--output", "nested/out.xlsx" });
+        Assert.Null(parsed.Error);
+        Assert.NotNull(parsed.Options);
+        Assert.Equal(CliFormat.Excel, parsed.Options.Format);
+        Assert.Equal("nested/out.xlsx", parsed.Options.OutputPath);
     }
 
     [Fact]
@@ -147,6 +193,102 @@ public class CliCommandTests
             var csv = await File.ReadAllTextAsync(output);
             Assert.Contains("ApplicationNumber", csv, StringComparison.Ordinal);
             Assert.Contains("'=SUM(A1)", csv, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelWritesTextCellsWithAFrozenHeaderAndAutofilter()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "nested", "out.xlsx");
+        var csvOutput = Path.Combine(directory, "out.csv");
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"260007116","billed_entity_number":"143618","billed_entity_name":"CHULA VISTA ELEM SCHOOL DIST","fcc_form_470_status":"Certified","form_nickname":"=SUM(A1)","form_version":"Current","funding_request_amount":"100.50","pre_discount_eligible_amount":"200.00"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            Assert.Contains("Found 1", stderr.ToString(), StringComparison.Ordinal);
+
+            var sheet = ReadSheet(output);
+            Assert.Equal(ExportSchema.BaseColumns, sheet.Rows[0]);
+            Assert.Equal(ExportSchema.BaseColumns.Count * sheet.Rows.Count, sheet.CellCount);
+            Assert.All(sheet.CellTypes, type => Assert.Equal("inlineStr", type));
+            Assert.DoesNotContain("f", sheet.ElementNames);
+            var nickname = Array.IndexOf(sheet.Rows[0], "Nickname");
+            var amount = Array.IndexOf(sheet.Rows[0], "RequestedAmount");
+            Assert.Equal("=SUM(A1)", sheet.Rows[1][nickname]);
+            Assert.Equal("100.50", sheet.Rows[1][amount]);
+            Assert.Equal("1", sheet.FrozenSplit);
+            Assert.Equal("A2", sheet.TopLeftCell);
+            Assert.Equal("frozen", sheet.PaneState);
+            Assert.Equal("A1:" + ColumnName(sheet.Rows[0].Length) + sheet.Rows.Count, sheet.AutoFilter);
+
+            var csvCode = await CliCommand.RunAsync(options with { Format = CliFormat.Csv, OutputPath = csvOutput }, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, csvCode);
+            var csv = await File.ReadAllTextAsync(csvOutput);
+            Assert.Contains("'=SUM(A1)", csv, StringComparison.Ordinal);
+            Assert.Contains("\"100.50\"", csv, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelEmptyResultStillWritesTheHeader()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "empty.xlsx");
+        try
+        {
+            using var http = new HttpClient(new ScriptedHandler("[]"));
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel, 2027) with { OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitNotFound, code);
+            Assert.Equal("", stdout.ToString());
+            var sheet = ReadSheet(output);
+            var header = Assert.Single(sheet.Rows);
+            Assert.Equal(ExportSchema.BaseColumns, header);
+            Assert.Equal(ExportSchema.BaseColumns.Count, sheet.CellCount);
+            Assert.All(sheet.CellTypes, type => Assert.Equal("inlineStr", type));
+            Assert.Equal("A1:" + ColumnName(header.Length) + "1", sheet.AutoFilter);
+            Assert.Equal("frozen", sheet.PaneState);
+            Assert.Equal("1", sheet.FrozenSplit);
+            Assert.Equal("A2", sheet.TopLeftCell);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelRunWithoutOutputDoesNotQuery()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("[]");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stderr = new StringWriter();
+            var code = await CliCommand.RunAsync(Options(FilingForm.Form470, CliFormat.Excel), client, new StringWriter(), stderr, default);
+            Assert.Equal(CliCommand.ExitBadArgs, code);
+            Assert.Equal("--xlsx requires --output <file.xlsx>." + Environment.NewLine, stderr.ToString());
+            Assert.Empty(handler.Urls);
         }
         finally
         {
@@ -598,6 +740,65 @@ public class CliCommandTests
 
     static CliOptions Options(FilingForm form, CliFormat format = CliFormat.Table, int year = 2026) =>
         new(form, false, "143618", null, year, null, null, format, null);
+
+    static SheetSnapshot ReadSheet(string path)
+    {
+        using var archive = System.IO.Compression.ZipFile.OpenRead(path);
+        var entry = archive.GetEntry("xl/worksheets/sheet1.xml");
+        Assert.NotNull(entry);
+        using var stream = entry.Open();
+        var xml = System.Xml.Linq.XDocument.Load(stream);
+        var rows = new List<string[]>();
+        var types = new List<string>();
+        var count = 0;
+        foreach (var row in xml.Descendants().Where(element => element.Name.LocalName == "row"))
+        {
+            var cells = new List<string>();
+            foreach (var cell in row.Elements().Where(element => element.Name.LocalName == "c"))
+            {
+                count++;
+                types.Add(cell.Attribute("t")?.Value ?? "");
+                cells.Add(cell.Descendants().First(element => element.Name.LocalName == "t").Value);
+            }
+
+            rows.Add(cells.ToArray());
+        }
+
+        var pane = xml.Descendants().First(element => element.Name.LocalName == "pane");
+        var filter = xml.Descendants().First(element => element.Name.LocalName == "autoFilter");
+        return new SheetSnapshot(
+            rows,
+            count,
+            types,
+            xml.Descendants().Select(element => element.Name.LocalName).ToHashSet(StringComparer.Ordinal),
+            pane.Attribute("ySplit")?.Value,
+            pane.Attribute("topLeftCell")?.Value,
+            pane.Attribute("state")?.Value,
+            filter.Attribute("ref")?.Value);
+    }
+
+    static string ColumnName(int n)
+    {
+        var result = "";
+        while (n > 0)
+        {
+            n--;
+            result = (char)('A' + n % 26) + result;
+            n /= 26;
+        }
+
+        return result;
+    }
+
+    sealed record SheetSnapshot(
+        List<string[]> Rows,
+        int CellCount,
+        List<string> CellTypes,
+        HashSet<string> ElementNames,
+        string? FrozenSplit,
+        string? TopLeftCell,
+        string? PaneState,
+        string? AutoFilter);
 
     static string Temp() => Path.Combine(Path.GetTempPath(), "ERateCli-" + Guid.NewGuid().ToString("N"));
 

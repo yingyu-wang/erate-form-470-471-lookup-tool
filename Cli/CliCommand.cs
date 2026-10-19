@@ -9,7 +9,8 @@ public enum CliFormat
 {
     Table,
     Csv,
-    Json
+    Json,
+    Excel
 }
 
 public sealed record CliOptions(
@@ -49,6 +50,7 @@ public static class CliCommand
           --frn <number>       Form 471 funding request number
           --csv                Write CSV, including the source link and 470/471 link columns
           --json               Write JSON instead of a text table
+          --xlsx, --excel      Write an Excel workbook with the same columns. Requires --output
           --output <file>      Write the result to this file
           --help, -h           Show this help
 
@@ -83,6 +85,7 @@ public static class CliCommand
         string? output = null;
         var csv = false;
         var json = false;
+        var xlsx = false;
         var help = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -147,6 +150,14 @@ public static class CliCommand
                         return Fail("Duplicate argument: --json");
                     json = true;
                     break;
+                case "--xlsx":
+                case "--excel":
+                    if (value is not null)
+                        return Fail($"{token} does not take a value.");
+                    if (!seen.Add("--xlsx"))
+                        return Fail($"Duplicate argument: {token}");
+                    xlsx = true;
+                    break;
                 default:
                     return Fail($"Unknown argument: {raw}");
             }
@@ -154,8 +165,10 @@ public static class CliCommand
 
         if (help)
             return new CliParseResult(null, true, null);
-        if (csv && json)
-            return Fail("Choose either --csv or --json.");
+        if ((csv ? 1 : 0) + (json ? 1 : 0) + (xlsx ? 1 : 0) > 1)
+            return Fail("Choose either --csv, --json, or --xlsx.");
+        if (xlsx && string.IsNullOrWhiteSpace(output))
+            return Fail("--xlsx requires --output <file.xlsx>.");
         if (form is null || fy is null || (ben is null && name is null))
             return Fail("Form, applicant name or BEN, and funding year are required.");
         if (form is not ("470" or "471" or "both"))
@@ -180,7 +193,7 @@ public static class CliCommand
             return Fail("--frn applies to Form 471.");
 
         var link = form == "both";
-        var format = csv ? CliFormat.Csv : json ? CliFormat.Json : CliFormat.Table;
+        var format = csv ? CliFormat.Csv : json ? CliFormat.Json : xlsx ? CliFormat.Excel : CliFormat.Table;
         FilingForm? filing = form switch
         {
             "471" => FilingForm.Form471,
@@ -192,6 +205,12 @@ public static class CliCommand
 
     public static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        if (options.Format == CliFormat.Excel && string.IsNullOrWhiteSpace(options.OutputPath))
+        {
+            await stderr.WriteLineAsync("--xlsx requires --output <file.xlsx>.").ConfigureAwait(false);
+            return ExitBadArgs;
+        }
+
         try
         {
             IReadOnlyList<ExportRow> exportRows;
@@ -232,8 +251,15 @@ public static class CliCommand
                 EnsureLinkedApplicant(options, rows);
             }
 
-            var body = Render(options, exportRows, rows, fetched, form470Count, form471Count);
-            await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+            if (options.Format == CliFormat.Excel)
+            {
+                WriteExcelFile(options, exportRows, cancellationToken);
+            }
+            else
+            {
+                var body = Render(options, exportRows, rows, fetched, form470Count, form471Count);
+                await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+            }
             if (rows.Count == 0)
             {
                 await stderr.WriteLineAsync(MissingMessage(options)).ConfigureAwait(false);
@@ -377,12 +403,7 @@ public static class CliCommand
             return writer.ToString();
         }
 
-        var table = new List<string[]>
-        {
-            ExportSchema.Columns().ToArray()
-        };
-        foreach (var row in exportRows)
-            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben)));
+        var table = Table(options, exportRows);
 
         if (options.Format == CliFormat.Csv)
         {
@@ -392,6 +413,26 @@ public static class CliCommand
         }
 
         return RenderTable(table);
+    }
+
+    static List<string[]> Table(CliOptions options, IReadOnlyList<ExportRow> exportRows)
+    {
+        var table = new List<string[]>
+        {
+            ExportSchema.Columns().ToArray()
+        };
+        foreach (var row in exportRows)
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben)));
+        return table;
+    }
+
+    static void WriteExcelFile(CliOptions options, IReadOnlyList<ExportRow> exportRows, CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath!));
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+        // Workbook cells are inline strings, so amounts stay text. Typed numeric cells are not written.
+        DataExporter.WriteExcel(options.OutputPath!, Table(options, exportRows), cancellationToken);
     }
 
     static string RenderTable(List<string[]> table)

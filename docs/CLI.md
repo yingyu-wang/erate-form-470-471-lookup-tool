@@ -35,6 +35,21 @@ during `--form both`, the command exits 3 and does not print a partial link.
 
 Release files are unsigned by design. v1.0.5 is not tagged.
 
+## Excel export in 1.0.6
+
+`--xlsx` (alias `--excel`) writes the same columns as the table and CSV through
+`DataExporter.WriteExcel`. It requires `--output`. The workbook is not written
+to the terminal. `--csv`, `--json`, and `--xlsx` together exit 1.
+
+Every workbook cell is an inline string, including `RequestedAmount` and
+`PreDiscountAmount`. The file does not use numeric cells. CSV prefixes a field
+that starts with `=`, `+`, `-`, `@`, tab, or carriage return with `'`. The
+Excel cell stores the original text without that prefix. The worksheet stores
+no formula element. The header row is frozen, and an autofilter covers the
+rows that were written.
+
+Release files are unsigned by design. v1.0.6 is not tagged.
+
 This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
 (merge `155477d`). The release version is 1.0.4. Pull request
@@ -160,6 +175,7 @@ ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <yea
   --frn <number>       Form 471 funding request number
   --csv                Write CSV, including the source link and 470/471 link columns
   --json               Write JSON instead of a text table
+  --xlsx, --excel      Write an Excel workbook with the same columns. Requires --output
   --output <file>      Write the result to this file
   --help, -h           Show this help
 ```
@@ -176,12 +192,14 @@ The parser also accepts `-?` as help. The printed help does not list `-?`.
 | `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` `--form both --frn ...` exits 1 because a funding-request filter is not a 470-to-471 link. |
 | `--csv` | No | CSV body. Takes no value. |
 | `--json` | No | JSON body. Takes no value. |
-| `--output` | No | Writes the body to this path. Parent directories are created. |
+| `--xlsx`, `--excel` | No | Excel workbook with the same columns as the table and CSV. Takes no value. `--excel` is an alias of `--xlsx`. Requires `--output`. |
+| `--output` | With `--xlsx` | Writes the body to this path. Parent directories are created. Optional for the table, CSV, and JSON. The program does not check that the Excel path ends in `.xlsx`. |
 | `--help`, `-h`, `-?` | No | Prints help on stdout and exits 0. Does not run a lookup. |
 
 Valued options accept a separate argument (`--form 470`) or an equals form
 (`--form=470`). Repeating a flag is an error (`Duplicate argument: ...`).
-`--csv` and `--json` together exit 1: `Choose either --csv or --json.`
+`--csv`, `--json`, and `--xlsx` together exit 1: `Choose either --csv, --json, or --xlsx.`
+`--xlsx` or `--excel` without `--output` exits 1: `--xlsx requires --output <file.xlsx>.`
 Omitting `--form`, both `--ben` and `--name`, or `--fy` exits 1: `Form, applicant name or BEN, and funding year
 are required.` Unknown text exits 1: `Unknown argument: ...`. Parse errors go
 to stderr, followed by the help text.
@@ -218,6 +236,9 @@ dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 
 # JSON on stdout
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --json
 
+# Excel workbook. --xlsx requires --output. --excel is the same flag.
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026 --xlsx --output chula.xlsx
+
 # Same FRN, also constrained to an application number
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --app 261003372 --frn 2699003124
 ```
@@ -232,11 +253,13 @@ pass did not repeat the live USAC query.
 
 ## Output formats
 
-The body is the table, CSV, or JSON. Status text goes to stderr and is not
-part of the body. With no `--output`, the body is written to stdout, and a
-final newline is added when the body does not already end with one. With
-`--output`, the body is written only to that file. Stdout stays empty. An
-empty match still writes the body, then exits 2.
+The body is the table, CSV, JSON, or Excel workbook. Status text goes to
+stderr and is not part of the body. With no `--output`, the table, CSV, or
+JSON body is written to stdout, and a final newline is added when the body
+does not already end with one. With `--output`, that body is written only to
+the file. Stdout stays empty. `--xlsx` always uses `--output` and does not
+write a body to stdout. An empty match still writes the body (for Excel, a
+workbook whose only row is the header), then exits 2.
 
 ### Table (default)
 
@@ -257,7 +280,7 @@ that form was not queried.
 `jt8s-3q52`. Form 471 application rows use `9s6i-myen`. Funding-request rows
 use `qdmp-ygft`. The table prints the full source URL. Other cells longer
 than 40 characters are cut to 37 characters plus `...` in the table only.
-CSV and JSON keep the full text, including the source URL.
+CSV, JSON, and Excel keep the full text, including the source URL.
 
 ### `--csv`
 
@@ -277,6 +300,21 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 `requestedAmount`, `preDiscountAmount`, and `source`. Omitted `--app` or
 `--frn` is JSON `null` on the top-level fields. Filing rows leave
 `fundingRequestNumber` as an empty string. `source` is the Open Data URL.
+
+### `--xlsx`
+
+`--xlsx` and `--excel` call `DataExporter.WriteExcel` with the same rows as
+CSV. The file is an `.xlsx` zip. It is not UTF-8 text and it has no BOM.
+Passing either flag without `--output` exits 1 before the lookup. Repeating
+`--xlsx` exits 1 with `Duplicate argument: --xlsx`. Repeating `--excel` exits
+1 with `Duplicate argument: --excel`. Passing both exits 1 with
+`Duplicate argument:` and the second flag.
+
+Each cell is an inline string (`t="inlineStr"`). Amounts stay text, such as
+`100.50`, rather than numeric cells. A value CSV would prefix with `'` is
+stored without that prefix. The sheet has a frozen header (`ySplit="1"`,
+`topLeftCell="A2"`, `state="frozen"`) and an autofilter from `A1` through the
+last written cell.
 
 ### What a row contains
 
