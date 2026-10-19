@@ -11,7 +11,7 @@ from unittest.mock import patch
 import zipfile
 
 VERIFIER = Path(__file__).with_name("verify_android_apk.py")
-BADGING = """package: name='com.yingyuwang.eratelookup.android' versionCode='113' versionName='1.0.4'
+BADGING = """package: name='com.yingyuwang.eratelookup.android' versionCode='114' versionName='1.0.5'
 sdkVersion:'26'
 launchable-activity: name='com.yingyuwang.eratelookup.android.MainActivity'
 uses-permission: name='android.permission.INTERNET'

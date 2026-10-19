@@ -4,7 +4,9 @@
 
 A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.2 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+**Version 1.0.5 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+
+Source version 1.0.5 is not tagged and has no GitHub Release yet. Release files stay unsigned by design. Tag only after the latest nightly USAC check says `passed` or `passed after retry`.
 
 ## Download and run
 
@@ -86,15 +88,17 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Command line
 
-`ERateLookup.Cli` checks published Form 470 and Form 471 status from a terminal on Windows, macOS, and Linux. It calls the same USAC lookup as the desktop apps. Flags, samples, output formats, exit codes, and build steps are in the [1.0.4 command-line guide](docs/CLI.md). Starting with v1.0.4, Windows, macOS, and Linux release assets include the CLI; that release is being rebuilt to add them. Building from source remains an alternative. The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3) does not include the CLI.
+`ERateLookup.Cli` checks published Form 470 and Form 471 rows from a terminal on Windows, macOS, and Linux. It calls the same read-only USAC lookup as the desktop apps. It does not create, change, certify, or submit a filing. Flags, samples, output formats, exit codes, and build steps are in the [1.0.5 command-line guide](docs/CLI.md). Windows, macOS, and Linux release assets include the CLI starting with v1.0.4. v1.0.5 packages are not published until that version is tagged.
 
 ```sh
-dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026
-dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2027 --csv --output chula.csv
-dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --json
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143662 --fy 2027
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --name "San Diego City" --fy 2027 --csv --output sdusd.csv
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --json
 ```
 
-BEN 143618 is Chula Vista Elementary School District. `--form` is `470` or `471`. `--app` keeps one application number. `--frn` is Form 471 only and reads USAC’s FRN status dataset. The default output is a text table; `--csv` and `--json` select the other formats. `--output` writes that result to a file. `--help` prints the full usage text.
+Search by BEN, by the published applicant name, or by both. `--form both` lists Form 470 and Form 471 for that applicant and funding year. A published Form 470 does not establish a Form 471. Every table, CSV, and JSON row includes a USAC Open Data source link. `--csv` and `--json` select those formats; the default is a text table. `--output` writes the body to a file. `--help` prints the full usage text.
+
+The San Diego Unified School District RFP calls the applicant "San Diego Unified." In the bundled California directory, USAC publishes that district as **San Diego City Unif Sch Dist**, BEN **143662**. Name search matches the published name. It does not translate an RFP title into a BEN.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -220,7 +224,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 
 GUI launch and appearance still require hands-on Windows and Mac testing. Linux CI validates native window launch on x64 and ARM64; interactive lookup, selection, export, and browser opening still require hands-on desktop testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
 
-See [Windows user guide](docs/USER_GUIDE.md), [1.0.4 command-line guide](docs/CLI.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
+See [Windows user guide](docs/USER_GUIDE.md), [1.0.5 command-line guide](docs/CLI.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
 
 ## License
 

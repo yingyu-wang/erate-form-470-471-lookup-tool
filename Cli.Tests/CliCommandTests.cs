@@ -199,8 +199,235 @@ public class CliCommandTests
         }
     }
 
+    [Fact]
+    public void NameCanReplaceBen()
+    {
+        var parsed = CliCommand.Parse(new[] { "--form", "470", "--name", "San Diego City", "--fy", "2027" });
+        Assert.Null(parsed.Error);
+        Assert.NotNull(parsed.Options);
+        Assert.Null(parsed.Options.Ben);
+        Assert.Equal("San Diego City", parsed.Options.ApplicantName);
+        Assert.False(parsed.Options.LinkForms);
+    }
+
+    [Fact]
+    public void ShortNameIsRejected()
+    {
+        var parsed = CliCommand.Parse(new[] { "--form", "470", "--name", "A", "--fy", "2027" });
+        Assert.Contains("2 characters", parsed.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BothFormsRejectFrn()
+    {
+        var parsed = CliCommand.Parse(new[] { "--form", "both", "--ben", "143662", "--fy", "2027", "--frn", "2699003124" });
+        Assert.Contains("cannot be combined", parsed.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NameSearchUsesThePublishedApplicantColumn()
+    {
+        var filter = UsacClient.SearchFilter(null, "San Diego City", 2027, FilingForm.Form470);
+        Assert.Contains("contains(upper(billed_entity_name),'SAN DIEGO CITY')", filter, StringComparison.Ordinal);
+        Assert.Contains("fcc_form_470_status='Certified'", filter, StringComparison.Ordinal);
+        Assert.DoesNotContain("billed_entity_number", filter, StringComparison.Ordinal);
+
+        var linked = UsacClient.SearchFilter("143662", "O'Brien", 2027, FilingForm.Form471);
+        Assert.Contains("epc_organization_id='143662'", linked, StringComparison.Ordinal);
+        Assert.Contains("contains(upper(organization_name),'O''BRIEN')", linked, StringComparison.Ordinal);
+        Assert.Contains("certified_datetime IS NOT NULL", linked, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SourceLinkIdentifiesTheOpenDataRecord()
+    {
+        var url = UsacSources.Application(FilingForm.Form470, "260007116");
+        Assert.StartsWith("https://opendata.usac.org/resource/jt8s-3q52.json?", url, StringComparison.Ordinal);
+        var text = Uri.UnescapeDataString(url);
+        Assert.Contains("application_number='260007116'", text, StringComparison.Ordinal);
+        Assert.Contains("qdmp-ygft", UsacSources.FundingRequest("2699003124", "261003372"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TablePrintsTheFullSourceLink()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"260007116","billed_entity_number":"143618","billed_entity_name":"CHULA VISTA ELEM SCHOOL DIST","fcc_form_470_status":"Certified","form_version":"Current"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var code = await CliCommand.RunAsync(Options(FilingForm.Form470), client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var source = UsacSources.Application(FilingForm.Form470, "260007116");
+            Assert.Contains(source, stdout.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain(source[..20] + "...", stdout.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task NameSearchQueriesThePublishedName()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"270000001","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","fcc_form_470_status":"Certified","form_version":"Current"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var options = Options(FilingForm.Form470, year: 2027) with { Ben = null, ApplicantName = "San Diego City" };
+            var code = await CliCommand.RunAsync(options, client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var query = Uri.UnescapeDataString(handler.Urls[0]);
+            Assert.Contains("contains(upper(billed_entity_name),'SAN DIEGO CITY')", query, StringComparison.Ordinal);
+            Assert.Contains("143662", stdout.ToString(), StringComparison.Ordinal);
+            Assert.Contains(UsacSources.Application(FilingForm.Form470, "270000001"), stdout.ToString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LinkingReadsBothFormsAndKeepsEachSource()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new RoutingHandler(url => url.Contains("9s6i-myen", StringComparison.Ordinal)
+                ? """[{"application_number":"271000001","epc_organization_id":"143662","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","form_version":"Current","filing_status":"Certified","certified_date_time":"2026-02-01T00:00:00.000"}]"""
+                : """[{"application_number":"270000001","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","fcc_form_470_status":"Certified","form_version":"Current","certified_date_time":"2026-07-23T00:00:00.000"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Json, 2027) with { Form = null, LinkForms = true, Ben = "143662" };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Contains("jt8s-3q52", string.Join('\n', handler.Urls), StringComparison.Ordinal);
+            Assert.Contains("9s6i-myen", string.Join('\n', handler.Urls), StringComparison.Ordinal);
+            Assert.Contains("does not establish", stderr.ToString(), StringComparison.Ordinal);
+            using var document = JsonDocument.Parse(stdout.ToString());
+            Assert.True(document.RootElement.GetProperty("linked").GetBoolean());
+            Assert.Equal(2, document.RootElement.GetProperty("count").GetInt32());
+            var rows = document.RootElement.GetProperty("rows");
+            Assert.Equal(470, rows[0].GetProperty("form").GetInt32());
+            Assert.Equal(471, rows[1].GetProperty("form").GetInt32());
+            Assert.Contains("jt8s-3q52", rows[0].GetProperty("source").GetString(), StringComparison.Ordinal);
+            Assert.Contains("9s6i-myen", rows[1].GetProperty("source").GetString(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LinkingNothingIsNotProofOfNoFiling()
+    {
+        var directory = Temp();
+        try
+        {
+            using var http = new HttpClient(new ScriptedHandler("[]"));
+            using var client = new UsacClient(http, directory);
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, year: 2027) with { Form = null, LinkForms = true, Ben = "143662" };
+            var code = await CliCommand.RunAsync(options, client, new StringWriter(), stderr, default);
+            Assert.Equal(CliCommand.ExitNotFound, code);
+            var message = stderr.ToString();
+            Assert.Contains("No certified Form 470 or Form 471", message, StringComparison.Ordinal);
+            Assert.Contains("not proof", message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task LinkingStopsWhenUsacIsUnreachable()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new RoutingHandler(_ => "[]", url => url.Contains("9s6i-myen", StringComparison.Ordinal) ? HttpStatusCode.BadRequest : HttpStatusCode.OK);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470) with { Form = null, LinkForms = true };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitUsacUnreachable, code);
+            Assert.Contains("were not linked", stderr.ToString(), StringComparison.Ordinal);
+            Assert.Equal(string.Empty, stdout.ToString());
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task JsonAndCsvIncludeTheSourceLink()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "out.csv");
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"261003372","epc_organization_id":"143618","billed_entity_name":"Chula Vista Elem School Dist","form_version":"Current","filing_status":"Committed","certified_date_time":"2026-03-01T00:00:00.000"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var jsonCode = await CliCommand.RunAsync(Options(FilingForm.Form471, CliFormat.Json), client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, jsonCode);
+            using var document = JsonDocument.Parse(stdout.ToString());
+            var source = document.RootElement.GetProperty("rows")[0].GetProperty("source").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(source));
+            Assert.Contains("9s6i-myen", source, StringComparison.Ordinal);
+            Assert.Contains("261003372", Uri.UnescapeDataString(source!), StringComparison.Ordinal);
+
+            var csvOptions = Options(FilingForm.Form471, CliFormat.Csv) with { OutputPath = output };
+            var csvCode = await CliCommand.RunAsync(csvOptions, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, csvCode);
+            var csv = await File.ReadAllTextAsync(output);
+            Assert.Contains("Source", csv, StringComparison.Ordinal);
+            Assert.Contains("9s6i-myen", csv, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task NameOnlyForm471WithoutAnApplicantIdIsNotEmpty()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"271000009","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","form_version":"Current","filing_status":"Certified"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form471) with { Ben = null, ApplicantName = "San Diego City" };
+            var code = await CliCommand.RunAsync(options, client, new StringWriter(), stderr, default);
+            Assert.Equal(CliCommand.ExitLookupFailed, code);
+            Assert.Contains("not a no-filings result", stderr.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
     static CliOptions Options(FilingForm form, CliFormat format = CliFormat.Table, int year = 2026) =>
-        new(form, "143618", year, null, null, format, null);
+        new(form, false, "143618", null, year, null, null, format, null);
 
     static string Temp() => Path.Combine(Path.GetTempPath(), "ERateCli-" + Guid.NewGuid().ToString("N"));
 
@@ -227,6 +454,26 @@ public class CliCommandTests
         {
             Urls.Add(request.RequestUri!.ToString());
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
+    }
+
+    sealed class RoutingHandler : HttpMessageHandler
+    {
+        readonly Func<string, string> body;
+        readonly Func<string, HttpStatusCode> status;
+        public List<string> Urls { get; } = new();
+
+        public RoutingHandler(Func<string, string> body, Func<string, HttpStatusCode>? status = null)
+        {
+            this.body = body;
+            this.status = status ?? (_ => HttpStatusCode.OK);
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var url = request.RequestUri!.ToString();
+            Urls.Add(url);
+            return Task.FromResult(new HttpResponseMessage(status(url)) { Content = new StringContent(body(url)) });
         }
     }
 }

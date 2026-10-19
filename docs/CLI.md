@@ -1,8 +1,38 @@
-# Command-line lookup — 1.0.4
+# Command-line lookup — 1.0.5
 
 `ERateLookup.Cli` looks up published E-rate Form 470 and Form 471 rows from a
 terminal. It is a .NET 10 console program in `Cli/`. It does not open the
-Windows Forms, Avalonia, or Android screens.
+Windows Forms, Avalonia, or Android screens. The lookup is read-only. It does
+not create, change, certify, or submit a filing.
+
+## What changed in 1.0.5
+
+Version 1.0.5 adds four lookup features. It does not add a Category 2 budget
+helper, EPC authentication, Form 470 version diffing, or committed-amount
+downloads.
+
+| Feature | Behavior |
+| --- | --- |
+| Applicant search | `--ben`, `--name`, or both. `--name` matches the published USAC applicant name and needs at least 2 characters. |
+| Source link | Every table, CSV, and JSON row includes a USAC Open Data URL. The table does not shorten that URL. |
+| JSON and CSV | `--json` and `--csv` still select the body format. Both include the source link. |
+| Link 470 to 471 | `--form both` reads both forms for the same applicant and funding year. Each row keeps its own form and source. A Form 470 does not establish a Form 471. |
+
+San Diego Unified School District is the example behind the name search. The
+RFP title uses "San Diego Unified." The bundled California directory publishes
+that district as **San Diego City Unif Sch Dist**, BEN **143662**. Searching
+`--name "San Diego City"` matches the published name. The tool does not invent
+a BEN from an RFP title.
+
+```sh
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --name "San Diego City" --fy 2027
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --json
+```
+
+An empty result is not proof that no filing exists. If USAC cannot be reached
+during `--form both`, the command exits 3 and does not print a partial link.
+
+Release files are unsigned by design. v1.0.5 is not tagged.
 
 This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
@@ -119,28 +149,30 @@ seconds.
 Help text, verified by running `--help`:
 
 ```text
-ERateLookup.Cli --form 470|471 --ben <BEN> --fy <year> [options]
+ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <year> [options]
 
-  --form 470|471     Published form to check
-  --ben <digits>     Billed entity number
-  --fy <year>        Funding year (2016-2100)
-  --app <number>     Keep one application number
-  --frn <number>     Form 471 funding request number
-  --csv              Write CSV instead of a text table
-  --json             Write JSON instead of a text table
-  --output <file>    Write the result to this file
-  --help, -h         Show this help
+  --form 470|471|both  Published form to check. both links Form 470 and Form 471
+  --ben <digits>       Billed entity number
+  --name <text>        Published applicant name (at least 2 characters)
+  --fy <year>          Funding year (2016-2100)
+  --app <number>       Keep one application number
+  --frn <number>       Form 471 funding request number
+  --csv                Write CSV instead of a text table
+  --json               Write JSON instead of a text table
+  --output <file>      Write the result to this file
+  --help, -h           Show this help
 ```
 
 The parser also accepts `-?` as help. The printed help does not list `-?`.
 
 | Flag | Required | Rule in `CliCommand.Parse` |
 | --- | --- | --- |
-| `--form` | Yes | `470` or `471` |
-| `--ben` | Yes | Digits only, after trim |
+| `--form` | Yes | `470`, `471`, or `both`. `both` reads Form 470 and Form 471 for the same applicant and year. |
+| `--ben` | One of `--ben` or `--name` | Digits only, after trim. May be combined with `--name`. |
+| `--name` | One of `--ben` or `--name` | Published applicant name, 2 to 200 characters, no control characters. Matched with `contains(upper(...))` on the USAC name column. |
 | `--fy` | Yes | Integer year from 2016 through 2100 |
 | `--app` | No | One application number. Without `--frn`, rows from the filing query are kept only when the application number matches. With `--frn`, it is added to the FRN query. |
-| `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` |
+| `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` `--form both --frn ...` exits 1 because a funding-request filter is not a 470-to-471 link. |
 | `--csv` | No | CSV body. Takes no value. |
 | `--json` | No | JSON body. Takes no value. |
 | `--output` | No | Writes the body to this path. Parent directories are created. |
@@ -149,7 +181,7 @@ The parser also accepts `-?` as help. The printed help does not list `-?`.
 Valued options accept a separate argument (`--form 470`) or an equals form
 (`--form=470`). Repeating a flag is an error (`Duplicate argument: ...`).
 `--csv` and `--json` together exit 1: `Choose either --csv or --json.`
-Omitting `--form`, `--ben`, or `--fy` exits 1: `Form, BEN, and funding year
+Omitting `--form`, both `--ben` and `--name`, or `--fy` exits 1: `Form, applicant name or BEN, and funding year
 are required.` Unknown text exits 1: `Unknown argument: ...`. Parse errors go
 to stderr, followed by the help text.
 
@@ -211,10 +243,13 @@ Columns, in order:
 
 `Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`,
 `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`,
-`RequestedAmount`, `PreDiscountAmount`, `PDF`
+`RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`
 
-Cells longer than 40 characters are cut to 37 characters plus `...` in the
-table only. CSV and JSON keep the full text.
+`Source` is the USAC Open Data URL for that row. Form 470 rows use dataset
+`jt8s-3q52`. Form 471 application rows use `9s6i-myen`. Funding-request rows
+use `qdmp-ygft`. The table prints the full source URL. Other cells longer
+than 40 characters are cut to 37 characters plus `...` in the table only.
+CSV and JSON keep the full text, including the source URL.
 
 ### `--csv`
 
@@ -225,13 +260,15 @@ the header row only.
 
 ### `--json`
 
-Indented JSON. Names are camelCase. Top-level fields: `form` (470 or 471),
-`ben`, `fundingYear`, `applicationNumber`, `fundingRequestNumber`,
-`fetchedAt`, `count`, `rows`. Each row has `applicationNumber`,
-`fundingRequestNumber`, `status`, `certifiedDate`, `nickname`, `ben`, `name`,
-`services`, `pdf`, `requestedAmount`, `preDiscountAmount`. Omitted `--app` or
+Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
+`null` when `--form both`), `linked`, `ben`, `applicantName`, `fundingYear`,
+`applicationNumber`, `fundingRequestNumber`, `fetchedAt`, `count`, `rows`.
+`--form both` also includes `form470Count` and `form471Count`. Each row has
+`form`, `applicationNumber`, `fundingRequestNumber`, `status`,
+`certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`,
+`requestedAmount`, `preDiscountAmount`, and `source`. Omitted `--app` or
 `--frn` is JSON `null` on the top-level fields. Filing rows leave
-`fundingRequestNumber` as an empty string.
+`fundingRequestNumber` as an empty string. `source` is the Open Data URL.
 
 ### What a row contains
 
@@ -257,9 +294,10 @@ Found 1 Form 471 funding request(s) for BEN 143618, FY 2026.
 Stderr when nothing matches:
 
 ```text
-No certified Form 470 found in currently published data for BEN 143618, FY 2027.
-No application 999 found in published Form 470 data for BEN 143618, FY 2026.
-No Form 471 funding request 2699003124 found in published data for BEN 143618, FY 2026.
+No certified Form 470 found in currently published data for BEN 143618, FY 2027. An empty result is not proof that no filing exists.
+No application 999 found in published Form 470 data for BEN 143618, FY 2026. An empty result is not proof that no filing exists.
+No Form 471 funding request 2699003124 found in published data for BEN 143618, FY 2026. An empty result is not proof that no filing exists.
+No certified Form 470 or Form 471 found in currently published data for BEN 143662, FY 2027. An empty result is not proof that no filing exists.
 ```
 
 The count and the form number follow the query. An empty result is not proof
@@ -298,4 +336,6 @@ Any other exception is not mapped to these codes.
 - `--fy` accepts 2016 through 2100. A year USAC has not published, including
   FY2027 for some BENs, is an empty published result (exit 2), not a bad
   argument.
-- The CLI has no name search, watchlist, budget, or theme flags.
+- `--name` searches the published applicant name for the selected form and funding year. It does not search the local California directory and it does not translate an RFP title into a BEN.
+- `--form both` cannot be combined with `--frn`.
+- The CLI has no watchlist, budget, or theme flags. A Category 2 budget helper is not part of 1.0.5.
