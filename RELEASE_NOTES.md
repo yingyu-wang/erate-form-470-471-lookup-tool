@@ -1,8 +1,16 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.6 — unreleased: committed and disbursed amounts from Open Data
+## v1.0.6 — unreleased
 
-Not tagged. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and only with Ying's approval. Release files are unsigned by design. This change adds no signing step, certificate, or signed package.
+Not tagged. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and only with Ying's approval. Release files are unsigned by design. No signing step, certificate, or signed package is added.
+
+### Form 470 Original vs Current diff
+
+- `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
+- An ordinary lookup still collapses to the Current version when USAC published one. The diff query does not require `fcc_form_470_status='Certified'`.
+- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions.
+
+### Committed and disbursed amounts from Open Data
 
 - `--frn` reads committed, FCDL, and disbursed fields from the public USAC Open Data FRN Status dataset `qdmp-ygft`. The command does not sign in to EPC and does not scrape EPC.
 - CLI table, CSV, and JSON add `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. Form 470 and Form 471 application rows leave those columns blank. Desktop, Mac, Linux, and Android exports are unchanged.

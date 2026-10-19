@@ -31,6 +31,11 @@ public class LiveUsacTests
             Assert.All(older471.Data, filing => Assert.Equal("106359", filing.Ben));
             var future471 = await live.GetFilingsAsync("106359", 2027, FilingForm.Form471, true, default);
             Assert.NotNull(future471.Data);
+            var versions = await live.GetForm470VersionRowsAsync("16057656", null, 2027, "270000266", true, default);
+            Assert.Contains(versions.Data, row => row.Number == "270000266" && row.Version == "Original");
+            Assert.Contains(versions.Data, row => row.Number == "270000266" && row.Version == "Current");
+            Assert.All(versions.Data, row => Assert.Equal("270000266", row.Number));
+            Assert.NotNull(Form470Diff.Compare(versions.Data));
         }
         finally
         {
