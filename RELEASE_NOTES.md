@@ -1,5 +1,14 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
+## v1.0.6 — unreleased: Form 470 Original vs Current diff
+
+Draft for review. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`. Release files are unsigned by design.
+
+- `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
+- An ordinary lookup still collapses to the Current version when USAC published one. The diff query does not require `fcc_form_470_status='Certified'`.
+- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions.
+- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key.
+
 ## v1.0.5 — draft, October 19, 2026: applicant search and linked forms
 
 Draft for review. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`. Release files are unsigned by design.

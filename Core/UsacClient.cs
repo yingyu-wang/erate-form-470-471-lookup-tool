@@ -36,6 +36,37 @@ public sealed class UsacRow
     [JsonPropertyName("pre_discount_eligible_amount")] public string PreDiscountAmount { get; set; } = "";
     [JsonPropertyName("pdf_url")] public string PdfUrl { get; set; } = "";
     [JsonPropertyName("funding_request_number")] public string FundingRequestNumber { get; set; } = "";
+    [JsonPropertyName("service_request_id")] public string ServiceRequestId { get; set; } = "";
+    [JsonPropertyName("service_request_rfp_attachment")][JsonConverter(typeof(SodaTextConverter))] public string RfpAttachmentCount { get; set; } = "";
+    [JsonPropertyName("rfp_documents")]
+    public UrlField? RfpDocuments
+    {
+        get; set;
+    }
+    [JsonPropertyName("rfp_upload_date")] public string RfpUploadDate { get; set; } = "";
+    [JsonPropertyName("rfp_identifier")][JsonConverter(typeof(SodaTextConverter))] public string RfpIdentifier { get; set; } = "";
+    [JsonPropertyName("contact_name")] public string ContactName { get; set; } = "";
+    [JsonPropertyName("contact_email")] public string ContactEmail { get; set; } = "";
+    [JsonPropertyName("contact_phone")] public string ContactPhone { get; set; } = "";
+    [JsonPropertyName("technical_contact_name")] public string TechnicalContactName { get; set; } = "";
+    [JsonPropertyName("technical_contact_email")] public string TechnicalContactEmail { get; set; } = "";
+    [JsonPropertyName("technical_contact_phone")] public string TechnicalContactPhone { get; set; } = "";
+    [JsonPropertyName("authorized_person_name")] public string AuthorizedPersonName { get; set; } = "";
+    [JsonPropertyName("authorized_person_email")] public string AuthorizedPersonEmail { get; set; } = "";
+    [JsonPropertyName("authorized_person_phone")] public string AuthorizedPersonPhone { get; set; } = "";
+    [JsonPropertyName("category_one_description")] public string CategoryOneDescription { get; set; } = "";
+    [JsonPropertyName("category_two_description")] public string CategoryTwoDescription { get; set; } = "";
+    [JsonPropertyName("number_of_eligible_entities")][JsonConverter(typeof(SodaTextConverter))] public string EligibleEntities { get; set; } = "";
+    [JsonPropertyName("other_function")] public string OtherFunction { get; set; } = "";
+    [JsonPropertyName("quantity")][JsonConverter(typeof(SodaTextConverter))] public string Quantity { get; set; } = "";
+    [JsonPropertyName("unit")] public string Unit { get; set; } = "";
+    [JsonPropertyName("minimum_capacity")] public string MinimumCapacity { get; set; } = "";
+    [JsonPropertyName("maximum_capacity")] public string MaximumCapacity { get; set; } = "";
+    [JsonPropertyName("manufacturer")] public string Manufacturer { get; set; } = "";
+    [JsonPropertyName("other_manufacturer")] public string OtherManufacturer { get; set; } = "";
+    [JsonPropertyName("entities")][JsonConverter(typeof(SodaTextConverter))] public string Entities { get; set; } = "";
+    [JsonPropertyName("installation_initial")][JsonConverter(typeof(SodaTextConverter))] public string InstallationInitial { get; set; } = "";
+    [JsonPropertyName("maintenance_technical_support")][JsonConverter(typeof(SodaTextConverter))] public string MaintenanceTechnicalSupport { get; set; } = "";
     [JsonPropertyName("form_pdf")]
     public UrlField? Pdf
     {
@@ -46,6 +77,37 @@ public sealed class UsacRow
 public sealed class UrlField
 {
     [JsonPropertyName("url")] public string Url { get; set; } = "";
+}
+
+/// <summary>
+/// Reads a Socrata value that may arrive as a string, number, or checkbox boolean.
+/// Form 470 rows publish <c>rfp_identifier</c> and similar checkboxes as JSON booleans.
+/// </summary>
+public sealed class SodaTextConverter : JsonConverter<string>
+{
+    public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.String:
+                return reader.GetString() ?? "";
+            case JsonTokenType.Number:
+                return reader.TryGetInt64(out var whole)
+                    ? whole.ToString(CultureInfo.InvariantCulture)
+                    : reader.GetDouble().ToString(CultureInfo.InvariantCulture);
+            case JsonTokenType.True:
+                return "true";
+            case JsonTokenType.False:
+                return "false";
+            case JsonTokenType.Null:
+                return "";
+            default:
+                throw new JsonException("Unexpected JSON token for a USAC field.");
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options) =>
+        writer.WriteStringValue(value);
 }
 
 public sealed record Entity(string Ben, string Name, string City, string State)
@@ -74,6 +136,9 @@ public sealed class UsacClient : IDisposable
 {
     public const string Endpoint = "https://opendata.usac.org/resource/jt8s-3q52.json";
     public const string Form471Endpoint = "https://opendata.usac.org/resource/9s6i-myen.json";
+    public const string Form470VersionOrder = "application_number,form_version,service_request_id,service_request_rfp_attachment";
+    public const string Form470VersionSelect =
+        "application_number,billed_entity_number,billed_entity_name,form_version,form_nickname,fcc_form_470_status,certified_date_time,last_modified_date_time,allowable_contract_date,number_of_eligible_entities,contact_name,contact_email,contact_phone,technical_contact_name,technical_contact_email,technical_contact_phone,authorized_person_name,authorized_person_email,authorized_person_phone,category_one_description,category_two_description,rfp_identifier,service_request_id,service_category,service_type,function,other_function,quantity,unit,minimum_capacity,maximum_capacity,manufacturer,other_manufacturer,entities,installation_initial,maintenance_technical_support,service_request_rfp_attachment,rfp_documents,rfp_upload_date";
     const string Form471Select =
         "application_number,epc_organization_id,organization_name as billed_entity_name,org_city as billed_entity_city,org_state as billed_entity_state,certified_datetime as certified_date_time,last_modified_timestamp as last_modified_date_time,form_version,nickname as form_nickname,chosen_category_of_service as service_category,form_471_status_name as filing_status,file_url as pdf_url,funding_request_amount,pre_discount_eligible_amount";
 
@@ -397,6 +462,61 @@ public sealed class UsacClient : IDisposable
                 }
 
                 return new QueryResult<List<Filing>>(Collapse(all), fetched, cached);
+            }
+        }
+
+        throw new InvalidOperationException("Result limit reached; a complete lookup could not be made.");
+    }
+
+    /// <summary>
+    /// Loads Form 470 Original and Current rows for one applicant and funding year.
+    /// Unlike <see cref="FilingFilter(string,int)"/>, this filter does not require
+    /// <c>fcc_form_470_status='Certified'</c>, so a non-certified Current view stays in the result.
+    /// </summary>
+    public static string Form470VersionFilter(string? ben, string? name, int year, string? applicationNumber)
+    {
+        if (year < 2016 || year > 2100)
+        {
+            throw new ArgumentException("Invalid funding year.");
+        }
+
+        var filter = ApplicantClause(FilingForm.Form470, ben, name)
+            + " AND funding_year="
+            + Literal(year.ToString(CultureInfo.InvariantCulture));
+        if (!string.IsNullOrWhiteSpace(applicationNumber))
+        {
+            filter += " AND application_number=" + Literal(applicationNumber.Trim());
+        }
+
+        return filter;
+    }
+
+    public async Task<QueryResult<List<UsacRow>>> GetForm470VersionRowsAsync(string? ben, string? name, int year, string? applicationNumber, bool refresh, CancellationToken ct)
+    {
+        var filter = Form470VersionFilter(ben, name, year, applicationNumber);
+        var all = new List<UsacRow>();
+        var fetched = DateTimeOffset.MaxValue;
+        var cached = true;
+        for (var offset = 0; offset < 50000; offset += 1000)
+        {
+            var page = await QueryAsync(new Dictionary<string, string>
+            {
+                ["$select"] = Form470VersionSelect,
+                ["$where"] = filter,
+                ["$order"] = Form470VersionOrder,
+                ["$limit"] = "1000",
+                ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
+            }, refresh, ct).ConfigureAwait(false);
+            all.AddRange(page.Data);
+            if (page.FetchedAt < fetched)
+            {
+                fetched = page.FetchedAt;
+            }
+
+            cached &= page.FromCache;
+            if (page.Data.Count < 1000)
+            {
+                return new QueryResult<List<UsacRow>>(all, fetched, cached);
             }
         }
 
