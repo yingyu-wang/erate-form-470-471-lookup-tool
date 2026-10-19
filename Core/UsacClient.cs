@@ -217,7 +217,7 @@ public sealed class UsacClient : IDisposable
     public async Task<QueryResult<List<UsacRow>>> QueryAsync(Dictionary<string, string> parameters, bool refresh, CancellationToken ct, string endpoint = Endpoint)
     {
         var query = EncodeQuery(parameters);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(endpoint + "?" + query)));
+        var hash = CacheKey(endpoint, query);
         if (!refresh)
         {
             var cached = await ReadCacheAsync(hash, ct).ConfigureAwait(false);
@@ -395,6 +395,7 @@ public sealed class UsacClient : IDisposable
 
         var before = await RowsUpdatedAtAsync(datasetId, ct).ConfigureAwait(false);
         var all = new List<UsacRow>();
+        var pageKeys = new List<string>();
         var fetched = DateTimeOffset.MaxValue;
         var cached = true;
         var complete = false;
@@ -412,6 +413,7 @@ public sealed class UsacClient : IDisposable
                 parameters["$select"] = Form471Select;
             }
 
+            pageKeys.Add(CacheKey(endpoint, EncodeQuery(parameters)));
             var page = await QueryAsync(parameters, refresh, ct, endpoint).ConfigureAwait(false);
             all.AddRange(page.Data);
             if (page.FetchedAt < fetched)
@@ -429,12 +431,24 @@ public sealed class UsacClient : IDisposable
 
         if (!complete)
         {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
             throw new InvalidOperationException(ResultLimitMessage);
         }
 
-        var after = await RowsUpdatedAtAsync(datasetId, ct).ConfigureAwait(false);
+        string after;
+        try
+        {
+            after = await RowsUpdatedAtAsync(datasetId, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw;
+        }
+
         if (!string.Equals(before, after, StringComparison.Ordinal))
         {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
             throw new InvalidOperationException(PagingDriftMessage(datasetId, before, after));
         }
 
@@ -499,6 +513,34 @@ public sealed class UsacClient : IDisposable
         }
 
         return text;
+    }
+
+    static string CacheKey(string endpoint, string query) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(endpoint + "?" + query)));
+
+    async Task ForgetCacheAsync(IReadOnlyList<string> hashes, CancellationToken ct)
+    {
+        if (hashes.Count == 0)
+        {
+            return;
+        }
+
+        await cacheGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            foreach (var hash in hashes)
+            {
+                using var delete = cacheConnection.CreateCommand();
+                delete.CommandText = "DELETE FROM query_cache WHERE query_key=$key";
+                delete.Parameters.AddWithValue("$key", hash);
+                delete.ExecuteNonQuery();
+            }
+        }
+        finally
+        {
+            cacheGate.Release();
+        }
     }
 
     async Task<JsonDocument> ReadJsonAsync(string url, CancellationToken ct)

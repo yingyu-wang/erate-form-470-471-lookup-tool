@@ -348,7 +348,9 @@ Any other exception is not mapped to these codes.
   page set.
 - `LoadFilingsAsync` reads `rowsUpdatedAt` from `/api/views/<id>.json` before
   the first page and after the last. If that value changes, it throws
-  `InvalidOperationException` and the CLI exits 4.
+  `InvalidOperationException` and the CLI exits 4. Pages read for that
+  attempt are removed from the local cache, including when the second
+  metadata read fails, so a later lookup does not reuse a mixed set.
 - `--fy` accepts 2016 through 2100. A year USAC has not published, including
   FY2027 for some BENs, is an empty published result (exit 2), not a bad
   argument.

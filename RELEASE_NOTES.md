@@ -5,7 +5,7 @@
 Unreleased. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`. Release files are unsigned by design.
 
 - Form 471 paging orders by `application_number`, `form_version`, `last_modified_timestamp`, and Socrata `:id`, so rows that share the other sort values cannot be skipped or repeated at a page boundary.
-- Offset paging reads the dataset view's `rowsUpdatedAt` before the first page and after the last. If it changes, the lookup fails instead of returning a mix of pages.
+- Offset paging reads the dataset view's `rowsUpdatedAt` before the first page and after the last. If it changes, the lookup fails instead of returning a mix of pages. Pages from that attempt are dropped from the local cache.
 - A name search with more than 50,000 published rows fails before paging and reports how many rows matched. The message tells the user to narrow the name or pass `--ben`.
 - `CliOptions` and `CliRow` are internal to the command-line program. The test project is the only other assembly that can see them.
 - The nightly USAC script checks that the quoted Form 470 source link for application 270000594 still returns rows.

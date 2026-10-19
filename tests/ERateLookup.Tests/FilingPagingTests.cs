@@ -47,6 +47,13 @@ public class FilingPagingTests
             var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetFilingsAsync("101552", 2026, true, default));
             Assert.Equal(UsacClient.PagingDriftMessage("jt8s-3q52", "10", "11"), error.Message);
             Assert.Equal(2, handler.ViewRequests);
+            Assert.Equal(1, handler.PageRequests);
+            handler.Drift = false;
+            handler.Page = """[{"application_number":"470-2","billed_entity_number":"101552","form_version":"Current"}]""";
+            var again = await client.GetFilingsAsync("101552", 2026, false, default);
+            Assert.False(again.FromCache);
+            Assert.Equal("470-2", Assert.Single(again.Data).Number);
+            Assert.Equal(2, handler.PageRequests);
         }
         finally
         {
@@ -107,17 +114,18 @@ public class FilingPagingTests
 
     sealed class PagingHandler : HttpMessageHandler
     {
-        readonly string page;
         readonly long count;
-        readonly bool drift;
+        public string Page { get; set; }
+        public bool Drift { get; set; }
         public List<string> Urls { get; } = new();
-        public int ViewRequests;
+        public int ViewRequests { get; private set; }
+        public int PageRequests { get; private set; }
 
         public PagingHandler(string page, long count = 1, bool drift = false)
         {
-            this.page = page;
+            Page = page;
             this.count = count;
-            this.drift = drift;
+            Drift = drift;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -129,7 +137,7 @@ public class FilingPagingTests
             if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
             {
                 ViewRequests++;
-                var stamp = drift && ViewRequests > 1 ? "11" : "10";
+                var stamp = Drift && ViewRequests > 1 ? "11" : "10";
                 body = "{\"rowsUpdatedAt\":" + stamp + "}";
             }
             else if (query.Contains("count(*)", StringComparison.Ordinal))
@@ -138,7 +146,8 @@ public class FilingPagingTests
             }
             else
             {
-                body = page;
+                PageRequests++;
+                body = Page;
             }
 
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
