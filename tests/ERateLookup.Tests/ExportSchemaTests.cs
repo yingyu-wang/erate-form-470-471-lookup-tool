@@ -261,6 +261,33 @@ public class ExportSchemaTests
     }
 
     [Fact]
+    public void WriteJsonStopsBetweenRowsWhenCanceled()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var canceled = new CancellationTokenSource();
+            var rows = new[]
+            {
+                new CancelingRow("1", canceled, stop: false),
+                new CancelingRow("2", canceled, stop: true),
+            };
+            var metadata = new ExportMetadata { FundingYear = 2026, FetchedAt = DateTimeOffset.UnixEpoch };
+            var writer = new StringWriter();
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteJson(writer, metadata, rows, canceled.Token));
+            Assert.Equal("", writer.ToString());
+            var path = Path.Combine(directory, "rows.json");
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteJson(path, metadata, rows, canceled.Token));
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void WriteJsonHonorsCancellationBeforeWriting()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
@@ -310,4 +337,32 @@ public class ExportSchemaTests
     }
 
     sealed record SampleJsonRow(string ApplicationNumber, string Source);
+
+    sealed class CancelingRow
+    {
+        readonly CancellationTokenSource cancel;
+        readonly bool stop;
+
+        public CancelingRow(string applicationNumber, CancellationTokenSource cancel, bool stop)
+        {
+            ApplicationNumber = applicationNumber;
+            this.cancel = cancel;
+            this.stop = stop;
+        }
+
+        public string ApplicationNumber { get; }
+
+        public string Source
+        {
+            get
+            {
+                if (stop)
+                {
+                    cancel.Cancel();
+                }
+
+                return ApplicationNumber;
+            }
+        }
+    }
 }
