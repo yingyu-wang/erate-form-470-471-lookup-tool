@@ -36,6 +36,13 @@ public sealed class UsacRow
     [JsonPropertyName("pre_discount_eligible_amount")] public string PreDiscountAmount { get; set; } = "";
     [JsonPropertyName("pdf_url")] public string PdfUrl { get; set; } = "";
     [JsonPropertyName("funding_request_number")] public string FundingRequestNumber { get; set; } = "";
+    // Published FRN Status (qdmp-ygft) fields. CommittedAmount is not stored here.
+    // FrnCommitment maps funding_commitment_request when the status is Funded.
+    // That mapping is an inference; Q8 (confirming it against an FCDL) is pending.
+    [JsonPropertyName("funding_commitment_request")] public string FundingCommitmentRequest { get; set; } = "";
+    [JsonPropertyName("fcdl_letter_date")] public string FcdlLetterDate { get; set; } = "";
+    [JsonPropertyName("revised_fcdl_date")] public string RevisedFcdlDate { get; set; } = "";
+    [JsonPropertyName("total_authorized_disbursement")] public string TotalAuthorizedDisbursement { get; set; } = "";
     [JsonPropertyName("form_pdf")]
     public UrlField? Pdf
     {
@@ -74,6 +81,15 @@ public sealed class UsacClient : IDisposable
 {
     public const string Endpoint = "https://opendata.usac.org/resource/jt8s-3q52.json";
     public const string Form471Endpoint = "https://opendata.usac.org/resource/9s6i-myen.json";
+    public const string FrnStatusEndpoint = "https://opendata.usac.org/resource/qdmp-ygft.json";
+
+    // Current rows from FRN Status (qdmp-ygft). funding_commitment_request is
+    // selected under its published name and again as funding_request_amount so
+    // the existing RequestedAmount column stays the published after-discount
+    // figure. CommittedAmount is not that alias. See FrnCommitment.
+    public const string FrnStatusSelect =
+        "funding_request_number,application_number,ben as billed_entity_number,organization_name as billed_entity_name,form_471_frn_status_name as filing_status,nickname as form_nickname,form_471_service_type_name as service_type,funding_commitment_request,funding_commitment_request as funding_request_amount,fcdl_letter_date,revised_fcdl_date,total_authorized_disbursement,form_version";
+
     const string Form471Select =
         "application_number,epc_organization_id,organization_name as billed_entity_name,org_city as billed_entity_city,org_state as billed_entity_state,certified_datetime as certified_date_time,last_modified_timestamp as last_modified_date_time,form_version,nickname as form_nickname,chosen_category_of_service as service_category,form_471_status_name as filing_status,file_url as pdf_url,funding_request_amount,pre_discount_eligible_amount";
 

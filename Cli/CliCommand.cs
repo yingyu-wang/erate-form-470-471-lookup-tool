@@ -32,7 +32,7 @@ public static class CliCommand
     public const int ExitNotFound = 2;
     public const int ExitUsacUnreachable = 3;
     public const int ExitLookupFailed = 4;
-    public const string FrnEndpoint = "https://opendata.usac.org/resource/qdmp-ygft.json";
+    public const string FrnEndpoint = UsacClient.FrnStatusEndpoint;
 
     public const string HelpText = """
         E-rate Form 470 / 471 lookup
@@ -60,6 +60,11 @@ public static class CliCommand
         Every result row includes its USAC Open Data source link. The lookup is
         read-only: it does not create, change, certify, or submit a filing.
         Results are an observation of published data, not proof that no filing exists.
+
+        With --frn, each row also includes FrnStatus, CommittedAmount, FcdlDate,
+        RevisedFcdlDate, and DisbursedAmount from the public FRN Status dataset.
+        CommittedAmount is filled only when the published FRN status is Funded.
+        Application lookups leave those five columns blank. There is no EPC sign-in.
 
         Exit codes:
           0  At least one published row matched
@@ -270,7 +275,7 @@ public static class CliCommand
             where += " AND funding_request_number=" + UsacClient.Literal(options.FundingRequestNumber);
         return await client.QueryAsync(new Dictionary<string, string>
         {
-            ["$select"] = "funding_request_number,application_number,ben as billed_entity_number,organization_name as billed_entity_name,form_471_frn_status_name as filing_status,nickname as form_nickname,form_471_service_type_name as service_type,funding_commitment_request as funding_request_amount,form_version",
+            ["$select"] = UsacClient.FrnStatusSelect,
             ["$where"] = where,
             ["$order"] = "funding_request_number",
             ["$limit"] = "1000"
@@ -349,20 +354,36 @@ public static class CliCommand
         filing.PreDiscountAmount,
         UsacSources.Application(form, filing.Number));
 
-    static CliRow ToFrnRow(UsacRow row) => new(
-        (int)FilingForm.Form471,
-        row.Number,
-        row.FundingRequestNumber,
-        string.IsNullOrWhiteSpace(row.Status) ? "Unknown" : row.Status,
-        UsacTimestamps.CalendarDate(row.Certified),
-        row.Nickname,
-        row.Ben,
-        row.Name,
-        row.Service,
-        row.Pdf?.Url ?? row.PdfUrl,
-        row.RequestedAmount,
-        row.PreDiscountAmount,
-        UsacSources.FundingRequest(row.FundingRequestNumber, row.Number));
+    static CliRow ToFrnRow(UsacRow row)
+    {
+        // [Inference] CommittedAmount copies funding_commitment_request only when
+        // the published FRN status is Funded. Q8 (FCDL confirmation) is pending.
+        var commitment = FrnCommitment.FromPublished(
+            row.Status,
+            row.FundingCommitmentRequest,
+            row.FcdlLetterDate,
+            row.RevisedFcdlDate,
+            row.TotalAuthorizedDisbursement);
+        return new(
+            (int)FilingForm.Form471,
+            row.Number,
+            row.FundingRequestNumber,
+            string.IsNullOrWhiteSpace(row.Status) ? "Unknown" : row.Status,
+            UsacTimestamps.CalendarDate(row.Certified),
+            row.Nickname,
+            row.Ben,
+            row.Name,
+            row.Service,
+            row.Pdf?.Url ?? row.PdfUrl,
+            row.RequestedAmount,
+            row.PreDiscountAmount,
+            UsacSources.FundingRequest(row.FundingRequestNumber, row.Number),
+            commitment.FrnStatus,
+            commitment.CommittedAmount,
+            commitment.FcdlDate,
+            commitment.RevisedFcdlDate,
+            commitment.DisbursedAmount);
+    }
 
     static string Render(CliOptions options, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
     {
@@ -401,10 +422,12 @@ public static class CliCommand
             return JsonSerializer.Serialize(payload, JsonOptions);
         }
 
-        var table = new List<string[]>
+        var header = new List<string>
         {
-            new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count" }
+            "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count"
         };
+        header.AddRange(FrnCommitment.Columns);
+        var table = new List<string[]> { header.ToArray() };
         foreach (var row in TableRows(options, rows, form470Count, form471Count))
             table.Add(row);
 
@@ -443,7 +466,12 @@ public static class CliCommand
                 row.Source,
                 linked,
                 count470,
-                count471
+                count471,
+                row.FrnStatus,
+                row.CommittedAmount,
+                row.FcdlDate,
+                row.RevisedFcdlDate,
+                row.DisbursedAmount
             ];
         }
     }
@@ -551,4 +579,9 @@ public sealed record CliRow(
     string Pdf,
     string RequestedAmount,
     string PreDiscountAmount,
-    string Source);
+    string Source,
+    string FrnStatus = "",
+    string CommittedAmount = "",
+    string FcdlDate = "",
+    string RevisedFcdlDate = "",
+    string DisbursedAmount = "");
