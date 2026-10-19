@@ -53,7 +53,8 @@ public static class CliCommand
           --help, -h           Show this help
 
         Search by BEN, by the published applicant name, or by both. --form both
-        reads Form 470 and Form 471 for that applicant and year. A published
+        reads Form 470 and Form 471 for that applicant and year. A name-only
+        link is printed only when every row shares one published BEN. A published
         Form 470 does not establish a Form 471.
 
         Every result row includes its USAC Open Data source link. The lookup is
@@ -215,6 +216,7 @@ public static class CliCommand
                 rows = filings470.Select(filing => ToFilingRow(FilingForm.Form470, filing))
                     .Concat(filings471.Select(filing => ToFilingRow(FilingForm.Form471, filing)))
                     .ToList();
+                EnsureLinkedApplicant(options, rows);
             }
             else
             {
@@ -277,6 +279,43 @@ public static class CliCommand
 
     static Task<QueryResult<List<Filing>>> SearchAsync(UsacClient client, CliOptions options, FilingForm form, CancellationToken cancellationToken) =>
         client.SearchFilingsAsync(options.Ben, options.ApplicantName, options.FundingYear, form, true, cancellationToken);
+
+    static void EnsureLinkedApplicant(CliOptions options, IReadOnlyList<CliRow> rows)
+    {
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        if (options.Ben is not null)
+        {
+            var other = rows
+                .Select(row => row.Ben)
+                .Where(ben => !string.IsNullOrWhiteSpace(ben) && !string.Equals(ben, options.Ben, StringComparison.Ordinal))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (other.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "The published rows include BEN " + string.Join(", ", other) + " in addition to requested BEN " + options.Ben + ". Pass one BEN to link Form 470 and Form 471 for that applicant.");
+            }
+
+            return;
+        }
+
+        if (rows.Any(row => string.IsNullOrWhiteSpace(row.Ben)))
+        {
+            throw new InvalidOperationException(
+                "A published row did not include a BEN, so Form 470 and Form 471 were not linked as one applicant. Pass --ben to choose one applicant.");
+        }
+
+        var bens = rows.Select(row => row.Ben).Distinct(StringComparer.Ordinal).ToList();
+        if (bens.Count > 1)
+        {
+            throw new InvalidOperationException(
+                "The published name matches more than one BEN (" + string.Join(", ", bens) + "). Pass --ben to choose one applicant.");
+        }
+    }
 
     static List<Filing> ApplyApplicationFilter(CliOptions options, IReadOnlyList<Filing> filings)
     {

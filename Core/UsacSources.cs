@@ -27,7 +27,12 @@ public static class UsacSources
             return Record(FundingRequestDataset, "funding_request_number", fundingRequestNumber);
         }
 
-        return Application(FilingForm.Form471, applicationNumber);
+        if (!string.IsNullOrWhiteSpace(applicationNumber))
+        {
+            return Record(FundingRequestDataset, "application_number", applicationNumber);
+        }
+
+        return Record(FundingRequestDataset, "funding_request_number", "");
     }
 
     public static string Record(string datasetId, string field, string value)

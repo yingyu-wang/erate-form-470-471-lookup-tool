@@ -234,9 +234,9 @@ public class CliCommandTests
         Assert.DoesNotContain("billed_entity_number", filter, StringComparison.Ordinal);
 
         var linked = UsacClient.SearchFilter("143662", "O'Brien", 2027, FilingForm.Form471);
-        Assert.Contains("epc_organization_id='143662'", linked, StringComparison.Ordinal);
-        Assert.Contains("contains(upper(organization_name),'O''BRIEN')", linked, StringComparison.Ordinal);
-        Assert.Contains("certified_datetime IS NOT NULL", linked, StringComparison.Ordinal);
+        Assert.Equal(
+            "epc_organization_id='143662' AND contains(upper(organization_name),'O''BRIEN') AND funding_year='2027' AND certified_datetime IS NOT NULL",
+            linked);
     }
 
     [Fact]
@@ -246,7 +246,13 @@ public class CliCommandTests
         Assert.StartsWith("https://opendata.usac.org/resource/jt8s-3q52.json?", url, StringComparison.Ordinal);
         var text = Uri.UnescapeDataString(url);
         Assert.Contains("application_number='260007116'", text, StringComparison.Ordinal);
-        Assert.Contains("qdmp-ygft", UsacSources.FundingRequest("2699003124", "261003372"), StringComparison.Ordinal);
+        var frn = Uri.UnescapeDataString(UsacSources.FundingRequest("2699003124", "261003372"));
+        Assert.Contains("qdmp-ygft", frn, StringComparison.Ordinal);
+        Assert.Contains("funding_request_number='2699003124'", frn, StringComparison.Ordinal);
+        var fallback = Uri.UnescapeDataString(UsacSources.FundingRequest("", "261003372"));
+        Assert.Contains("qdmp-ygft", fallback, StringComparison.Ordinal);
+        Assert.Contains("application_number='261003372'", fallback, StringComparison.Ordinal);
+        Assert.DoesNotContain("9s6i-myen", fallback, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -440,8 +446,39 @@ public class CliCommandTests
             Assert.Equal("true", parsed[2][14]);
             Assert.Equal("1", parsed[1][15]);
             Assert.Equal("1", parsed[1][16]);
+            Assert.Equal("1", parsed[2][15]);
+            Assert.Equal("1", parsed[2][16]);
             Assert.Equal("143662", parsed[1][2]);
             Assert.Equal("2027", parsed[1][1]);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task NameOnlyLinkRequiresOnePublishedBen()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new RoutingHandler(url => url.Contains("9s6i-myen", StringComparison.Ordinal)
+                ? """[{"application_number":"271000001","epc_organization_id":"143663","billed_entity_number":"143663","billed_entity_name":"San Diego School Dist-Area 1","form_version":"Current","filing_status":"Certified","certified_date_time":"2026-02-01T00:00:00.000"}]"""
+                : """[{"application_number":"270000001","billed_entity_number":"143662","billed_entity_name":"SAN DIEGO CITY UNIF SCH DIST","fcc_form_470_status":"Certified","form_version":"Current","certified_date_time":"2026-07-23T00:00:00.000"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, year: 2027) with { Form = null, LinkForms = true, Ben = null, ApplicantName = "San Diego" };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitLookupFailed, code);
+            Assert.Equal(string.Empty, stdout.ToString());
+            var message = stderr.ToString();
+            Assert.Contains("were not linked", message, StringComparison.Ordinal);
+            Assert.Contains("143662", message, StringComparison.Ordinal);
+            Assert.Contains("143663", message, StringComparison.Ordinal);
+            Assert.Contains("--ben", message, StringComparison.Ordinal);
         }
         finally
         {
