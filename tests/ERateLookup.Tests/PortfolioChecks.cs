@@ -60,7 +60,11 @@ public class PortfolioChecks
             session.LoadSaved(new[] { keys[0] }); Check(session.Rows.Single().Note.StartsWith("Saved / offline"), "Complete saved snapshots open offline");
             var row = session.Rows.Single(); session.Selected.Add(row.Id);
             Check(session.Filter("district", "wireless").Count == 1 && session.Filter("district", "switch").Count == 0 && session.Selected.Count == 1, "Filters combine and preserve hidden selection");
-            Check(session.ExportRows().Count == 2 && session.ExportRows()[1][4] == "1", "Selected export contains the intended query identity");
+            var exported = session.ExportRows();
+            var benColumn = Array.IndexOf(exported[0], "BEN");
+            Check(exported.Count == 2 && benColumn == 2 && exported[1][benColumn] == "1", "Selected export contains the intended query identity");
+            Check(exported[0].SequenceEqual(ExportSchema.Columns(new ExportColumns { IncludePortfolio = true })), "Portfolio export is the base schema plus four trailing columns");
+            Check(!exported[0].Contains("BudgetCycle") && !exported[0].Contains("Customer") && exported[0][^4] == "LookupOutcome" && exported[0][^1] == "AllowableContractDate", "Portfolio export drops budget columns and keeps the four trailing names");
             var count = handler.Count; using var canceled = new CancellationTokenSource(); canceled.Cancel(); await session.RefreshAsync(keys, null, canceled.Token);
             Check(handler.Count == count && session.Rows.All(r => r.Outcome == "Not started"), "Canceled batch does not start pending requests");
             Check(PortfolioInsights.ContractDate(Filing("1")) == "2026-10-29" && PortfolioInsights.ContractDate(Filing("1") with { AllowableContractDate = "n/a" }) == "Unknown", "Source contract dates preserve date precision and missing values");

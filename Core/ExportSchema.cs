@@ -1,13 +1,14 @@
 using System.Globalization;
+using System.Text.Json.Serialization;
 
 namespace ERateLookup.Core;
 
 /// <summary>
-/// Shared lookup export columns. <see cref="BaseColumns"/> is the shared list.
+/// Shared lookup export columns. App lookup CSV and Excel use <see cref="BaseColumns"/>.
 /// The command-line table and CSV use <see cref="CliColumns"/>, which appends
 /// the FRN commitment columns. Other groups stay out until
 /// <see cref="ExportColumns"/> selects them.
-/// App and portfolio files still write their current headers.
+/// Category 2 budget columns are the budget group only.
 /// </summary>
 public static class ExportSchema
 {
@@ -53,8 +54,8 @@ public static class ExportSchema
     ];
 
     /// <summary>
-    /// Current app and portfolio headers that correspond to a unified name.
-    /// Nothing reads this while those exports keep their current headers.
+    /// App headers renamed so CSV and Excel match <see cref="BaseColumns"/>.
+    /// The key is the header written before this change. The value is the header written now.
     /// </summary>
     public static IReadOnlyDictionary<string, string> PendingHeaderRenames
     {
@@ -164,6 +165,40 @@ public static class ExportSchema
         row with
         {
             Ben = string.IsNullOrEmpty(row.Ben) ? queryBen ?? "" : row.Ben
+        };
+
+    /// <summary>
+    /// CamelCase JSON row for an app lookup. It matches the command-line row through <c>source</c>.
+    /// The command line adds the five FRN Status fields on its own row type.
+    /// Portfolio-only properties stay null here, so a lookup document omits them.
+    /// </summary>
+    public static ExportJsonRow ToJsonRow(ExportRow row) =>
+        new(
+            int.Parse(row.Form, CultureInfo.InvariantCulture),
+            row.ApplicationNumber,
+            row.FundingRequestNumber,
+            row.Status,
+            row.CertifiedDate,
+            row.Nickname,
+            row.Ben,
+            row.Name,
+            row.Services,
+            row.Pdf,
+            row.RequestedAmount,
+            row.PreDiscountAmount,
+            row.Source);
+
+    /// <summary>
+    /// Same JSON row as <see cref="ToJsonRow"/>, plus the four portfolio fields.
+    /// Empty portfolio fields are written as empty strings.
+    /// </summary>
+    public static ExportJsonRow ToPortfolioJsonRow(ExportRow row) =>
+        ToJsonRow(row) with
+        {
+            LookupOutcome = row.LookupOutcome,
+            Change = row.Change,
+            SourceAndNotes = row.SourceAndNotes,
+            AllowableContractDate = row.AllowableContractDate,
         };
 
     static string CountText(int? count) => count?.ToString(CultureInfo.InvariantCulture) ?? "";
@@ -336,7 +371,7 @@ public sealed class ExportMetadata
         get; init;
     }
 
-    public int FundingYear
+    public int? FundingYear
     {
         get; init;
     }
@@ -355,4 +390,72 @@ public sealed class ExportMetadata
     {
         get; init;
     }
+}
+
+/// <summary>
+/// JSON row in the command-line camelCase shape through <c>source</c>. <c>form</c> is a number.
+/// App rows omit the five FRN Status fields. The four portfolio properties are omitted when null.
+/// </summary>
+public sealed record ExportJsonRow(
+    int Form,
+    string ApplicationNumber,
+    string FundingRequestNumber,
+    string Status,
+    string CertifiedDate,
+    string Nickname,
+    string Ben,
+    string Name,
+    string Services,
+    string Pdf,
+    string RequestedAmount,
+    string PreDiscountAmount,
+    string Source)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LookupOutcome
+    {
+        get; init;
+    }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Change
+    {
+        get; init;
+    }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceAndNotes
+    {
+        get; init;
+    }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AllowableContractDate
+    {
+        get; init;
+    }
+}
+
+/// <summary>
+/// One lookup or portfolio export, ready for CSV, Excel, or JSON.
+/// </summary>
+public sealed class PreparedExport
+{
+    public required List<string[]> Table
+    {
+        get; init;
+    }
+
+    public required ExportMetadata Metadata
+    {
+        get; init;
+    }
+
+    public required IReadOnlyList<ExportJsonRow> JsonRows
+    {
+        get; init;
+    }
+
+    public void Write(string path, CancellationToken cancellationToken = default) =>
+        DataExporter.WritePrepared(path, Table, Metadata, JsonRows, cancellationToken);
 }

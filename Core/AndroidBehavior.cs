@@ -4,6 +4,28 @@ public static class AndroidBehavior
 {
     public const int PageSize = 50;
 
+    public const string CsvContentType = "text/csv";
+
+    public const string JsonContentType = "application/json";
+
+    public const string ExcelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    /// <summary>
+    /// Maps an export extension to the Android document MIME type.
+    /// Accepts <c>csv</c>, <c>json</c>, and <c>xlsx</c>, with or without a leading dot.
+    /// </summary>
+    public static string ExportContentType(string extension)
+    {
+        var normalized = extension.Trim().TrimStart('.').ToLowerInvariant();
+        return normalized switch
+        {
+            "csv" => CsvContentType,
+            "json" => JsonContentType,
+            "xlsx" => ExcelContentType,
+            _ => throw new ArgumentException("Export extension must be csv, json, or xlsx.")
+        };
+    }
+
     public static int PageCount(int count) => Math.Max(1, (count + PageSize - 1) / PageSize);
 
     public static IEnumerable<T> Page<T>(IReadOnlyList<T> items, int page) =>

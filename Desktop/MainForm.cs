@@ -22,7 +22,7 @@ public sealed class MainForm : Form
     private readonly DataGridView grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, MultiSelect = true, SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoGenerateColumns = false, RowHeadersVisible = false, BackgroundColor = Color.White, BorderStyle = BorderStyle.None };
     private readonly Label details = new() { AutoSize = true, MaximumSize = new Size(1000, 0) };
     private readonly Button open = new() { Text = "Open selected Form 470", AutoSize = true };
-    private readonly Button export = new() { Text = "Export selected CSV / Excel", AutoSize = true };
+    private readonly Button export = new() { Text = "Export selected (CSV / Excel / JSON)", AutoSize = true };
     private readonly Button selectAll = new() { Text = "Select all", AutoSize = true, Enabled = false };
     private readonly Button unselectAll = new() { Text = "Unselect all", AutoSize = true, Enabled = false };
     private readonly Label selectionCount = new() { Text = "0 selected", AutoSize = true, Margin = new Padding(8, 10, 8, 0) };
@@ -299,13 +299,13 @@ public sealed class MainForm : Form
         var selectedNumbers = grid.SelectedRows.Cast<DataGridViewRow>().Select(r => (r.DataBoundItem as Filing)?.Number).OfType<string>().ToHashSet();
         var selectedResults = results.Where(r => selectedNumbers.Contains(r.Number)).ToList();
         if (results.Count > 0 && selectedResults.Count == 0) { MessageBox.Show(this, "Select at least one filing to export. Use Ctrl-click or Select all."); return; }
-        using var dialog = new SaveFileDialog() { Filter = "CSV files (*.csv)|*.csv|Excel workbook (*.xlsx)|*.xlsx", FileName = $"Form{(int)selectedForm}_{selectedBen}_FY{selectedYear}", DefaultExt = "csv", AddExtension = true }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        using var dialog = new SaveFileDialog() { Filter = "CSV files (*.csv)|*.csv|Excel workbook (*.xlsx)|*.xlsx|JSON (*.json)|*.json", FileName = $"Form{(int)selectedForm}_{selectedBen}_FY{selectedYear}", DefaultExt = "csv", AddExtension = true }; if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
-            var rows = screen.ExportRows(selectedYear, selectedForm, selectedBen, customer.Text, lookupFetched, results, selectedNumbers, hasCycle470);
-            var excel = dialog.FilterIndex == 2 || Path.GetExtension(dialog.FileName).Equals(".xlsx", StringComparison.OrdinalIgnoreCase);
-            if (excel) DataExporter.WriteExcel(dialog.FileName, rows); else DataExporter.WriteCsv(dialog.FileName, rows);
-            status.Text = $"Exported {selectedResults.Count} selected filing(s) to " + dialog.FileName;
+            var prepared = screen.CreateExport(selectedYear, selectedForm, selectedBen, customer.Text, lookupFetched, results, selectedNumbers, hasCycle470);
+            var path = DataExporter.ApplySaveFilterExtension(dialog.FileName, dialog.FilterIndex, ".csv", ".xlsx", ".json");
+            prepared.Write(path);
+            status.Text = $"Exported {selectedResults.Count} selected filing(s) to " + path;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { AppLog.Error(ex, "Export filings"); MessageBox.Show(this, "Export failed: " + ex.Message); }
     }

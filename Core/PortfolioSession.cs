@@ -167,18 +167,57 @@ public sealed class PortfolioSession
             Store.Acknowledge(key, sequence);
         Rows = Rows.Select(r => r with { Change = "" }).ToList();
     }
-    public List<string[]> ExportRows(CaliforniaDirectory? directory = null)
+    public List<string[]> ExportRows(CaliforniaDirectory? directory = null) => CreateExport(directory).Table;
+
+    /// <summary>
+    /// Base columns plus <c>LookupOutcome</c>, <c>Change</c>, <c>SourceAndNotes</c>, and <c>AllowableContractDate</c>.
+    /// <paramref name="directory"/> is unused. Budget columns stay in the optional budget group and are not written.
+    /// </summary>
+    public PreparedExport CreateExport(CaliforniaDirectory? directory = null)
     {
-        var rows = new List<string[]> { new[] { "ExportedUTC", "LookupFetchedUTC", "DirectoryUpdatedUTC", "FundingYear", "BEN", "Customer", "FormType", "ApplicationNumber", "FilingStatus", "CertifiedDate", "Nickname", "Services", "PDF", "BudgetCycle", "USACBudgetStatus", "BudgetDisplayStatus", "TotalC2BudgetPreDiscount", "CommittedC2BudgetPreDiscount", "PendingC2BudgetPreDiscount", "ReportedRemainingC2BudgetPreDiscount", "LookupOutcome", "Change", "SourceAndNotes", "AllowableContractDate", "RequestedFundingUSD", "PreDiscountEligibleUSD" } };
-        var exported = DateTimeOffset.UtcNow.ToString("O");
-        foreach (var r in Rows.Where(r => Selected.Contains(r.Id)))
-        {
-            var b = directory?.GetBudget(r.Query.Ben, r.Query.Year);
-            rows.Add(new[] { exported, r.Observed?.ToString("O") ?? "", directory?.LastUpdated ?? "Unknown", r.Query.Year.ToString(CultureInfo.InvariantCulture), r.Query.Ben, r.Filing?.Name ?? "", ((int)r.Query.Form).ToString(CultureInfo.InvariantCulture), r.Filing?.Number ?? "", r.Filing?.Status ?? "", r.Filing?.Certified ?? "", r.Filing?.Nickname ?? "", r.Filing?.Services ?? "", r.Filing?.Pdf ?? "", b?.Cycle ?? "Not reported", b?.Version ?? "Not reported", b is null ? "Not reported" : BudgetRow.ForecastView(b.Version, null) ? "Forecast" : b.Version, b?.Total ?? "Not reported", b?.Committed ?? "Not reported", b?.Pending ?? "Not reported", b?.Available ?? "Not reported", r.Outcome, r.Change, r.Note, PortfolioInsights.ContractDate(r.Filing), string.IsNullOrWhiteSpace(r.Filing?.RequestedAmount) ? "Not reported" : r.Filing.RequestedAmount, string.IsNullOrWhiteSpace(r.Filing?.PreDiscountAmount) ? "Not reported" : r.Filing.PreDiscountAmount });
-        }
-        if (rows.Count == 1)
+        _ = directory;
+        var selected = Rows.Where(row => Selected.Contains(row.Id)).ToList();
+        if (selected.Count == 0)
             throw new InvalidOperationException("Select at least one result to export.");
-        return rows;
+        var columns = new ExportColumns { IncludePortfolio = true };
+        var table = new List<string[]> { ExportSchema.Columns(columns).ToArray() };
+        var jsonRows = new List<ExportJsonRow>(selected.Count);
+        foreach (var row in selected)
+        {
+            var filing = row.Filing ?? new Filing("", row.Query.Ben, "", "", "", "", "");
+            var published = ExportSchema.FromFiling(row.Query.Form, filing, row.Query.Year, false, null, null) with
+            {
+                LookupOutcome = row.Outcome,
+                Change = row.Change,
+                SourceAndNotes = row.Note,
+                AllowableContractDate = PortfolioInsights.ContractDate(row.Filing),
+            };
+            if (string.IsNullOrWhiteSpace(filing.Number))
+                published = published with
+                {
+                    Source = ""
+                };
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(published, row.Query.Ben), columns));
+            jsonRows.Add(ExportSchema.ToPortfolioJsonRow(published));
+        }
+
+        var years = selected.Select(row => row.Query.Year).Distinct().ToArray();
+        var forms = selected.Select(row => (int)row.Query.Form).Distinct().ToArray();
+        var bens = selected.Select(row => row.Query.Ben).Distinct(StringComparer.Ordinal).ToArray();
+        var observed = selected.Where(row => row.Observed is not null).Select(row => row.Observed!.Value).ToArray();
+        return new PreparedExport
+        {
+            Table = table,
+            Metadata = new ExportMetadata
+            {
+                Form = forms.Length == 1 ? forms[0] : null,
+                Linked = false,
+                Ben = bens.Length == 1 ? bens[0] : null,
+                FundingYear = years.Length == 1 ? years[0] : null,
+                FetchedAt = observed.Length == 0 ? DateTimeOffset.UtcNow : observed.Min(),
+            },
+            JsonRows = jsonRows,
+        };
     }
     public string HistorySummary()
     {
