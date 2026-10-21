@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using System.Xml;
 namespace ERateLookup.Core;
 
@@ -104,6 +106,129 @@ public static class DataExporter
         xml.WriteEndElement();
         xml.WriteEndDocument();
     }
+
+    public static void WriteJson<TRow>(string path, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
+    {
+        using var buffer = new StringWriter();
+        WriteJson(buffer, metadata, rows, ct);
+        WriteCompletedText(path, buffer.ToString(), ct);
+    }
+
+    public static void WriteJson<TRow>(TextWriter writer, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(rows);
+        ct.ThrowIfCancellationRequested();
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        {
+            json.WriteStartObject();
+            WriteProperty(json, "form", metadata.Form);
+            json.WriteBoolean("linked", metadata.Linked);
+            if (metadata.Form470Count is int form470Count)
+            {
+                json.WriteNumber("form470Count", form470Count);
+            }
+
+            if (metadata.Form471Count is int form471Count)
+            {
+                json.WriteNumber("form471Count", form471Count);
+            }
+
+            WriteProperty(json, "ben", metadata.Ben);
+            WriteProperty(json, "applicantName", metadata.ApplicantName);
+            json.WriteNumber("fundingYear", metadata.FundingYear);
+            WriteProperty(json, "applicationNumber", metadata.ApplicationNumber);
+            WriteProperty(json, "fundingRequestNumber", metadata.FundingRequestNumber);
+            json.WriteString("fetchedAt", metadata.FetchedAt.ToString("O", CultureInfo.InvariantCulture));
+            json.WriteNumber("count", rows.Count);
+            json.WritePropertyName("rows");
+            json.WriteStartArray();
+            foreach (var row in rows)
+            {
+                ct.ThrowIfCancellationRequested();
+                JsonSerializer.Serialize(json, row, RowJsonOptions);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            json.WriteEndArray();
+            json.WriteEndObject();
+            json.Flush();
+        }
+
+        ct.ThrowIfCancellationRequested();
+        writer.Write(Encoding.UTF8.GetString(buffer.ToArray()));
+        writer.Flush();
+    }
+
+    /// <summary>
+    /// Same envelope as <see cref="WriteJson{TRow}"/>, with each row keyed by the supplied column names.
+    /// The command-line JSON path does not call this.
+    /// </summary>
+    public static void WriteColumnJson(string path, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
+    {
+        using var buffer = new StringWriter();
+        WriteColumnJson(buffer, metadata, columns, rows, ct);
+        WriteCompletedText(path, buffer.ToString(), ct);
+    }
+
+    public static void WriteColumnJson(TextWriter writer, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        ArgumentNullException.ThrowIfNull(rows);
+        var shaped = new Dictionary<string, string>[rows.Count];
+        for (var r = 0; r < rows.Count; r++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var source = rows[r];
+            var shapedRow = new Dictionary<string, string>(columns.Count, StringComparer.Ordinal);
+            for (var c = 0; c < columns.Count; c++)
+            {
+                shapedRow[columns[c]] = source.Length > c ? source[c] : "";
+            }
+
+            shaped[r] = shapedRow;
+        }
+
+        WriteJson(writer, metadata, shaped, ct);
+    }
+
+    static void WriteCompletedText(string path, string text, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        File.WriteAllText(path, text, new UTF8Encoding(false));
+    }
+
+    static void WriteProperty(Utf8JsonWriter json, string name, int? value)
+    {
+        if (value is int number)
+        {
+            json.WriteNumber(name, number);
+        }
+        else
+        {
+            json.WriteNull(name);
+        }
+    }
+
+    static void WriteProperty(Utf8JsonWriter json, string name, string? value)
+    {
+        if (value is null)
+        {
+            json.WriteNull(name);
+        }
+        else
+        {
+            json.WriteString(name, value);
+        }
+    }
+
+    static readonly JsonSerializerOptions RowJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
     private static void WriteText(ZipArchive zip, string name, string text)
     {
         using var stream = zip.CreateEntry(name).Open();

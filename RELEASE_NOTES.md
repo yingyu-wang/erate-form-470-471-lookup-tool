@@ -12,6 +12,13 @@ Not tagged. Do not tag this version until the latest nightly USAC check says `pa
 - `CliOptions` and `CliRow` are internal to the command-line program. The test project is the only other assembly that can see them.
 - The nightly USAC script checks that the quoted Form 470 source link for application 270000594 still returns rows.
 
+### Shared export schema
+
+- Core has one export schema (`ExportSchema`) and a shared JSON writer (`DataExporter.WriteJson`). The command-line table, CSV, and JSON are built from that schema.
+- Category 2 budget columns stay out of the shared base schema. App and portfolio exports still use their current headers and files.
+- The schema records the unified header names (`Name`, `Form`, `Status`, and the other shared columns). A portfolio export is defined as those base columns plus trailing `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
+- Command-line JSON keeps the `CliRow` shape. Table, CSV, and JSON append `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` after the base columns. Those five names stay out of the shared base list. Form 470 and Form 471 application rows leave them blank.
+
 ### Form 470 Original vs Current diff
 
 - `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
@@ -28,7 +35,7 @@ Not tagged. Do not tag this version until the latest nightly USAC check says `pa
 - The FRN query still keeps `form_version='Current'`.
 - Checked 2026-10-19. Current FRN `2099010373` (Webster Groves School District, BEN 136910, FY 2020) was `Funded`, with `funding_commitment_request` `14908.32`, `fcdl_letter_date` `2020-05-09T00:00:00.000`, `revised_fcdl_date` `2026-07-14T00:00:00.000`, and `total_authorized_disbursement` `14908.32`. URL: https://opendata.usac.org/resource/qdmp-ygft.json?funding_request_number=2099010373&$select=funding_request_number,application_number,ben,funding_year,organization_name,form_471_frn_status_name,funding_commitment_request,fcdl_letter_date,revised_fcdl_date,total_authorized_disbursement,form_version,pending_reason
 - Field text is from https://opendata.usac.org/api/views/qdmp-ygft.json read the same day.
-- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key.
+- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key. This version does not add a signing step.
 
 ## v1.0.5 — draft, October 19, 2026: applicant search and linked forms
 
