@@ -58,11 +58,14 @@ public class ExportSchemaTests
         Assert.Equal(
             new[] { "LookupOutcome", "Change", "SourceAndNotes", "AllowableContractDate" },
             ExportSchema.Names(ExportColumnGroup.Portfolio));
+        Assert.Equal(FrnCommitment.Columns, ExportSchema.Names(ExportColumnGroup.FrnCommitment));
+        Assert.Equal(FrnCommitment.Columns, ExportSchema.Columns(ExportSchema.CliColumns).Skip(BaseHeaders.Length));
 
         foreach (var name in ExportSchema.Names(ExportColumnGroup.Budget)
             .Concat(ExportSchema.Names(ExportColumnGroup.LookupTimestamp))
             .Concat(ExportSchema.Names(ExportColumnGroup.LookupContext))
-            .Concat(ExportSchema.Names(ExportColumnGroup.Portfolio)))
+            .Concat(ExportSchema.Names(ExportColumnGroup.Portfolio))
+            .Concat(ExportSchema.Names(ExportColumnGroup.FrnCommitment)))
         {
             Assert.DoesNotContain(name, ExportSchema.BaseColumns);
         }
@@ -73,11 +76,13 @@ public class ExportSchemaTests
             IncludeLookupContext = true,
             IncludeBudget = true,
             IncludePortfolio = true,
+            IncludeFrnCommitment = true,
         };
         var headers = ExportSchema.Columns(selected);
         Assert.Equal(
             ExportSchema.Names(ExportColumnGroup.LookupTimestamp)
                 .Concat(BaseHeaders)
+                .Concat(ExportSchema.Names(ExportColumnGroup.FrnCommitment))
                 .Concat(ExportSchema.Names(ExportColumnGroup.LookupContext))
                 .Concat(ExportSchema.Names(ExportColumnGroup.Budget))
                 .Concat(ExportSchema.Names(ExportColumnGroup.Portfolio)),
@@ -161,6 +166,32 @@ public class ExportSchemaTests
         Assert.Equal("2026-03-01", frn.CertifiedDate);
         Assert.Equal(UsacSources.FundingRequest("", "261003372"), frn.Source);
         Assert.Equal("", frn.Ben);
+        Assert.Equal("", frn.FrnStatus);
+        Assert.Equal("", frn.CommittedAmount);
+
+        var funded = ExportSchema.FromFundingRequest(
+            new UsacRow
+            {
+                Number = "201009092",
+                FundingRequestNumber = "2099010373",
+                Status = "Funded",
+                Name = "Webster Groves School District",
+                Ben = "136910",
+                FundingCommitmentRequest = "14908.32",
+                RequestedAmount = "14908.32",
+                FcdlLetterDate = "2020-05-09T00:00:00.000",
+                RevisedFcdlDate = "2026-07-14T00:00:00.000",
+                TotalAuthorizedDisbursement = "14908.32",
+            },
+            2020,
+            false,
+            null,
+            null);
+        Assert.Equal(
+            new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" },
+            ExportSchema.ToRow(funded, ExportSchema.CliColumns).Skip(BaseHeaders.Length));
+        Assert.Equal("14908.32", funded.RequestedAmount);
+        Assert.Equal(BaseHeaders.Length, ExportSchema.ToRow(funded).Length);
     }
 
     [Fact]
