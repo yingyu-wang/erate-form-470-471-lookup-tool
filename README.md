@@ -88,16 +88,17 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Command line
 
-`ERateLookup.Cli` checks published Form 470 and Form 471 rows from a terminal on Windows, macOS, and Linux. It calls the same read-only USAC lookup as the desktop apps. It does not create, change, certify, or submit a filing. Flags, samples, output formats, exit codes, and build steps are in the [1.0.5 command-line guide](docs/CLI.md). Windows, macOS, and Linux release assets include the CLI starting with v1.0.4. v1.0.5 packages are not published until that version is tagged.
+`ERateLookup.Cli` checks published Form 470 and Form 471 rows from a terminal on Windows, macOS, and Linux. It calls the same read-only USAC lookup as the desktop apps. It does not create, change, certify, or submit a filing. Flags, samples, output formats, exit codes, and build steps are in the [command-line guide](docs/CLI.md). Windows, macOS, and Linux release assets include the CLI starting with v1.0.4. v1.0.5 packages are not published until that version is tagged. v1.0.6 is unreleased.
 
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143662 --fy 2027
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --name "San Diego City" --fy 2027 --csv --output sdusd.csv
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy 2027 --json
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143662 --fy 2027 --xlsx --output sdusd.xlsx
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
 ```
 
-`--diff` compares published Form 470 Original and Current rows from USAC Open Data dataset `jt8s-3q52`. It does not store a local history of intermediate revisions, and it does not determine whether a change was substantial. Search by BEN, by the published applicant name, or by both. `--form both` lists Form 470 and Form 471 for that applicant and funding year. A name-only link is printed only when every row shares one published BEN. A published Form 470 does not establish a Form 471. Every table, CSV, and JSON row includes a USAC Open Data source link. The published 1.0.4 CLI already writes JSON (`--json`) and CSV (`--csv`). Version 1.0.5 keeps both. CSV rows also include `Linked`, `Form470Count`, and `Form471Count`. Unreleased 1.0.6 adds `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` from the public FRN Status dataset (`qdmp-ygft`) on `--frn` rows. Application rows leave those five columns blank. `CommittedAmount` is an inference: `funding_commitment_request` when the published status is Funded. Q8, confirming that field against an FCDL, is pending. There is no EPC sign-in. The default output is a text table. `--output` writes the body to a file. `--help` prints the full usage text.
+`--diff` compares published Form 470 Original and Current rows from USAC Open Data dataset `jt8s-3q52`. It does not store a local history of intermediate revisions, and it does not determine whether a change was substantial. `--diff` writes a table, CSV, or JSON. It does not write Excel. Search by BEN, by the published applicant name, or by both. `--form both` lists Form 470 and Form 471 for that applicant and funding year. A name-only link is printed only when every row shares one published BEN. A published Form 470 does not establish a Form 471. Every table, CSV, and JSON row includes a USAC Open Data source link. The published 1.0.4 CLI already writes JSON (`--json`) and CSV (`--csv`). Version 1.0.5 keeps both. CSV rows also include `Linked`, `Form470Count`, and `Form471Count`. Unreleased 1.0.6 adds `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` from the public FRN Status dataset (`qdmp-ygft`) on table, CSV, and JSON rows. Application rows leave those five columns blank. `CommittedAmount` is an inference: `funding_commitment_request` when the published status is Funded. Q8, confirming that field against an FCDL, is pending. There is no EPC sign-in. `--xlsx` (alias `--excel`) writes the 17 base columns and requires `--output`. It does not include those five FRN columns in 1.0.6. Adding them to Excel is deferred to a future release. `--csv`, `--json`, and `--xlsx` cannot be combined. Excel cells are text, including amounts. `--output` writes the body to a file. `--help` prints the full usage text.
 
 The San Diego Unified School District RFP calls the applicant "San Diego Unified." In the bundled California directory, USAC publishes that district as **San Diego City Unif Sch Dist**, BEN **143662**. Name search matches the published name. It does not translate an RFP title into a BEN.
 
@@ -225,7 +226,7 @@ Keep executables, package archives, caches, and user settings out of the source 
 
 GUI launch and appearance still require hands-on Windows and Mac testing. Linux CI validates native window launch on x64 and ARM64; interactive lookup, selection, export, and browser opening still require hands-on desktop testing. Packages are unsigned. The funding-year selector currently covers 2016–2027; local name suggestions cover California. USAC data publishing delays can affect filing results. Budget figures are snapshot information, not a substitute for USAC's authoritative records. This project is independent of USAC.
 
-See [Windows user guide](docs/USER_GUIDE.md), [1.0.5 command-line guide](docs/CLI.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
+See [Windows user guide](docs/USER_GUIDE.md), [command-line guide](docs/CLI.md), [Mac instructions](MACOS_README.md), [validation record](VALIDATION.md), and [release notes](RELEASE_NOTES.md).
 
 ## License
 
