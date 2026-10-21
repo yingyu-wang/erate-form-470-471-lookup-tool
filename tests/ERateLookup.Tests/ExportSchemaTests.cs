@@ -55,6 +55,7 @@ public class ExportSchemaTests
                 "ReportedRemainingC2BudgetPreDiscount",
             },
             ExportSchema.Names(ExportColumnGroup.Budget));
+        Assert.Equal(FrnCommitment.Columns, ExportSchema.Names(ExportColumnGroup.FrnCommitment));
         Assert.Equal(
             new[] { "LookupOutcome", "Change", "SourceAndNotes", "AllowableContractDate" },
             ExportSchema.Names(ExportColumnGroup.Portfolio));
@@ -62,6 +63,7 @@ public class ExportSchemaTests
         foreach (var name in ExportSchema.Names(ExportColumnGroup.Budget)
             .Concat(ExportSchema.Names(ExportColumnGroup.LookupTimestamp))
             .Concat(ExportSchema.Names(ExportColumnGroup.LookupContext))
+            .Concat(ExportSchema.Names(ExportColumnGroup.FrnCommitment))
             .Concat(ExportSchema.Names(ExportColumnGroup.Portfolio)))
         {
             Assert.DoesNotContain(name, ExportSchema.BaseColumns);
@@ -71,6 +73,7 @@ public class ExportSchemaTests
         {
             IncludeLookupTimestamps = true,
             IncludeLookupContext = true,
+            IncludeFrnCommitment = true,
             IncludeBudget = true,
             IncludePortfolio = true,
         };
@@ -78,6 +81,7 @@ public class ExportSchemaTests
         Assert.Equal(
             ExportSchema.Names(ExportColumnGroup.LookupTimestamp)
                 .Concat(BaseHeaders)
+                .Concat(ExportSchema.Names(ExportColumnGroup.FrnCommitment))
                 .Concat(ExportSchema.Names(ExportColumnGroup.LookupContext))
                 .Concat(ExportSchema.Names(ExportColumnGroup.Budget))
                 .Concat(ExportSchema.Names(ExportColumnGroup.Portfolio)),
@@ -158,9 +162,45 @@ public class ExportSchemaTests
             null);
         Assert.Equal("471", frn.Form);
         Assert.Equal("Unknown", frn.Status);
+        Assert.Equal("", frn.FrnStatus);
+        Assert.Equal("", frn.CommittedAmount);
         Assert.Equal("2026-03-01", frn.CertifiedDate);
         Assert.Equal(UsacSources.FundingRequest("", "261003372"), frn.Source);
         Assert.Equal("", frn.Ben);
+
+        var funded = ExportSchema.FromFundingRequest(
+            new UsacRow
+            {
+                Number = "201009092",
+                FundingRequestNumber = "2099010373",
+                Status = "Funded",
+                FundingCommitmentRequest = "14908.32",
+                RequestedAmount = "14908.32",
+                FcdlLetterDate = "2020-05-09T00:00:00.000",
+                RevisedFcdlDate = "2026-07-14T00:00:00.000",
+                TotalAuthorizedDisbursement = "14908.32",
+            },
+            2020,
+            false,
+            null,
+            null);
+        Assert.Equal("Funded", funded.Status);
+        Assert.Equal("14908.32", funded.RequestedAmount);
+        Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" }, new[] { funded.FrnStatus, funded.CommittedAmount, funded.FcdlDate, funded.RevisedFcdlDate, funded.DisbursedAmount });
+        var pending = ExportSchema.FromFundingRequest(
+            new UsacRow
+            {
+                Status = "Pending",
+                FundingCommitmentRequest = "14908.32",
+                RequestedAmount = "14908.32",
+            },
+            2020,
+            false,
+            null,
+            null);
+        Assert.Equal("", pending.CommittedAmount);
+        Assert.Equal("14908.32", pending.RequestedAmount);
+        Assert.Equal("", ExportSchema.FromFiling(FilingForm.Form470, filing, 2026, false, null, null).FrnStatus);
     }
 
     [Fact]

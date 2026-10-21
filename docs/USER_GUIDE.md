@@ -178,7 +178,7 @@ Name suggestions are capped at **15** matches. A prompt asks for more letters wh
 
 ## Export CSV, Excel, or JSON
 
-After a completed lookup, click **Export selected (CSV / Excel / JSON)** and select the file type in the Save dialog. CSV and Excel use the same columns as the command-line table:
+After a completed lookup, click **Export selected (CSV / Excel / JSON)** and select the file type in the Save dialog. CSV and Excel use the shared base columns. The command-line table appends `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` after these columns. The app file does not:
 
 `Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`, `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`, `RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`, `Linked`, `Form470Count`, `Form471Count`
 
@@ -188,7 +188,7 @@ These files rename the previous app headers: `Customer` is `Name`, `FormType` is
 
 A successful lookup with no filing can still be exported. That file has one row with a blank application number and a blank source. A failed lookup cannot be exported as a no-filing result.
 
-JSON uses the same envelope as the command line. Names are camelCase. The top-level fields are `form`, `linked`, `ben`, `applicantName`, `fundingYear`, `applicationNumber`, `fundingRequestNumber`, `fetchedAt`, `count`, and `rows`. `linked` is false. The count fields are omitted. `applicantName` is the customer text on the screen, or `null` when that box is empty. Each row has `form`, `applicationNumber`, `fundingRequestNumber`, `status`, `certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`, `requestedAmount`, `preDiscountAmount`, and `source`. A JSON file is UTF-8 and has no BOM.
+JSON uses the same envelope as the command line. Names are camelCase. The top-level fields are `form`, `linked`, `ben`, `applicantName`, `fundingYear`, `applicationNumber`, `fundingRequestNumber`, `fetchedAt`, `count`, and `rows`. `linked` is false. The count fields are omitted. `applicantName` is the customer text on the screen, or `null` when that box is empty. Each row has `form`, `applicationNumber`, `fundingRequestNumber`, `status`, `certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`, `requestedAmount`, `preDiscountAmount`, and `source`. A command-line row also has `frnStatus`, `committedAmount`, `fcdlDate`, `revisedFcdlDate`, and `disbursedAmount`. The app row does not. A JSON file is UTF-8 and has no BOM.
 
 Excel export creates a genuine `.xlsx` file without requiring Microsoft Excel to be installed. Columns are stored as text to preserve IDs, missing-value labels and exact reported amounts. Header filters and a frozen first row are included. Formula-like strings are escaped in CSV and stored as literal text in Excel. No additional runtime or library is required for export.
 

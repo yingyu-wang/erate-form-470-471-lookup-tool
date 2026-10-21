@@ -5,6 +5,44 @@ terminal. It is a .NET 10 console program in `Cli/`. It does not open the
 Windows Forms, Avalonia, or Android screens. The lookup is read-only. It does
 not create, change, certify, or submit a filing.
 
+## Unreleased 1.0.6: committed and disbursed amounts
+
+`--frn` reads the public FRN Status dataset `qdmp-ygft`. It does not sign in
+to EPC. The table, CSV, and JSON gain five columns. Application lookups leave
+them blank. Desktop, Mac, Linux, and Android exports do not include these five
+columns.
+
+| Column | Published field | Rule |
+| --- | --- | --- |
+| `FrnStatus` | `form_471_frn_status_name` | The published status text. On 2026-10-19 the Current rows used `Funded`, `Pending`, `Denied`, and `Cancelled`. |
+| `CommittedAmount` | `funding_commitment_request` | **[Inference]** Copied only when `FrnStatus` is Funded. Blank for every other status. Q8 is pending: this has not been confirmed against an FCDL, including when `revised_fcdl_date` is set. |
+| `FcdlDate` | `fcdl_letter_date` | Calendar date of the wave. The dataset calls this field Wave Date. |
+| `RevisedFcdlDate` | `revised_fcdl_date` | Calendar date when USAC published one. Blank when the field is missing. |
+| `DisbursedAmount` | `total_authorized_disbursement` | Published total net amount disbursed. Blank when the field is missing. A missing value is not written as zero. |
+
+`RequestedAmount` on an FRN row is still the same `funding_commitment_request`,
+for every status. The select aliases it as `funding_request_amount`. That
+column is not the committed-amount rule.
+
+The query still requires `form_version='Current'`.
+
+Checked 2026-10-19 against
+[FRN 2099010373](https://opendata.usac.org/resource/qdmp-ygft.json?funding_request_number=2099010373&$select=funding_request_number,application_number,ben,funding_year,organization_name,form_471_frn_status_name,funding_commitment_request,fcdl_letter_date,revised_fcdl_date,total_authorized_disbursement,form_version,pending_reason)
+and the [dataset metadata](https://opendata.usac.org/api/views/qdmp-ygft.json).
+The Current row was Webster Groves School District, BEN 136910, FY 2020,
+application 201009092, status `Funded`, `funding_commitment_request` `14908.32`,
+`fcdl_letter_date` `2020-05-09T00:00:00.000`, `revised_fcdl_date`
+`2026-07-14T00:00:00.000`, `total_authorized_disbursement` `14908.32`,
+`pending_reason` `FCDL Issued`. An Original row for the same FRN was `Pending`
+with the same `funding_commitment_request` and no FCDL or disbursement fields
+in that response. The CLI does not return the Original row.
+Field descriptions used above are from that metadata page:
+`funding_commitment_request` is "The total amount for the Funding Request (FRN)
+after discount." `fcdl_letter_date` is "The date of the wave that a funding
+commitment was issued in." `revised_fcdl_date` is "Date the applicant FCDL was
+revised." `total_authorized_disbursement` is "Total net amount disbursed to a
+service provider or applicant."
+
 ## What changed in 1.0.5
 
 Version 1.0.5 adds four lookup features. It does not add a Category 2 budget
@@ -248,7 +286,8 @@ Columns, in order:
 `Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`,
 `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`,
 `RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`, `Linked`,
-`Form470Count`, `Form471Count`
+`Form470Count`, `Form471Count`, `FrnStatus`, `CommittedAmount`, `FcdlDate`,
+`RevisedFcdlDate`, `DisbursedAmount`
 
 `Linked` is `true` when the command used `--form both` and `false` for a
 single-form lookup. `Form470Count` and `Form471Count` are filled only for
@@ -277,16 +316,23 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 `--form both` also includes `form470Count` and `form471Count`. Each row has
 `form`, `applicationNumber`, `fundingRequestNumber`, `status`,
 `certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`,
-`requestedAmount`, `preDiscountAmount`, and `source`. Omitted `--app` or
-`--frn` is JSON `null` on the top-level fields. Filing rows leave
-`fundingRequestNumber` as an empty string. `source` is the Open Data URL.
+`requestedAmount`, `preDiscountAmount`, `source`, `frnStatus`,
+`committedAmount`, `fcdlDate`, `revisedFcdlDate`, and `disbursedAmount`.
+Omitted `--app` or `--frn` is JSON `null` on the top-level fields. Filing
+rows leave `fundingRequestNumber` as an empty string and leave the five FRN
+Status fields as empty strings. `source` is the Open Data URL.
+`committedAmount` is an inference: see the unreleased 1.0.6 section. Q8 is
+pending.
 
-The Windows, macOS, Linux, and Android lookup screens write this same JSON
-shape. Their CSV and Excel files use the column list in the table section
-above. An app lookup sets `linked` to false and omits `form470Count` and
-`form471Count`, because those screens look up one form at a time. In an app
-file, `applicantName` is the customer text on the screen, or `null` when that
-box is empty. The command-line `applicantName` remains the `--name` argument.
+The Windows, macOS, Linux, and Android lookup screens write this same envelope.
+Their JSON rows use the fields through `source` and omit `frnStatus`,
+`committedAmount`, `fcdlDate`, `revisedFcdlDate`, and `disbursedAmount`.
+Their CSV and Excel files use the 17 base columns through `Form471Count` and
+do not include the five FRN Status columns. An app lookup sets `linked` to
+false and omits `form470Count` and `form471Count`, because those screens look
+up one form at a time. In an app file, `applicantName` is the customer text on
+the screen, or `null` when that box is empty. The command-line `applicantName`
+remains the `--name` argument.
 A portfolio JSON row adds `lookupOutcome`, `change`, `sourceAndNotes`, and
 `allowableContractDate` after `source`. The command-line program does not
 write those four fields.
@@ -299,11 +345,15 @@ lookup). Form 470 reads dataset `jt8s-3q52` and keeps certified rows. Form
 are collapsed to the current version, one application per row.
 
 With `--frn`, the CLI calls the FRN status dataset `qdmp-ygft` instead. The
-select list is funding request number, application number, BEN, organization
-name, FRN status, nickname, service type, and `funding_commitment_request`.
-It does not request a certified date, a pre-discount amount, or a PDF, so
-those columns are empty on FRN rows. The query also requires
-`form_version='Current'`.
+select list is `UsacClient.FrnStatusSelect`: funding request number,
+application number, BEN, organization name, FRN status, nickname, service
+type, `funding_commitment_request` (also aliased as `funding_request_amount`),
+`fcdl_letter_date`, `revised_fcdl_date`, `total_authorized_disbursement`, and
+`form_version`. It does not request a certified date, a pre-discount amount,
+or a PDF, so those columns are empty on FRN rows. The query also requires
+`form_version='Current'`. `FrnStatus`, `FcdlDate`, `RevisedFcdlDate`, and
+`DisbursedAmount` are the published fields. `CommittedAmount` is an inference
+and is blank unless the status is Funded. Q8 is pending.
 
 Stderr on success:
 

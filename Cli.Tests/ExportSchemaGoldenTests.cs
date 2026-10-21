@@ -36,14 +36,19 @@ public class ExportSchemaGoldenTests
             var schemaRow = ExportSchema.FromFiling(FilingForm.Form470, filing, 2026, false, null, null);
             var displayed = ExportSchema.WithDisplayedBen(schemaRow, "143618");
             var cells = ExportSchema.ToRow(displayed);
+            var cliColumns = new ExportColumns { IncludeFrnCommitment = true };
+            var cliCells = ExportSchema.ToRow(displayed, cliColumns);
             Assert.Equal(ExportSchema.BaseColumns, ExportSchema.Columns());
             Assert.Equal(cells.Length, ExportSchema.BaseColumns.Count);
+            Assert.Equal(ExportSchema.BaseColumns.Concat(FrnCommitment.Columns), ExportSchema.Columns(cliColumns));
 
             var csvCode = await CliCommand.RunAsync(Options(CliFormat.Csv) with { OutputPath = csvPath }, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, csvCode);
             var csv = ParseCsv(await File.ReadAllTextAsync(csvPath));
-            Assert.Equal(ExportSchema.BaseColumns, csv[0]);
-            Assert.Equal(cells, csv[1]);
+            Assert.Equal(ExportSchema.Columns(cliColumns), csv[0]);
+            Assert.Equal(cliCells, csv[1]);
+            Assert.Equal(cells, csv[1].Take(cells.Length));
+            Assert.Equal(new[] { "", "", "", "", "" }, csv[1][17..]);
 
             var excelPath = Path.Combine(directory, "rows.xlsx");
             DataExporter.WriteExcel(excelPath, csv);
@@ -63,7 +68,7 @@ public class ExportSchemaGoldenTests
             {
                 var columnRow = columnDocument.RootElement.GetProperty("rows")[0];
                 Assert.Equal(csv[0], columnRow.EnumerateObject().Select(property => property.Name).ToArray());
-                Assert.Equal(cells, columnRow.EnumerateObject().Select(property => property.Value.GetString()).ToArray());
+                Assert.Equal(cliCells, columnRow.EnumerateObject().Select(property => property.Value.GetString()).ToArray());
             }
 
             var jsonText = Body(stdout.ToString());
@@ -104,8 +109,10 @@ public class ExportSchemaGoldenTests
             var screen = new LookupViewModel(client, directoryClient, windows, LookupSurface.Windows, () => Clock);
             var prepared = screen.CreateExport(2026, FilingForm.Form470, "143618", "fallback", filings.FetchedAt, filings.Data, new HashSet<string> { filing.Number }, null);
             Assert.Equal(ExportSchema.BaseColumns, prepared.Table[0]);
-            Assert.Equal(csv, prepared.Table);
             Assert.Equal(cells, prepared.Table[1]);
+            Assert.Equal(csv[1].Take(ExportSchema.BaseColumns.Count), prepared.Table[1]);
+            Assert.DoesNotContain("FrnStatus", prepared.Table[0]);
+            Assert.DoesNotContain("CommittedAmount", prepared.Table[0]);
             Assert.DoesNotContain("Customer", prepared.Table[0]);
             Assert.DoesNotContain("FormType", prepared.Table[0]);
             Assert.DoesNotContain("FilingStatus", prepared.Table[0]);
@@ -132,10 +139,23 @@ public class ExportSchemaGoldenTests
             Assert.Equal(filings.FetchedAt.ToString("O", CultureInfo.InvariantCulture), appFetchedAt);
             var appRow = appRoot.GetProperty("rows")[0];
             var cliRowElement = root.GetProperty("rows")[0];
-            Assert.Equal(cliRowElement.EnumerateObject().Select(property => property.Name).ToArray(), appRow.EnumerateObject().Select(property => property.Name).ToArray());
-            foreach (var property in cliRowElement.EnumerateObject())
+            var sharedNames = new[]
             {
-                Assert.Equal(property.Value.ToString(), appRow.GetProperty(property.Name).ToString());
+                "form", "applicationNumber", "fundingRequestNumber", "status", "certifiedDate", "nickname", "ben", "name", "services", "pdf", "requestedAmount", "preDiscountAmount", "source"
+            };
+            Assert.Equal(sharedNames, appRow.EnumerateObject().Select(property => property.Name).ToArray());
+            var cliNames = cliRowElement.EnumerateObject().Select(property => property.Name).ToArray();
+            Assert.Equal(sharedNames, cliNames.Take(sharedNames.Length));
+            Assert.Equal(new[] { "frnStatus", "committedAmount", "fcdlDate", "revisedFcdlDate", "disbursedAmount" }, cliNames.Skip(sharedNames.Length));
+            foreach (var name in sharedNames)
+            {
+                Assert.Equal(cliRowElement.GetProperty(name).ToString(), appRow.GetProperty(name).ToString());
+            }
+
+            foreach (var name in new[] { "frnStatus", "committedAmount", "fcdlDate", "revisedFcdlDate", "disbursedAmount" })
+            {
+                Assert.Equal("", cliRowElement.GetProperty(name).GetString());
+                Assert.False(appRow.TryGetProperty(name, out _));
             }
 
             Assert.False(appRow.TryGetProperty("lookupOutcome", out _));
@@ -168,9 +188,11 @@ public class ExportSchemaGoldenTests
             var csvCode = await CliCommand.RunAsync(options with { Format = CliFormat.Csv, OutputPath = csvPath }, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, csvCode);
             var csv = ParseCsv(await File.ReadAllTextAsync(csvPath));
-            Assert.Equal(ExportSchema.BaseColumns, csv[0]);
+            Assert.Equal(ExportSchema.Columns(new ExportColumns { IncludeFrnCommitment = true }), csv[0]);
             Assert.Equal("143618", csv[1][2]);
+            Assert.Equal("Funded", csv[1][6]);
             Assert.Equal(UsacSources.FundingRequest("2699003124", "261003372"), csv[1][13]);
+            Assert.Equal(new[] { "Funded", "", "", "", "" }, csv[1][17..]);
         }
         finally
         {

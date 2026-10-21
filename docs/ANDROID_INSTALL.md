@@ -37,7 +37,7 @@ Developer verification rules can add another installation step on some devices/r
 3. Tap **Save selected (CSV / Excel / JSON)**, choose Excel, CSV, or JSON, then select a folder/name in Android's file picker and tap **Save**.
 4. Open the saved file in Files or an appropriate spreadsheet app. No broad storage permission is needed; access is granted only to your chosen destination.
 
-The file uses the same columns as the command-line export, including `Source`, `Linked`, `Form470Count`, and `Form471Count`. `Linked` is `false` and the two counts are blank. JSON uses `application/json`. A successful lookup with no filings can export one row with a blank application number and a blank source. A failed or canceled query cannot be exported as a successful no-results query. Category 2 budget amounts stay on the screen and are not columns in the file. A missing on-screen budget means **Not reported**, not zero.
+The file uses the shared base columns, including `Source`, `Linked`, `Form470Count`, and `Form471Count`. It does not include the command-line FRN Status columns `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. `Linked` is `false` and the two counts are blank. JSON uses `application/json`. App JSON rows stop at `source` and omit those five FRN fields. A successful lookup with no filings can export one row with a blank application number and a blank source. A failed or canceled query cannot be exported as a successful no-results query. Category 2 budget amounts stay on the screen and are not columns in the file. A missing on-screen budget means **Not reported**, not zero.
 
 ## Updating and uninstalling
 

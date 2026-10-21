@@ -33,7 +33,7 @@ public static class CliCommand
     public const int ExitNotFound = 2;
     public const int ExitUsacUnreachable = 3;
     public const int ExitLookupFailed = 4;
-    public const string FrnEndpoint = "https://opendata.usac.org/resource/qdmp-ygft.json";
+    public const string FrnEndpoint = UsacClient.FrnStatusEndpoint;
 
     public const string HelpText = """
         E-rate Form 470 / 471 lookup
@@ -69,6 +69,11 @@ public static class CliCommand
         Every result row includes its USAC Open Data source link. The lookup is
         read-only: it does not create, change, certify, or submit a filing.
         Results are an observation of published data, not proof that no filing exists.
+
+        With --frn, each row also includes FrnStatus, CommittedAmount, FcdlDate,
+        RevisedFcdlDate, and DisbursedAmount from the public FRN Status dataset.
+        CommittedAmount is filled only when the published FRN status is Funded.
+        Application lookups leave those five columns blank. There is no EPC sign-in.
 
         Exit codes:
           0  At least one published row matched
@@ -386,7 +391,7 @@ public static class CliCommand
             where += " AND funding_request_number=" + UsacClient.Literal(options.FundingRequestNumber);
         return await client.QueryAsync(new Dictionary<string, string>
         {
-            ["$select"] = "funding_request_number,application_number,ben as billed_entity_number,organization_name as billed_entity_name,form_471_frn_status_name as filing_status,nickname as form_nickname,form_471_service_type_name as service_type,funding_commitment_request as funding_request_amount,form_version",
+            ["$select"] = UsacClient.FrnStatusSelect,
             ["$where"] = where,
             ["$order"] = "funding_request_number",
             ["$limit"] = "1000"
@@ -463,7 +468,12 @@ public static class CliCommand
         row.Pdf,
         row.RequestedAmount,
         row.PreDiscountAmount,
-        row.Source);
+        row.Source,
+        row.FrnStatus,
+        row.CommittedAmount,
+        row.FcdlDate,
+        row.RevisedFcdlDate,
+        row.DisbursedAmount);
 
     static string Render(CliOptions options, IReadOnlyList<ExportRow> exportRows, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
     {
@@ -486,12 +496,10 @@ public static class CliCommand
             return writer.ToString();
         }
 
-        var table = new List<string[]>
-        {
-            ExportSchema.Columns().ToArray()
-        };
+        var columns = new ExportColumns { IncludeFrnCommitment = true };
+        var table = new List<string[]> { ExportSchema.Columns(columns).ToArray() };
         foreach (var row in exportRows)
-            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben)));
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), columns));
 
         if (options.Format == CliFormat.Csv)
         {
@@ -603,4 +611,9 @@ public sealed record CliRow(
     string Pdf,
     string RequestedAmount,
     string PreDiscountAmount,
-    string Source);
+    string Source,
+    string FrnStatus = "",
+    string CommittedAmount = "",
+    string FcdlDate = "",
+    string RevisedFcdlDate = "",
+    string DisbursedAmount = "");

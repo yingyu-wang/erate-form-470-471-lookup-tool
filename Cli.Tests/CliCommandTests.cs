@@ -277,6 +277,60 @@ public class CliCommandTests
             Assert.Contains("2699003124", stdout.ToString(), StringComparison.Ordinal);
             Assert.Contains("qdmp-ygft", handler.Urls[0], StringComparison.Ordinal);
             Assert.Contains("funding_request_number='2699003124'", Uri.UnescapeDataString(handler.Urls[0]), StringComparison.Ordinal);
+            var select = Uri.UnescapeDataString(handler.Urls[0]);
+            Assert.Contains("fcdl_letter_date", select, StringComparison.Ordinal);
+            Assert.Contains("revised_fcdl_date", select, StringComparison.Ordinal);
+            Assert.Contains("total_authorized_disbursement", select, StringComparison.Ordinal);
+            Assert.Contains("funding_commitment_request", select, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task FrnRowsExportCommitmentColumnsByStatus()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "frn.csv");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"funding_request_number":"2099010373","application_number":"201009092","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Funded","funding_commitment_request":"14908.32","funding_request_amount":"14908.32","fcdl_letter_date":"2020-05-09T00:00:00.000","total_authorized_disbursement":"14908.32"},
+                  {"funding_request_number":"1799022629","application_number":"171000001","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Pending","funding_commitment_request":"14908.32","funding_request_amount":"14908.32"},
+                  {"funding_request_number":"1799008573","application_number":"171000002","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Denied","funding_commitment_request":"0","funding_request_amount":"0","fcdl_letter_date":"2017-08-25T00:00:00.000"},
+                  {"funding_request_number":"2099010999","application_number":"201009092","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Funded","funding_commitment_request":"14908.32","funding_request_amount":"14908.32","fcdl_letter_date":"2020-05-09T00:00:00.000","revised_fcdl_date":"2026-07-14T00:00:00.000","total_authorized_disbursement":"14908.32"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var options = Options(FilingForm.Form471, CliFormat.Csv) with { Ben = "136910", FundingYear = 2020, FundingRequestNumber = "2099010373", OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            var parsed = ParseCsv(await File.ReadAllTextAsync(output));
+            Assert.Equal(new[] { "FrnStatus", "CommittedAmount", "FcdlDate", "RevisedFcdlDate", "DisbursedAmount" }, parsed[0][17..]);
+            Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "", "14908.32" }, parsed[1][17..]);
+            Assert.Equal("14908.32", parsed[1][10]);
+            Assert.Equal(new[] { "Pending", "", "", "", "" }, parsed[2][17..]);
+            Assert.Equal("14908.32", parsed[2][10]);
+            Assert.Equal(new[] { "Denied", "", "2017-08-25", "", "" }, parsed[3][17..]);
+            Assert.Equal("0", parsed[3][10]);
+            Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" }, parsed[4][17..]);
+
+            var jsonOut = new StringWriter();
+            var jsonCode = await CliCommand.RunAsync(options with { Format = CliFormat.Json, OutputPath = null }, client, jsonOut, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, jsonCode);
+            using var document = JsonDocument.Parse(jsonOut.ToString());
+            var rows = document.RootElement.GetProperty("rows");
+            Assert.Equal(4, rows.GetArrayLength());
+            Assert.Equal("14908.32", rows[0].GetProperty("committedAmount").GetString());
+            Assert.Equal("", rows[1].GetProperty("committedAmount").GetString());
+            Assert.Equal("", rows[2].GetProperty("committedAmount").GetString());
+            Assert.Equal("2026-07-14", rows[3].GetProperty("revisedFcdlDate").GetString());
+            Assert.Equal("14908.32", rows[3].GetProperty("disbursedAmount").GetString());
+            Assert.Contains("CommittedAmount", CliCommand.HelpText, StringComparison.Ordinal);
         }
         finally
         {
@@ -493,6 +547,8 @@ public class CliCommandTests
             Assert.Equal("Linked", header[14]);
             Assert.Equal("Form470Count", header[15]);
             Assert.Equal("Form471Count", header[16]);
+            Assert.Equal(new[] { "FrnStatus", "CommittedAmount", "FcdlDate", "RevisedFcdlDate", "DisbursedAmount" }, header[17..]);
+            Assert.Equal(new[] { "", "", "", "", "" }, parsed[1][17..]);
             Assert.Contains("9s6i-myen", parsed[1][13], StringComparison.Ordinal);
             Assert.Equal("false", parsed[1][14]);
             Assert.Equal("", parsed[1][15]);
@@ -520,7 +576,7 @@ public class CliCommandTests
             var code = await CliCommand.RunAsync(options, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, code);
             var parsed = ParseCsv(await File.ReadAllTextAsync(output));
-            Assert.Equal(new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count" }, parsed[0]);
+            Assert.Equal(new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count", "FrnStatus", "CommittedAmount", "FcdlDate", "RevisedFcdlDate", "DisbursedAmount" }, parsed[0]);
             Assert.Equal(3, parsed.Count);
             Assert.Equal("470", parsed[1][0]);
             Assert.Equal("471", parsed[2][0]);

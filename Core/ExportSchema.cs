@@ -4,9 +4,9 @@ using System.Text.Json.Serialization;
 namespace ERateLookup.Core;
 
 /// <summary>
-/// Shared lookup export columns. The command-line table and CSV, and the app
-/// lookup CSV and Excel files, use <see cref="BaseColumns"/>. Optional groups
-/// stay out of that list; pass <see cref="ExportColumns"/> to include them.
+/// Shared lookup export columns. App lookup CSV and Excel use <see cref="BaseColumns"/>.
+/// The command line uses that base plus the FRN commitment group.
+/// Other optional groups stay out until <see cref="ExportColumns"/> selects them.
 /// Category 2 budget columns are the budget group only.
 /// </summary>
 public static class ExportSchema
@@ -32,6 +32,11 @@ public static class ExportSchema
         new("Linked", ExportColumnGroup.Base, static row => row.Linked),
         new("Form470Count", ExportColumnGroup.Base, static row => row.Form470Count),
         new("Form471Count", ExportColumnGroup.Base, static row => row.Form471Count),
+        new("FrnStatus", ExportColumnGroup.FrnCommitment, static row => row.FrnStatus),
+        new("CommittedAmount", ExportColumnGroup.FrnCommitment, static row => row.CommittedAmount),
+        new("FcdlDate", ExportColumnGroup.FrnCommitment, static row => row.FcdlDate),
+        new("RevisedFcdlDate", ExportColumnGroup.FrnCommitment, static row => row.RevisedFcdlDate),
+        new("DisbursedAmount", ExportColumnGroup.FrnCommitment, static row => row.DisbursedAmount),
         new("LookupResult", ExportColumnGroup.LookupContext, static row => row.LookupResult),
         new("DirectoryUpdatedUTC", ExportColumnGroup.LookupContext, static row => row.DirectoryUpdatedUtc),
         new("BudgetCycle", ExportColumnGroup.Budget, static row => row.BudgetCycle),
@@ -108,8 +113,17 @@ public static class ExportSchema
         int fundingYear,
         bool linked,
         int? form470Count,
-        int? form471Count) =>
-        new()
+        int? form471Count)
+    {
+        // [Inference] CommittedAmount copies funding_commitment_request only when
+        // the published FRN status is Funded. Q8 (FCDL confirmation) is pending.
+        var commitment = FrnCommitment.FromPublished(
+            row.Status,
+            row.FundingCommitmentRequest,
+            row.FcdlLetterDate,
+            row.RevisedFcdlDate,
+            row.TotalAuthorizedDisbursement);
+        return new()
         {
             Form = ((int)FilingForm.Form471).ToString(CultureInfo.InvariantCulture),
             FundingYear = fundingYear.ToString(CultureInfo.InvariantCulture),
@@ -128,7 +142,13 @@ public static class ExportSchema
             Linked = linked ? "true" : "false",
             Form470Count = CountText(form470Count),
             Form471Count = CountText(form471Count),
+            FrnStatus = commitment.FrnStatus,
+            CommittedAmount = commitment.CommittedAmount,
+            FcdlDate = commitment.FcdlDate,
+            RevisedFcdlDate = commitment.RevisedFcdlDate,
+            DisbursedAmount = commitment.DisbursedAmount,
         };
+    }
 
     /// <summary>
     /// Table and CSV show the queried BEN when the published row did not include one.
@@ -141,7 +161,8 @@ public static class ExportSchema
         };
 
     /// <summary>
-    /// CamelCase JSON row used by the command-line <c>rows</c> array.
+    /// CamelCase JSON row for an app lookup. It matches the command-line row through <c>source</c>.
+    /// The command line adds the five FRN Status fields on its own row type.
     /// Portfolio-only properties stay null here, so a lookup document omits them.
     /// </summary>
     public static ExportJsonRow ToJsonRow(ExportRow row) =>
@@ -179,6 +200,7 @@ public static class ExportSchema
         Definitions.Where(column => column.Group switch
         {
             ExportColumnGroup.Base => true,
+            ExportColumnGroup.FrnCommitment => columns.IncludeFrnCommitment,
             ExportColumnGroup.LookupTimestamp => columns.IncludeLookupTimestamps,
             ExportColumnGroup.LookupContext => columns.IncludeLookupContext,
             ExportColumnGroup.Budget => columns.IncludeBudget,
@@ -192,6 +214,7 @@ public static class ExportSchema
 public enum ExportColumnGroup
 {
     Base,
+    FrnCommitment,
     LookupTimestamp,
     LookupContext,
     Budget,
@@ -219,6 +242,11 @@ public readonly record struct ExportColumns
     }
 
     public bool IncludePortfolio
+    {
+        get; init;
+    }
+
+    public bool IncludeFrnCommitment
     {
         get; init;
     }
@@ -259,6 +287,16 @@ public sealed record ExportRow
     public string Form470Count { get; init; } = "";
 
     public string Form471Count { get; init; } = "";
+
+    public string FrnStatus { get; init; } = "";
+
+    public string CommittedAmount { get; init; } = "";
+
+    public string FcdlDate { get; init; } = "";
+
+    public string RevisedFcdlDate { get; init; } = "";
+
+    public string DisbursedAmount { get; init; } = "";
 
     public string ExportedUtc { get; init; } = "";
 
@@ -348,8 +386,8 @@ public sealed class ExportMetadata
 }
 
 /// <summary>
-/// JSON row in the command-line camelCase shape. <c>form</c> is a number.
-/// The four portfolio properties are omitted when null.
+/// JSON row in the command-line camelCase shape through <c>source</c>. <c>form</c> is a number.
+/// App rows omit the five FRN Status fields. The four portfolio properties are omitted when null.
 /// </summary>
 public sealed record ExportJsonRow(
     int Form,
