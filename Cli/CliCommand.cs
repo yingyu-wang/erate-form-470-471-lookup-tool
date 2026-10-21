@@ -223,7 +223,7 @@ public static class CliCommand
                 return await RunDiffAsync(options, client, stdout, stderr, cancellationToken).ConfigureAwait(false);
             }
 
-            IReadOnlyList<CliRow> rows;
+            IReadOnlyList<ExportRow> exportRows;
             DateTimeOffset fetched;
             int? form470Count = null;
             int? form471Count = null;
@@ -231,7 +231,7 @@ public static class CliCommand
             {
                 var response = await FundingRequestsAsync(client, options, cancellationToken).ConfigureAwait(false);
                 fetched = response.FetchedAt;
-                rows = response.Data.Select(ToFrnRow).ToList();
+                exportRows = response.Data.Select(row => ExportSchema.FromFundingRequest(row, options.FundingYear, false, null, null)).ToList();
             }
             else if (options.LinkForms)
             {
@@ -242,19 +242,26 @@ public static class CliCommand
                 var filings471 = ApplyApplicationFilter(options, form471.Data);
                 form470Count = filings470.Count;
                 form471Count = filings471.Count;
-                rows = filings470.Select(filing => ToFilingRow(FilingForm.Form470, filing))
-                    .Concat(filings471.Select(filing => ToFilingRow(FilingForm.Form471, filing)))
+                exportRows = filings470.Select(filing => ExportSchema.FromFiling(FilingForm.Form470, filing, options.FundingYear, true, form470Count, form471Count))
+                    .Concat(filings471.Select(filing => ExportSchema.FromFiling(FilingForm.Form471, filing, options.FundingYear, true, form470Count, form471Count)))
                     .ToList();
-                EnsureLinkedApplicant(options, rows);
             }
             else
             {
                 var response = await SearchAsync(client, options, options.Form!.Value, cancellationToken).ConfigureAwait(false);
                 fetched = response.FetchedAt;
-                rows = ApplyApplicationFilter(options, response.Data).Select(filing => ToFilingRow(options.Form!.Value, filing)).ToList();
+                exportRows = ApplyApplicationFilter(options, response.Data)
+                    .Select(filing => ExportSchema.FromFiling(options.Form!.Value, filing, options.FundingYear, false, null, null))
+                    .ToList();
             }
 
-            var body = Render(options, rows, fetched, form470Count, form471Count);
+            var rows = exportRows.Select(ToCliRow).ToList();
+            if (options.LinkForms)
+            {
+                EnsureLinkedApplicant(options, rows);
+            }
+
+            var body = Render(options, exportRows, rows, fetched, form470Count, form471Count);
             await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
             if (rows.Count == 0)
             {
@@ -448,97 +455,50 @@ public static class CliCommand
 
     static CliParseResult Fail(string message) => new(null, false, message);
 
-    static CliRow ToFilingRow(FilingForm form, Filing filing) => new(
-        (int)form,
-        filing.Number,
-        "",
-        filing.Status,
-        filing.Certified,
-        filing.Nickname,
-        filing.Ben,
-        filing.Name,
-        filing.Services,
-        filing.Pdf,
-        filing.RequestedAmount,
-        filing.PreDiscountAmount,
-        UsacSources.Application(form, filing.Number));
+    static CliRow ToCliRow(ExportRow row) => new(
+        int.Parse(row.Form, CultureInfo.InvariantCulture),
+        row.ApplicationNumber,
+        row.FundingRequestNumber,
+        row.Status,
+        row.CertifiedDate,
+        row.Nickname,
+        row.Ben,
+        row.Name,
+        row.Services,
+        row.Pdf,
+        row.RequestedAmount,
+        row.PreDiscountAmount,
+        row.Source,
+        row.FrnStatus,
+        row.CommittedAmount,
+        row.FcdlDate,
+        row.RevisedFcdlDate,
+        row.DisbursedAmount);
 
-    static CliRow ToFrnRow(UsacRow row)
-    {
-        // [Inference] CommittedAmount copies funding_commitment_request only when
-        // the published FRN status is Funded. Q8 (FCDL confirmation) is pending.
-        var commitment = FrnCommitment.FromPublished(
-            row.Status,
-            row.FundingCommitmentRequest,
-            row.FcdlLetterDate,
-            row.RevisedFcdlDate,
-            row.TotalAuthorizedDisbursement);
-        return new(
-            (int)FilingForm.Form471,
-            row.Number,
-            row.FundingRequestNumber,
-            string.IsNullOrWhiteSpace(row.Status) ? "Unknown" : row.Status,
-            UsacTimestamps.CalendarDate(row.Certified),
-            row.Nickname,
-            row.Ben,
-            row.Name,
-            row.Service,
-            row.Pdf?.Url ?? row.PdfUrl,
-            row.RequestedAmount,
-            row.PreDiscountAmount,
-            UsacSources.FundingRequest(row.FundingRequestNumber, row.Number),
-            commitment.FrnStatus,
-            commitment.CommittedAmount,
-            commitment.FcdlDate,
-            commitment.RevisedFcdlDate,
-            commitment.DisbursedAmount);
-    }
-
-    static string Render(CliOptions options, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
+    static string Render(CliOptions options, IReadOnlyList<ExportRow> exportRows, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
     {
         if (options.Format == CliFormat.Json)
         {
-            var fetchedAt = fetched.ToString("O", CultureInfo.InvariantCulture);
-            object payload = options.LinkForms
-                ? new
-                {
-                    form = (int?)null,
-                    linked = true,
-                    form470Count,
-                    form471Count,
-                    ben = options.Ben,
-                    applicantName = options.ApplicantName,
-                    fundingYear = options.FundingYear,
-                    applicationNumber = options.ApplicationNumber,
-                    fundingRequestNumber = options.FundingRequestNumber,
-                    fetchedAt,
-                    count = rows.Count,
-                    rows
-                }
-                : new
-                {
-                    form = (int)options.Form!,
-                    linked = false,
-                    ben = options.Ben,
-                    applicantName = options.ApplicantName,
-                    fundingYear = options.FundingYear,
-                    applicationNumber = options.ApplicationNumber,
-                    fundingRequestNumber = options.FundingRequestNumber,
-                    fetchedAt,
-                    count = rows.Count,
-                    rows
-                };
-            return JsonSerializer.Serialize(payload, JsonOptions);
+            using var writer = new StringWriter();
+            DataExporter.WriteJson(writer, new ExportMetadata
+            {
+                Form = options.LinkForms ? null : (int)options.Form!,
+                Linked = options.LinkForms,
+                Form470Count = options.LinkForms ? form470Count : null,
+                Form471Count = options.LinkForms ? form471Count : null,
+                Ben = options.Ben,
+                ApplicantName = options.ApplicantName,
+                FundingYear = options.FundingYear,
+                ApplicationNumber = options.ApplicationNumber,
+                FundingRequestNumber = options.FundingRequestNumber,
+                FetchedAt = fetched,
+            }, rows);
+            return writer.ToString();
         }
 
-        var header = new List<string>
-        {
-            "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count"
-        };
-        header.AddRange(FrnCommitment.Columns);
-        var table = new List<string[]> { header.ToArray() };
-        foreach (var row in TableRows(options, rows, form470Count, form471Count))
-            table.Add(row);
+        var table = new List<string[]> { ExportSchema.Columns(ExportSchema.CliColumns).ToArray() };
+        foreach (var row in exportRows)
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), ExportSchema.CliColumns));
 
         if (options.Format == CliFormat.Csv)
         {
@@ -549,44 +509,6 @@ public static class CliCommand
 
         return RenderTable(table);
     }
-
-    static IEnumerable<string[]> TableRows(CliOptions options, IReadOnlyList<CliRow> rows, int? form470Count, int? form471Count)
-    {
-        var linked = options.LinkForms ? "true" : "false";
-        var count470 = form470Count?.ToString(CultureInfo.InvariantCulture) ?? "";
-        var count471 = form471Count?.ToString(CultureInfo.InvariantCulture) ?? "";
-        foreach (var row in rows)
-        {
-            yield return
-            [
-                row.Form.ToString(CultureInfo.InvariantCulture),
-                options.FundingYear.ToString(CultureInfo.InvariantCulture),
-                DisplayBen(options, row),
-                row.Name,
-                row.ApplicationNumber,
-                row.FundingRequestNumber,
-                row.Status,
-                row.CertifiedDate,
-                row.Nickname,
-                row.Services,
-                row.RequestedAmount,
-                row.PreDiscountAmount,
-                row.Pdf,
-                row.Source,
-                linked,
-                count470,
-                count471,
-                row.FrnStatus,
-                row.CommittedAmount,
-                row.FcdlDate,
-                row.RevisedFcdlDate,
-                row.DisbursedAmount
-            ];
-        }
-    }
-
-    static string DisplayBen(CliOptions options, CliRow row) =>
-        !string.IsNullOrEmpty(row.Ben) ? row.Ben : options.Ben ?? "";
 
     static string RenderTable(List<string[]> table)
     {
