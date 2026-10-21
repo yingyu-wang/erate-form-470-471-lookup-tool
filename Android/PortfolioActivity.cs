@@ -64,7 +64,7 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Previous",()=>Do(()=>{page=Math.Max(0,page-1);Render();})));root.AddView(Button("Next",()=>Do(()=>{page++;Render();})));
         root.AddView(Button("Change history",()=>Do(()=>new AlertDialog.Builder(this)!.SetTitle("Unread changes")!.SetMessage(session.ChangeHistory())!.SetPositiveButton("Close",(_,_)=>{})!.Show())));
         root.AddView(Button("Mark changes read",()=>Do(()=>{session.AcknowledgeDisplayed();Render();})));
-        root.AddView(Button("Export selected CSV",()=>PrepareExportAsync("csv")));root.AddView(Button("Export selected Excel",()=>PrepareExportAsync("xlsx")));
+        root.AddView(Button("Export selected CSV",()=>PrepareExportAsync("csv")));root.AddView(Button("Export selected Excel",()=>PrepareExportAsync("xlsx")));root.AddView(Button("Export selected JSON",()=>PrepareExportAsync("json")));
         root.AddView(Button("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!destroyed)new AlertDialog.Builder(this)!.SetTitle("Source-backed dates")!.SetMessage(text)!.SetPositiveButton("Close",(_,_)=>{})!.Show();}));
         root.AddView(Button("History / summary",()=>Do(()=>new AlertDialog.Builder(this)!.SetTitle("District history")!.SetMessage(PortfolioInsights.Summary(session,directory))!.SetPositiveButton("Close",(_,_)=>{})!.Show())));
         root.AddView(Button("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.ClearView();Render();}}));
@@ -124,11 +124,11 @@ public sealed class PortfolioActivity : Activity
     }
     async Task PrepareExportAsync(string extension)
     {
-        var rows=session.ExportRows(directory);var path=Path.Combine(CacheDir!.AbsolutePath,"portfolio-"+Guid.NewGuid().ToString("N")+"."+extension);
+        var prepared=session.CreateExport(directory);var path=Path.Combine(CacheDir!.AbsolutePath,"portfolio-"+Guid.NewGuid().ToString("N")+"."+extension);
         try
         {
-            await Task.Run(()=>{if(extension=="csv")DataExporter.WriteCsv(path,rows,operation!.Token);else DataExporter.WriteExcel(path,rows,operation!.Token);});operation!.Token.ThrowIfCancellationRequested();
-            pendingExport=path;var intent=new Intent(Intent.ActionCreateDocument);intent.AddCategory(Intent.CategoryOpenable);intent.SetType(extension=="csv"?"text/csv":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");intent.PutExtra(Intent.ExtraTitle,"E-rate-portfolio."+extension);StartActivityForResult(intent,ExportRequest);
+            await Task.Run(()=>prepared.Write(path,operation!.Token));operation!.Token.ThrowIfCancellationRequested();
+            pendingExport=path;var intent=new Intent(Intent.ActionCreateDocument);intent.AddCategory(Intent.CategoryOpenable);intent.SetType(AndroidBehavior.ExportContentType(extension));intent.PutExtra(Intent.ExtraTitle,"E-rate-portfolio."+extension);StartActivityForResult(intent,ExportRequest);
         }
         catch{pendingExport=null;throw;}
         finally{if(pendingExport!=path)File.Delete(path);}

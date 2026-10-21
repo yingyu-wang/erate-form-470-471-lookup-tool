@@ -9,7 +9,8 @@ not create, change, certify, or submit a filing.
 
 `--frn` reads the public FRN Status dataset `qdmp-ygft`. It does not sign in
 to EPC. The table, CSV, and JSON gain five columns. Application lookups leave
-them blank. Desktop, Mac, Linux, and Android exports are unchanged.
+them blank. Desktop, Mac, Linux, and Android exports do not include these five
+columns.
 
 | Column | Published field | Rule |
 | --- | --- | --- |
@@ -354,6 +355,19 @@ rows leave `fundingRequestNumber` as an empty string and leave the five FRN
 Status fields as empty strings. `source` is the Open Data URL.
 `committedAmount` is an inference: see the unreleased 1.0.6 section. Q8 is
 pending.
+
+The Windows, macOS, Linux, and Android lookup screens write this same envelope.
+Their JSON rows use the fields through `source` and omit `frnStatus`,
+`committedAmount`, `fcdlDate`, `revisedFcdlDate`, and `disbursedAmount`.
+Their CSV and Excel files use the 17 base columns through `Form471Count` and
+do not include the five FRN Status columns. An app lookup sets `linked` to
+false and omits `form470Count` and `form471Count`, because those screens look
+up one form at a time. In an app file, `applicantName` is the customer text on
+the screen, or `null` when that box is empty. The command-line `applicantName`
+remains the `--name` argument.
+A portfolio JSON row adds `lookupOutcome`, `change`, `sourceAndNotes`, and
+`allowableContractDate` after `source`. The command-line program does not
+write those four fields.
 
 ### `--xlsx`
 

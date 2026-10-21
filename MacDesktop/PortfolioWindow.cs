@@ -110,8 +110,8 @@ public sealed class PortfolioWindow : Window
     }
     async Task ExportAsync()
     {
-        var rows = session.ExportRows(directory); using var file = await StorageProvider.SaveFilePickerAsync(new() { Title = "Export selected results", SuggestedFileName = "E-rate-portfolio.xlsx", FileTypeChoices = new[] { new FilePickerFileType("Excel") { Patterns = new[] { "*.xlsx" } }, new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" } } } }); if (file is null) return;
+        var prepared = session.CreateExport(directory); using var file = await StorageProvider.SaveFilePickerAsync(new() { Title = "Export selected results", SuggestedFileName = "E-rate-portfolio.xlsx", FileTypeChoices = new[] { new FilePickerFileType("Excel") { Patterns = new[] { "*.xlsx" }, MimeTypes = new[] { AndroidBehavior.ExcelContentType } }, new FilePickerFileType("CSV") { Patterns = new[] { "*.csv" }, MimeTypes = new[] { AndroidBehavior.CsvContentType } }, new FilePickerFileType("JSON") { Patterns = new[] { "*.json" }, MimeTypes = new[] { AndroidBehavior.JsonContentType } } } }); if (file is null) return;
         var path = file.TryGetLocalPath() ?? throw new InvalidOperationException("Choose a local destination.");
-        await Task.Run(() => { if (Path.GetExtension(path).Equals(".csv", StringComparison.OrdinalIgnoreCase)) DataExporter.WriteCsv(path, rows, operation!.Token); else DataExporter.WriteExcel(path, rows, operation!.Token); }); status.Text = $"Exported {rows.Count - 1} selected results.";
+        await Task.Run(() => prepared.Write(path, operation!.Token)); status.Text = $"Exported {prepared.Table.Count - 1} selected results.";
     }
 }

@@ -105,15 +105,30 @@ to select all results matching the current filters across pages, or **Clear sele
 Selected rows stay selected when a filter hides them; the selected and visible
 counts make that scope explicit. A new lookup or opening saved data resets selection.
 
-**Export selected** writes CSV or Excel. Android has separate CSV and Excel buttons
-and uses the system document picker. The export retains the original lookup/budget
-columns and adds query outcome, change, source notes, source-reported contract date,
-and available Form 471 requested/pre-discount amounts. Failure/empty rows can be
-selected and exported without being represented as filed applications.
+**Export selected** writes CSV, Excel, or JSON. Android has separate CSV, Excel,
+and JSON buttons and uses the system document picker. The file starts with the
+same base columns as a lookup export, then adds four trailing columns:
+`LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
+Requested and pre-discount amounts are the base columns `RequestedAmount` and
+`PreDiscountAmount`. A missing amount is blank, and a blank amount is not zero.
+Category 2 budget columns are not in this file. The previous headers `Customer`,
+`FormType`, `FilingStatus`, `RequestedFundingUSD`, and `PreDiscountEligibleUSD`
+are not written.
+
+`Linked` is `false`. `Form470Count` and `Form471Count` are blank. `Source` is the
+USAC Open Data URL when the row has an application number, and blank when it does
+not. Failure and empty rows can be selected and exported. They are not represented
+as filed applications: the outcome column says what happened.
+
+JSON uses the command-line camelCase row and adds `lookupOutcome`, `change`,
+`sourceAndNotes`, and `allowableContractDate`. The envelope `form`, `ben`, and
+`fundingYear` are filled when every selected row shares that value. A mixed
+selection stores JSON `null` for the field that differs. `fetchedAt` is the
+earliest stored observation time.
 
 If you cancel while writing a destination, that file may be incomplete; delete it
 before retrying. CSV values that could be interpreted as spreadsheet formulas are
-escaped; Excel values are written as text.
+escaped; Excel values are written as text. JSON is UTF-8 without a BOM.
 
 ## Summaries, history, and dates
 
