@@ -663,19 +663,31 @@ public sealed class UsacClient : IDisposable
     public async Task<QueryResult<List<UsacRow>>> GetForm470VersionRowsAsync(string? ben, string? name, int year, string? applicationNumber, bool refresh, CancellationToken ct)
     {
         var filter = Form470VersionFilter(ben, name, year, applicationNumber);
+        var nameSearch = !string.IsNullOrWhiteSpace(name);
+        var count = await CountRowsAsync(Endpoint, filter, ct).ConfigureAwait(false);
+        if (count > MaxFilingRows)
+        {
+            throw new InvalidOperationException(nameSearch ? BroadSearchLimitMessage(count) : ResultLimitMessage);
+        }
+
+        var before = await RowsUpdatedAtAsync(UsacSources.Form470Dataset, ct).ConfigureAwait(false);
         var all = new List<UsacRow>();
+        var pageKeys = new List<string>();
         var fetched = DateTimeOffset.MaxValue;
         var cached = true;
-        for (var offset = 0; offset < 50000; offset += 1000)
+        var complete = false;
+        for (var offset = 0; offset < MaxFilingRows; offset += FilingPageSize)
         {
-            var page = await QueryAsync(new Dictionary<string, string>
+            var parameters = new Dictionary<string, string>
             {
                 ["$select"] = Form470VersionSelect,
                 ["$where"] = filter,
                 ["$order"] = Form470VersionOrder,
-                ["$limit"] = "1000",
+                ["$limit"] = FilingPageSize.ToString(CultureInfo.InvariantCulture),
                 ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
-            }, refresh, ct).ConfigureAwait(false);
+            };
+            pageKeys.Add(CacheKey(Endpoint, EncodeQuery(parameters)));
+            var page = await QueryAsync(parameters, refresh, ct).ConfigureAwait(false);
             all.AddRange(page.Data);
             if (page.FetchedAt < fetched)
             {
@@ -683,13 +695,37 @@ public sealed class UsacClient : IDisposable
             }
 
             cached &= page.FromCache;
-            if (page.Data.Count < 1000)
+            if (page.Data.Count < FilingPageSize || all.Count >= count)
             {
-                return new QueryResult<List<UsacRow>>(all, fetched, cached);
+                complete = true;
+                break;
             }
         }
 
-        throw new InvalidOperationException("Result limit reached; a complete lookup could not be made.");
+        if (!complete)
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(ResultLimitMessage);
+        }
+
+        string after;
+        try
+        {
+            after = await RowsUpdatedAtAsync(UsacSources.Form470Dataset, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!string.Equals(before, after, StringComparison.Ordinal))
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(PagingDriftMessage(UsacSources.Form470Dataset, before, after));
+        }
+
+        return new QueryResult<List<UsacRow>>(all, fetched, cached);
     }
 
     public async Task<QueryResult<bool>> HasNewCycleForm470Async(string ben, bool refresh, CancellationToken ct)

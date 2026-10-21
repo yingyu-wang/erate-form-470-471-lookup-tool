@@ -83,6 +83,101 @@ public class FilingPagingTests
     }
 
     [Fact]
+    public async Task DiffRowsUpdatedAtChangeFailsAndDropsTheCache()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new PagingHandler("""[{"application_number":"470-1","billed_entity_number":"101552","form_version":"Current"}]""", drift: true);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetForm470VersionRowsAsync("101552", null, 2026, null, true, default));
+            Assert.Equal(UsacClient.PagingDriftMessage("jt8s-3q52", "10", "11"), error.Message);
+            Assert.Equal(2, handler.ViewRequests);
+            Assert.Equal(1, handler.PageRequests);
+            var page = Assert.Single(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset", StringComparison.Ordinal));
+            var query = Uri.UnescapeDataString(page);
+            Assert.Contains(UsacClient.Form470VersionOrder, query, StringComparison.Ordinal);
+            Assert.Contains(UsacClient.Form470VersionSelect, query, StringComparison.Ordinal);
+            Assert.DoesNotContain(":id", query, StringComparison.Ordinal);
+            handler.Drift = false;
+            handler.Page = """[{"application_number":"470-2","billed_entity_number":"101552","form_version":"Current"}]""";
+            var again = await client.GetForm470VersionRowsAsync("101552", null, 2026, null, false, default);
+            Assert.False(again.FromCache);
+            Assert.Equal("470-2", Assert.Single(again.Data).Number);
+            Assert.Equal(2, handler.PageRequests);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffNameSearchOverTheCapFailsBeforePaging()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new PagingHandler("[]", count: 50001);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetForm470VersionRowsAsync(null, "SCHOOL", 2026, null, true, default));
+            Assert.Equal(UsacClient.BroadSearchLimitMessage(50001), error.Message);
+            Assert.DoesNotContain(handler.Urls, url => url.Contains("/api/views/", StringComparison.Ordinal));
+            Assert.DoesNotContain(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffBenOverTheCapKeepsTheResultLimitMessage()
+    {
+        var directory = Temp();
+        try
+        {
+            var handler = new PagingHandler("[]", count: 50001);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetForm470VersionRowsAsync("101552", null, 2026, null, true, default));
+            Assert.Equal(UsacClient.ResultLimitMessage, error.Message);
+            Assert.DoesNotContain("narrow the name", error.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffQueryReturnsAFullResultAtTheRowCap()
+    {
+        var directory = Temp();
+        try
+        {
+            var row = "{\"application_number\":\"470-cap\",\"billed_entity_number\":\"101552\",\"form_version\":\"Current\"}";
+            var page = "[" + string.Join(',', Enumerable.Repeat(row, UsacClient.FilingPageSize)) + "]";
+            var handler = new PagingHandler(page, count: UsacClient.MaxFilingRows);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var result = await client.GetForm470VersionRowsAsync("101552", null, 2026, null, true, default);
+            Assert.Equal(UsacClient.MaxFilingRows, result.Data.Count);
+            Assert.Equal(UsacClient.MaxFilingRows / UsacClient.FilingPageSize, handler.PageRequests);
+            var first = Uri.UnescapeDataString(Assert.Single(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset=0", StringComparison.Ordinal)));
+            Assert.Contains("$order=" + UsacClient.Form470VersionOrder, first, StringComparison.Ordinal);
+            Assert.DoesNotContain("fcc_form_470_status='Certified'", first, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
     public async Task BenLookupOverTheCapKeepsTheResultLimitMessage()
     {
         var directory = Temp();

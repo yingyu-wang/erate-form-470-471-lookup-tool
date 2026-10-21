@@ -11,6 +11,7 @@ Unreleased. Do not tag this version until the latest nightly USAC check says `pa
 - A name search with more than 50,000 published rows fails before paging and reports how many rows matched. The message tells the user to narrow the name or pass `--ben`.
 - `CliOptions` and `CliRow` are internal to the command-line program. The test project is the only other assembly that can see them.
 - The nightly USAC script checks that the quoted Form 470 source link for application 270000594 still returns rows.
+- The Form 470 `--diff` version-row query uses the same `count(*)` pre-check, 50,000-row cap, and `rowsUpdatedAt` check. A complete result of exactly 50,000 rows is returned. A larger count fails before paging. The diff comparison, columns, and messages are unchanged.
 
 ### Shared export schema
 

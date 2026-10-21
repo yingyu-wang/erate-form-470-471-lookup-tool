@@ -386,6 +386,11 @@ ordinary Form 470 or Form 471 lookup.
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
 ```
 
+The version-row read uses the same `count(*)` pre-check, 50,000-row cap, and
+`rowsUpdatedAt` check as `LoadFilingsAsync`. Select, order, and the comparison
+are unchanged. A complete result of exactly 50,000 rows is returned. A count
+above 50,000 fails before any page is read.
+
 The query does not add `fcc_form_470_status='Certified'`. A Current row can be
 canceled while the Original row remains certified. Checked on 2026-10-19,
 application `270000194` had Original status `Certified` and Current status
@@ -462,6 +467,11 @@ Any other exception is not mapped to these codes.
   `InvalidOperationException` and the CLI exits 4. Pages read for that
   attempt are removed from the local cache, including when the second
   metadata read fails, so a later lookup does not reuse a mixed set.
+- `--diff` pages in `GetForm470VersionRowsAsync` with those same guards on
+  dataset `jt8s-3q52`. The cap stays 50,000 rows. A name search over the cap
+  uses the narrow-name message. A BEN lookup over the cap uses the result-limit
+  message. Both exit 4 and do not return a partial page set. The diff columns
+  and comparison are unchanged.
 - `--fy` accepts 2016 through 2100. A year USAC has not published, including
   FY2027 for some BENs, is an empty published result (exit 2), not a bad
   argument.
