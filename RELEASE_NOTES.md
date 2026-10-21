@@ -1,8 +1,8 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.6 — unreleased: shared export schema, Form 470 diff, and FRN commitment columns
+## v1.0.6 — October 20, 2026: shared export schema, Form 470 diff, and FRN commitment columns
 
-Unreleased. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and only with Ying's approval. Release files are unsigned by design. No signing step, certificate, or signed package is added.
+Release files are unsigned by design. No signing step, certificate, or signed package is added.
 
 ### Paging guards from the PR 18 review
 
