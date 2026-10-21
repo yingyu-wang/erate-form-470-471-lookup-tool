@@ -1,8 +1,8 @@
 """Verify standalone preview packaging; this does not assert device runtime behavior."""
 import argparse
 from pathlib import Path
+import re
 import struct
-import xml.etree.ElementTree as ET
 import zipfile
 
 parser = argparse.ArgumentParser()
@@ -15,14 +15,15 @@ parser.add_argument("--csproj", type=Path,
 args = parser.parse_args()
 
 
-def single_property(root, name):
-    values = [element.text.strip() for element in root.iter(name) if element.text and element.text.strip()]
+def single_property(text, name):
+    # Plain-text match; the project file is never handed to an XML parser.
+    values = re.findall(rf"<{name}>\s*([^<\s]+)\s*</{name}>", text)
     if len(values) != 1:
         raise SystemExit(f"Expected exactly one <{name}> in {args.csproj}, found {len(values)}")
     return values[0]
 
 
-project = ET.parse(args.csproj).getroot()
+project = args.csproj.read_text(encoding="utf-8")
 version_code = single_property(project, "ApplicationVersion")
 version_name = single_property(project, "ApplicationDisplayVersion")
 # External SDK tools are invoked by CI, never from command-line executable paths.
