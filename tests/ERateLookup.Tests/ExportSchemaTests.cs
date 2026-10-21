@@ -59,6 +59,7 @@ public class ExportSchemaTests
         Assert.Equal(
             new[] { "LookupOutcome", "Change", "SourceAndNotes", "AllowableContractDate" },
             ExportSchema.Names(ExportColumnGroup.Portfolio));
+        Assert.Equal(FrnCommitment.Columns, ExportSchema.Columns(ExportSchema.CliColumns).Skip(BaseHeaders.Length));
 
         foreach (var name in ExportSchema.Names(ExportColumnGroup.Budget)
             .Concat(ExportSchema.Names(ExportColumnGroup.LookupTimestamp))
@@ -174,6 +175,8 @@ public class ExportSchemaTests
                 Number = "201009092",
                 FundingRequestNumber = "2099010373",
                 Status = "Funded",
+                Name = "Webster Groves School District",
+                Ben = "136910",
                 FundingCommitmentRequest = "14908.32",
                 RequestedAmount = "14908.32",
                 FcdlLetterDate = "2020-05-09T00:00:00.000",
@@ -186,7 +189,10 @@ public class ExportSchemaTests
             null);
         Assert.Equal("Funded", funded.Status);
         Assert.Equal("14908.32", funded.RequestedAmount);
-        Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" }, new[] { funded.FrnStatus, funded.CommittedAmount, funded.FcdlDate, funded.RevisedFcdlDate, funded.DisbursedAmount });
+        Assert.Equal(
+            new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" },
+            ExportSchema.ToRow(funded, ExportSchema.CliColumns).Skip(BaseHeaders.Length));
+        Assert.Equal(BaseHeaders.Length, ExportSchema.ToRow(funded).Length);
         var pending = ExportSchema.FromFundingRequest(
             new UsacRow
             {
@@ -301,6 +307,33 @@ public class ExportSchemaTests
     }
 
     [Fact]
+    public void WriteJsonStopsBetweenRowsWhenCanceled()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            using var canceled = new CancellationTokenSource();
+            var rows = new[]
+            {
+                new CancelingRow("1", canceled, stop: false),
+                new CancelingRow("2", canceled, stop: true),
+            };
+            var metadata = new ExportMetadata { FundingYear = 2026, FetchedAt = DateTimeOffset.UnixEpoch };
+            var writer = new StringWriter();
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteJson(writer, metadata, rows, canceled.Token));
+            Assert.Equal("", writer.ToString());
+            var path = Path.Combine(directory, "rows.json");
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteJson(path, metadata, rows, canceled.Token));
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
     public void WriteJsonHonorsCancellationBeforeWriting()
     {
         var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
@@ -350,4 +383,32 @@ public class ExportSchemaTests
     }
 
     sealed record SampleJsonRow(string ApplicationNumber, string Source);
+
+    sealed class CancelingRow
+    {
+        readonly CancellationTokenSource cancel;
+        readonly bool stop;
+
+        public CancelingRow(string applicationNumber, CancellationTokenSource cancel, bool stop)
+        {
+            ApplicationNumber = applicationNumber;
+            this.cancel = cancel;
+            this.stop = stop;
+        }
+
+        public string ApplicationNumber { get; }
+
+        public string Source
+        {
+            get
+            {
+                if (stop)
+                {
+                    cancel.Cancel();
+                }
+
+                return ApplicationNumber;
+            }
+        }
+    }
 }

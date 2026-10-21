@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Xml;
 namespace ERateLookup.Core;
 
@@ -110,9 +109,9 @@ public static class DataExporter
 
     public static void WriteJson<TRow>(string path, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
-        using var writer = new StreamWriter(path, false, new UTF8Encoding(false));
-        WriteJson(writer, metadata, rows, ct);
+        using var buffer = new StringWriter();
+        WriteJson(buffer, metadata, rows, ct);
+        WriteCompletedText(path, buffer.ToString(), ct);
     }
 
     public static void WriteJson<TRow>(TextWriter writer, ExportMetadata metadata, IReadOnlyList<TRow> rows, CancellationToken ct = default)
@@ -121,8 +120,45 @@ public static class DataExporter
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(rows);
         ct.ThrowIfCancellationRequested();
-        var json = JsonSerializer.Serialize(Document(metadata, rows), JsonOptions);
-        writer.Write(json);
+        using var buffer = new MemoryStream();
+        using (var json = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        {
+            json.WriteStartObject();
+            WriteProperty(json, "form", metadata.Form);
+            json.WriteBoolean("linked", metadata.Linked);
+            if (metadata.Form470Count is int form470Count)
+            {
+                json.WriteNumber("form470Count", form470Count);
+            }
+
+            if (metadata.Form471Count is int form471Count)
+            {
+                json.WriteNumber("form471Count", form471Count);
+            }
+
+            WriteProperty(json, "ben", metadata.Ben);
+            WriteProperty(json, "applicantName", metadata.ApplicantName);
+            WriteProperty(json, "fundingYear", metadata.FundingYear);
+            WriteProperty(json, "applicationNumber", metadata.ApplicationNumber);
+            WriteProperty(json, "fundingRequestNumber", metadata.FundingRequestNumber);
+            json.WriteString("fetchedAt", metadata.FetchedAt.ToString("O", CultureInfo.InvariantCulture));
+            json.WriteNumber("count", rows.Count);
+            json.WritePropertyName("rows");
+            json.WriteStartArray();
+            foreach (var row in rows)
+            {
+                ct.ThrowIfCancellationRequested();
+                JsonSerializer.Serialize(json, row, RowJsonOptions);
+            }
+
+            ct.ThrowIfCancellationRequested();
+            json.WriteEndArray();
+            json.WriteEndObject();
+            json.Flush();
+        }
+
+        ct.ThrowIfCancellationRequested();
+        writer.Write(Encoding.UTF8.GetString(buffer.ToArray()));
         writer.Flush();
     }
 
@@ -179,9 +215,9 @@ public static class DataExporter
     /// </summary>
     public static void WriteColumnJson(string path, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
-        using var writer = new StreamWriter(path, false, new UTF8Encoding(false));
-        WriteColumnJson(writer, metadata, columns, rows, ct);
+        using var buffer = new StringWriter();
+        WriteColumnJson(buffer, metadata, columns, rows, ct);
+        WriteCompletedText(path, buffer.ToString(), ct);
     }
 
     public static void WriteColumnJson(TextWriter writer, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
@@ -205,87 +241,40 @@ public static class DataExporter
         WriteJson(writer, metadata, shaped, ct);
     }
 
-    static ExportJsonDocument<TRow> Document<TRow>(ExportMetadata metadata, IReadOnlyList<TRow> rows) =>
-        new()
-        {
-            Form = metadata.Form,
-            Linked = metadata.Linked,
-            Form470Count = metadata.Form470Count,
-            Form471Count = metadata.Form471Count,
-            Ben = metadata.Ben,
-            ApplicantName = metadata.ApplicantName,
-            FundingYear = metadata.FundingYear,
-            ApplicationNumber = metadata.ApplicationNumber,
-            FundingRequestNumber = metadata.FundingRequestNumber,
-            FetchedAt = metadata.FetchedAt.ToString("O", CultureInfo.InvariantCulture),
-            Count = rows.Count,
-            Rows = rows,
-        };
-
-    static readonly JsonSerializerOptions JsonOptions = new()
+    static void WriteCompletedText(string path, string text, CancellationToken ct)
     {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = true
-    };
-
-    sealed class ExportJsonDocument<TRow>
-    {
-        public int? Form
-        {
-            get; init;
-        }
-
-        public bool Linked
-        {
-            get; init;
-        }
-
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public int? Form470Count
-        {
-            get; init;
-        }
-
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public int? Form471Count
-        {
-            get; init;
-        }
-
-        public string? Ben
-        {
-            get; init;
-        }
-
-        public string? ApplicantName
-        {
-            get; init;
-        }
-
-        public int? FundingYear
-        {
-            get; init;
-        }
-
-        public string? ApplicationNumber
-        {
-            get; init;
-        }
-
-        public string? FundingRequestNumber
-        {
-            get; init;
-        }
-
-        public string FetchedAt { get; init; } = "";
-
-        public int Count
-        {
-            get; init;
-        }
-
-        public IReadOnlyList<TRow> Rows { get; init; } = [];
+        ct.ThrowIfCancellationRequested();
+        File.WriteAllText(path, text, new UTF8Encoding(false));
     }
+
+    static void WriteProperty(Utf8JsonWriter json, string name, int? value)
+    {
+        if (value is int number)
+        {
+            json.WriteNumber(name, number);
+        }
+        else
+        {
+            json.WriteNull(name);
+        }
+    }
+
+    static void WriteProperty(Utf8JsonWriter json, string name, string? value)
+    {
+        if (value is null)
+        {
+            json.WriteNull(name);
+        }
+        else
+        {
+            json.WriteString(name, value);
+        }
+    }
+
+    static readonly JsonSerializerOptions RowJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     private static void WriteText(ZipArchive zip, string name, string text)
     {

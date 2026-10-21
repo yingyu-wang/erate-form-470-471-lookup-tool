@@ -36,16 +36,16 @@ public class ExportSchemaGoldenTests
             var schemaRow = ExportSchema.FromFiling(FilingForm.Form470, filing, 2026, false, null, null);
             var displayed = ExportSchema.WithDisplayedBen(schemaRow, "143618");
             var cells = ExportSchema.ToRow(displayed);
-            var cliColumns = new ExportColumns { IncludeFrnCommitment = true };
-            var cliCells = ExportSchema.ToRow(displayed, cliColumns);
+            var cliCells = ExportSchema.ToRow(displayed, ExportSchema.CliColumns);
             Assert.Equal(ExportSchema.BaseColumns, ExportSchema.Columns());
             Assert.Equal(cells.Length, ExportSchema.BaseColumns.Count);
-            Assert.Equal(ExportSchema.BaseColumns.Concat(FrnCommitment.Columns), ExportSchema.Columns(cliColumns));
+            Assert.Equal(ExportSchema.BaseColumns.Concat(FrnCommitment.Columns), ExportSchema.Columns(ExportSchema.CliColumns));
+            Assert.Equal(new[] { "", "", "", "", "" }, cliCells.Skip(cells.Length));
 
             var csvCode = await CliCommand.RunAsync(Options(CliFormat.Csv) with { OutputPath = csvPath }, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, csvCode);
             var csv = ParseCsv(await File.ReadAllTextAsync(csvPath));
-            Assert.Equal(ExportSchema.Columns(cliColumns), csv[0]);
+            Assert.Equal(ExportSchema.Columns(ExportSchema.CliColumns), csv[0]);
             Assert.Equal(cliCells, csv[1]);
             Assert.Equal(cells, csv[1].Take(cells.Length));
             Assert.Equal(new[] { "", "", "", "", "" }, csv[1][17..]);
@@ -188,7 +188,7 @@ public class ExportSchemaGoldenTests
             var csvCode = await CliCommand.RunAsync(options with { Format = CliFormat.Csv, OutputPath = csvPath }, client, new StringWriter(), new StringWriter(), default);
             Assert.Equal(CliCommand.ExitFound, csvCode);
             var csv = ParseCsv(await File.ReadAllTextAsync(csvPath));
-            Assert.Equal(ExportSchema.Columns(new ExportColumns { IncludeFrnCommitment = true }), csv[0]);
+            Assert.Equal(ExportSchema.Columns(ExportSchema.CliColumns), csv[0]);
             Assert.Equal("143618", csv[1][2]);
             Assert.Equal("Funded", csv[1][6]);
             Assert.Equal(UsacSources.FundingRequest("2699003124", "261003372"), csv[1][13]);

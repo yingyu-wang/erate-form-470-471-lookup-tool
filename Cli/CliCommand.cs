@@ -496,10 +496,9 @@ public static class CliCommand
             return writer.ToString();
         }
 
-        var columns = new ExportColumns { IncludeFrnCommitment = true };
-        var table = new List<string[]> { ExportSchema.Columns(columns).ToArray() };
+        var table = new List<string[]> { ExportSchema.Columns(ExportSchema.CliColumns).ToArray() };
         foreach (var row in exportRows)
-            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), columns));
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), ExportSchema.CliColumns));
 
         if (options.Format == CliFormat.Csv)
         {
