@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Retries the live USAC xUnit filter for the nightly workflow only.
+# Category=Live includes the FRN Status field presence check for FRN 2099010373.
 # Unreachable USAC exits 0 so the schedule stays green. An assertion or build
 # failure exits 1 even when a later probe cannot reach USAC.
 set -euo pipefail

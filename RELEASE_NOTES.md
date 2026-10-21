@@ -1,14 +1,33 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## v1.0.6 — unreleased: shared export schema and CLI Excel
+## v1.0.6 — unreleased
 
-Unreleased. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and until the version is approved. Release files are unsigned by design.
+Not tagged. Do not tag this version until the latest nightly USAC check says `passed` or `passed after retry`, and only with Ying's approval. Release files are unsigned by design. No signing step, certificate, or signed package is added.
+
+### Shared export schema and CLI Excel
 
 - Core has one export schema (`ExportSchema`) and a shared JSON writer (`DataExporter.WriteJson`). The command-line table, CSV, and JSON are built from that schema.
-- Command-line columns and the JSON row shape are unchanged. Category 2 budget columns stay out of the shared base schema. App and portfolio exports still use their current headers and files.
+- Category 2 budget columns stay out of the shared base schema. App and portfolio exports still use their current headers and files.
 - The schema records the unified header names (`Name`, `Form`, `Status`, and the other shared columns). A portfolio export is defined as those base columns plus trailing `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
-- The command line writes that same table as an Excel workbook with `--xlsx` (alias `--excel`). The flag requires `--output`. `--csv`, `--json`, and `--xlsx` cannot be combined. Workbook cells are inline text, including amounts. A value that CSV prefixes with `'` is stored in the workbook as the original text. The sheet has no formula elements.
-- Release files are unsigned by design. Windows, macOS, and Linux packages are not signed or notarized. The Android preview still uses a generated debug signing key. This version does not add a signing step.
+- Command-line JSON keeps the `CliRow` shape. The table, CSV, and JSON include `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` after the base columns. Those five names stay out of the shared base list. Form 470 and Form 471 application rows leave them blank.
+- `--xlsx` (alias `--excel`) writes the 17 base columns only. It does not include those five FRN columns in 1.0.6. Adding them to Excel is deferred to a future release. The flag requires `--output`. `--csv`, `--json`, and `--xlsx` cannot be combined. `--diff` supports the table, CSV, and JSON only. Workbook cells are inline text, including amounts. A value that CSV prefixes with `'` is stored in the workbook as the original text. The sheet has no formula elements.
+
+### Form 470 Original vs Current diff
+
+- `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
+- An ordinary lookup still collapses to the Current version when USAC published one. The diff query does not require `fcc_form_470_status='Certified'`.
+- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions.
+
+### Committed and disbursed amounts from Open Data
+
+- `--frn` reads committed, FCDL, and disbursed fields from the public USAC Open Data FRN Status dataset `qdmp-ygft`. The command does not sign in to EPC and does not scrape EPC.
+- The command-line table, CSV, and JSON include `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. Form 470 and Form 471 application rows leave those columns blank. Excel does not include them in 1.0.6. Adding them to Excel is deferred to a future release. Desktop, Mac, Linux, and Android exports are unchanged.
+- `FrnStatus` is the published `form_471_frn_status_name`. `FcdlDate` is `fcdl_letter_date`. `RevisedFcdlDate` is `revised_fcdl_date`. `DisbursedAmount` is `total_authorized_disbursement`. A missing disbursement stays blank.
+- **[Inference]** `CommittedAmount` is `funding_commitment_request` when the status is Funded, and blank otherwise. **Q8 is pending for Ying:** this has not been confirmed against an FCDL, including when a revised FCDL date is present.
+- `RequestedAmount` on an FRN row remains the published `funding_commitment_request` for every status. That is the existing column, not the committed-amount rule.
+- The FRN query still keeps `form_version='Current'`.
+- Checked 2026-10-19. Current FRN `2099010373` (Webster Groves School District, BEN 136910, FY 2020) was `Funded`, with `funding_commitment_request` `14908.32`, `fcdl_letter_date` `2020-05-09T00:00:00.000`, `revised_fcdl_date` `2026-07-14T00:00:00.000`, and `total_authorized_disbursement` `14908.32`. URL: https://opendata.usac.org/resource/qdmp-ygft.json?funding_request_number=2099010373&$select=funding_request_number,application_number,ben,funding_year,organization_name,form_471_frn_status_name,funding_commitment_request,fcdl_letter_date,revised_fcdl_date,total_authorized_disbursement,form_version,pending_reason
+- Field text is from https://opendata.usac.org/api/views/qdmp-ygft.json read the same day.
 
 ## v1.0.5 — draft, October 19, 2026: applicant search and linked forms
 

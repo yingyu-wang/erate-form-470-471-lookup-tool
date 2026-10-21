@@ -22,7 +22,8 @@ public sealed record CliOptions(
     string? ApplicationNumber,
     string? FundingRequestNumber,
     CliFormat Format,
-    string? OutputPath);
+    string? OutputPath,
+    bool Diff = false);
 
 public sealed record CliParseResult(CliOptions? Options, bool Help, string? Error);
 
@@ -33,7 +34,7 @@ public static class CliCommand
     public const int ExitNotFound = 2;
     public const int ExitUsacUnreachable = 3;
     public const int ExitLookupFailed = 4;
-    public const string FrnEndpoint = "https://opendata.usac.org/resource/qdmp-ygft.json";
+    public const string FrnEndpoint = UsacClient.FrnStatusEndpoint;
 
     public const string HelpText = """
         E-rate Form 470 / 471 lookup
@@ -48,9 +49,10 @@ public static class CliCommand
           --fy <year>          Funding year (2016-2100)
           --app <number>       Keep one application number
           --frn <number>       Form 471 funding request number
+          --diff               Compare published Form 470 Original and Current rows
           --csv                Write CSV, including the source link and 470/471 link columns
           --json               Write JSON instead of a text table
-          --xlsx, --excel      Write an Excel workbook with the same columns. Requires --output
+          --xlsx, --excel      Write the 17 base columns to Excel. Requires --output
           --output <file>      Write the result to this file
           --help, -h           Show this help
 
@@ -59,9 +61,23 @@ public static class CliCommand
         link is printed only when every row shares one published BEN. A published
         Form 470 does not establish a Form 471.
 
+        --diff applies to Form 470. It compares the published Original and Current
+        rows in USAC Open Data dataset jt8s-3q52. It does not store a local
+        history of intermediate revisions, and it does not determine whether a
+        change was substantial. When --diff finds published rows, it exits 0
+        whether or not those versions differ. It exits 2 when no Original or
+        Current row is published. --diff writes a table, CSV, or JSON. It does
+        not write Excel.
+
         Every result row includes its USAC Open Data source link. The lookup is
         read-only: it does not create, change, certify, or submit a filing.
         Results are an observation of published data, not proof that no filing exists.
+
+        With --frn, each row also includes FrnStatus, CommittedAmount, FcdlDate,
+        RevisedFcdlDate, and DisbursedAmount from the public FRN Status dataset.
+        CommittedAmount is filled only when the published FRN status is Funded.
+        Application lookups leave those five columns blank. Excel does not
+        include those five columns in 1.0.6. There is no EPC sign-in.
 
         Exit codes:
           0  At least one published row matched
@@ -86,6 +102,7 @@ public static class CliCommand
         var csv = false;
         var json = false;
         var xlsx = false;
+        var diff = false;
         var help = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -136,6 +153,13 @@ public static class CliCommand
                     else
                         output = value.Trim();
                     break;
+                case "--diff":
+                    if (value is not null)
+                        return Fail("--diff does not take a value.");
+                    if (!seen.Add(token))
+                        return Fail("Duplicate argument: --diff");
+                    diff = true;
+                    break;
                 case "--csv":
                     if (value is not null)
                         return Fail("--csv does not take a value.");
@@ -167,6 +191,8 @@ public static class CliCommand
             return new CliParseResult(null, true, null);
         if ((csv ? 1 : 0) + (json ? 1 : 0) + (xlsx ? 1 : 0) > 1)
             return Fail("Choose either --csv, --json, or --xlsx.");
+        if (diff && xlsx)
+            return Fail("--diff supports the table, CSV, and JSON only.");
         if (xlsx && string.IsNullOrWhiteSpace(output))
             return Fail("--xlsx requires --output <file.xlsx>.");
         if (form is null || fy is null || (ben is null && name is null))
@@ -191,6 +217,8 @@ public static class CliCommand
             return Fail("--frn applies to Form 471 and cannot be combined with --form both.");
         if (frn is not null && form != "471")
             return Fail("--frn applies to Form 471.");
+        if (diff && form != "470")
+            return Fail("--diff applies to Form 470.");
 
         var link = form == "both";
         var format = csv ? CliFormat.Csv : json ? CliFormat.Json : xlsx ? CliFormat.Excel : CliFormat.Table;
@@ -200,11 +228,17 @@ public static class CliCommand
             "470" => FilingForm.Form470,
             _ => null
         };
-        return new CliParseResult(new CliOptions(filing, link, ben, name, year, app, frn, format, output), false, null);
+        return new CliParseResult(new CliOptions(filing, link, ben, name, year, app, frn, format, output, diff), false, null);
     }
 
     public static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        if (options.Diff && options.Format == CliFormat.Excel)
+        {
+            await stderr.WriteLineAsync("--diff supports the table, CSV, and JSON only.").ConfigureAwait(false);
+            return ExitBadArgs;
+        }
+
         if (options.Format == CliFormat.Excel && string.IsNullOrWhiteSpace(options.OutputPath))
         {
             await stderr.WriteLineAsync("--xlsx requires --output <file.xlsx>.").ConfigureAwait(false);
@@ -213,6 +247,11 @@ public static class CliCommand
 
         try
         {
+            if (options.Diff)
+            {
+                return await RunDiffAsync(options, client, stdout, stderr, cancellationToken).ConfigureAwait(false);
+            }
+
             IReadOnlyList<ExportRow> exportRows;
             DateTimeOffset fetched;
             int? form470Count = null;
@@ -292,6 +331,91 @@ public static class CliCommand
         }
     }
 
+    static async Task<int> RunDiffAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var response = await client.GetForm470VersionRowsAsync(options.Ben, options.ApplicantName, options.FundingYear, options.ApplicationNumber, true, cancellationToken).ConfigureAwait(false);
+        var changes = Form470Diff.Compare(response.Data);
+        var applicationCount = response.Data.Select(row => row.Number).Distinct(StringComparer.Ordinal).Count();
+        var body = RenderDiff(options, changes, response.FetchedAt, applicationCount);
+        await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+        if (applicationCount == 0)
+        {
+            await stderr.WriteLineAsync($"No Form 470 Original or Current rows were published for {Who(options)}. An empty result is not proof that no filing exists.").ConfigureAwait(false);
+            return ExitNotFound;
+        }
+
+        var applications = applicationCount.ToString(CultureInfo.InvariantCulture);
+        var summary = changes.Count == 0
+            ? $"Original and Current match for {applications} Form 470 application(s) for {Who(options)}. "
+            : $"Found {changes.Count.ToString(CultureInfo.InvariantCulture)} Original-vs-Current difference(s) in {applications} Form 470 application(s) for {Who(options)}. ";
+        await stderr.WriteLineAsync(summary + Form470Diff.Disclaimer).ConfigureAwait(false);
+        return ExitFound;
+    }
+
+    static string RenderDiff(CliOptions options, IReadOnlyList<Form470FieldChange> changes, DateTimeOffset fetched, int applicationCount)
+    {
+        if (options.Format == CliFormat.Json)
+        {
+            var payload = new
+            {
+                form = (int)FilingForm.Form470,
+                diff = true,
+                linked = false,
+                ben = options.Ben,
+                applicantName = options.ApplicantName,
+                fundingYear = options.FundingYear,
+                applicationNumber = options.ApplicationNumber,
+                fetchedAt = fetched.ToString("O", CultureInfo.InvariantCulture),
+                applicationCount,
+                count = changes.Count,
+                rows = changes.Select(change => new
+                {
+                    change.ApplicationNumber,
+                    change.Ben,
+                    change.Name,
+                    change.Change,
+                    change.Scope,
+                    change.ServiceRequestId,
+                    change.Field,
+                    change.Original,
+                    change.Current,
+                    Source = UsacSources.Application(FilingForm.Form470, change.ApplicationNumber)
+                })
+            };
+            return JsonSerializer.Serialize(payload, JsonOptions);
+        }
+
+        var table = new List<string[]>
+        {
+            new[] { "ApplicationNumber", "BEN", "Name", "Change", "Scope", "ServiceRequestId", "Field", "Original", "Current", "Source" }
+        };
+        foreach (var change in changes)
+        {
+            table.Add(
+            [
+                change.ApplicationNumber,
+                change.Ben,
+                change.Name,
+                change.Change,
+                change.Scope,
+                change.ServiceRequestId,
+                change.Field,
+                change.Original,
+                change.Current,
+                UsacSources.Application(FilingForm.Form470, change.ApplicationNumber)
+            ]);
+        }
+
+        if (options.Format == CliFormat.Csv)
+        {
+            using var writer = new StringWriter();
+            DataExporter.WriteCsv(writer, table);
+            return writer.ToString();
+        }
+
+        return RenderTable(table);
+    }
+
     public static async Task<QueryResult<List<UsacRow>>> FundingRequestsAsync(UsacClient client, CliOptions options, CancellationToken cancellationToken)
     {
         var where = UsacClient.ApplicantClause(FilingForm.Form471, options.Ben, options.ApplicantName, "ben");
@@ -303,7 +427,7 @@ public static class CliCommand
             where += " AND funding_request_number=" + UsacClient.Literal(options.FundingRequestNumber);
         return await client.QueryAsync(new Dictionary<string, string>
         {
-            ["$select"] = "funding_request_number,application_number,ben as billed_entity_number,organization_name as billed_entity_name,form_471_frn_status_name as filing_status,nickname as form_nickname,form_471_service_type_name as service_type,funding_commitment_request as funding_request_amount,form_version",
+            ["$select"] = UsacClient.FrnStatusSelect,
             ["$where"] = where,
             ["$order"] = "funding_request_number",
             ["$limit"] = "1000"
@@ -380,7 +504,12 @@ public static class CliCommand
         row.Pdf,
         row.RequestedAmount,
         row.PreDiscountAmount,
-        row.Source);
+        row.Source,
+        row.FrnStatus,
+        row.CommittedAmount,
+        row.FcdlDate,
+        row.RevisedFcdlDate,
+        row.DisbursedAmount);
 
     static string Render(CliOptions options, IReadOnlyList<ExportRow> exportRows, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
     {
@@ -403,7 +532,7 @@ public static class CliCommand
             return writer.ToString();
         }
 
-        var table = Table(options, exportRows);
+        var table = Table(options, exportRows, ExportSchema.CliColumns);
 
         if (options.Format == CliFormat.Csv)
         {
@@ -415,14 +544,14 @@ public static class CliCommand
         return RenderTable(table);
     }
 
-    static List<string[]> Table(CliOptions options, IReadOnlyList<ExportRow> exportRows)
+    static List<string[]> Table(CliOptions options, IReadOnlyList<ExportRow> exportRows, ExportColumns columns)
     {
         var table = new List<string[]>
         {
-            ExportSchema.Columns().ToArray()
+            ExportSchema.Columns(columns).ToArray()
         };
         foreach (var row in exportRows)
-            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben)));
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), columns));
         return table;
     }
 
@@ -431,8 +560,9 @@ public static class CliCommand
         var directory = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath!));
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
-        // Workbook cells are inline strings, so amounts stay text. Typed numeric cells are not written.
-        DataExporter.WriteExcel(options.OutputPath!, Table(options, exportRows), cancellationToken);
+        // Base columns only. The five FRN columns stay in the table, CSV, and JSON, and are deferred for Excel.
+        // Cells are inline strings, so amounts stay text.
+        DataExporter.WriteExcel(options.OutputPath!, Table(options, exportRows, default), cancellationToken);
     }
 
     static string RenderTable(List<string[]> table)
@@ -514,6 +644,12 @@ public static class CliCommand
                 : $"applicant name '{options.ApplicantName}'";
         return $"{applicant}, FY {year}";
     }
+
+    static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
 }
 
 public sealed record CliRow(
@@ -529,4 +665,9 @@ public sealed record CliRow(
     string Pdf,
     string RequestedAmount,
     string PreDiscountAmount,
-    string Source);
+    string Source,
+    string FrnStatus = "",
+    string CommittedAmount = "",
+    string FcdlDate = "",
+    string RevisedFcdlDate = "",
+    string DisbursedAmount = "");

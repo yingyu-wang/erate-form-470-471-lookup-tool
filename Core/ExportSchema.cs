@@ -3,9 +3,10 @@ using System.Globalization;
 namespace ERateLookup.Core;
 
 /// <summary>
-/// Shared lookup export columns. The command-line table and CSV use
-/// <see cref="BaseColumns"/>. Other groups stay out of that list until the
-/// open column questions are decided; pass <see cref="ExportColumns"/> to include them.
+/// Shared lookup export columns. <see cref="BaseColumns"/> is the shared list.
+/// The command-line table and CSV use <see cref="CliColumns"/>, which appends
+/// the FRN commitment columns. Excel uses <see cref="BaseColumns"/> only.
+/// Other groups stay out until <see cref="ExportColumns"/> selects them.
 /// App and portfolio files still write their current headers.
 /// </summary>
 public static class ExportSchema
@@ -31,6 +32,11 @@ public static class ExportSchema
         new("Linked", ExportColumnGroup.Base, static row => row.Linked),
         new("Form470Count", ExportColumnGroup.Base, static row => row.Form470Count),
         new("Form471Count", ExportColumnGroup.Base, static row => row.Form471Count),
+        new("FrnStatus", ExportColumnGroup.FrnCommitment, static row => row.FrnStatus),
+        new("CommittedAmount", ExportColumnGroup.FrnCommitment, static row => row.CommittedAmount),
+        new("FcdlDate", ExportColumnGroup.FrnCommitment, static row => row.FcdlDate),
+        new("RevisedFcdlDate", ExportColumnGroup.FrnCommitment, static row => row.RevisedFcdlDate),
+        new("DisbursedAmount", ExportColumnGroup.FrnCommitment, static row => row.DisbursedAmount),
         new("LookupResult", ExportColumnGroup.LookupContext, static row => row.LookupResult),
         new("DirectoryUpdatedUTC", ExportColumnGroup.LookupContext, static row => row.DirectoryUpdatedUtc),
         new("BudgetCycle", ExportColumnGroup.Budget, static row => row.BudgetCycle),
@@ -64,6 +70,12 @@ public static class ExportSchema
         };
 
     public static IReadOnlyList<string> BaseColumns => Columns();
+
+    /// <summary>
+    /// Command-line table and CSV: the shared base plus the five FRN columns.
+    /// Excel uses <see cref="BaseColumns"/>. Those five names stay out of that list.
+    /// </summary>
+    public static ExportColumns CliColumns { get; } = new() { IncludeFrnCommitment = true };
 
     public static IReadOnlyList<string> Names(ExportColumnGroup group) =>
         Definitions.Where(column => column.Group == group).Select(column => column.Name).ToArray();
@@ -107,8 +119,17 @@ public static class ExportSchema
         int fundingYear,
         bool linked,
         int? form470Count,
-        int? form471Count) =>
-        new()
+        int? form471Count)
+    {
+        // [Inference] CommittedAmount copies funding_commitment_request only when
+        // the published FRN status is Funded. Q8 (FCDL confirmation) is pending.
+        var commitment = FrnCommitment.FromPublished(
+            row.Status,
+            row.FundingCommitmentRequest,
+            row.FcdlLetterDate,
+            row.RevisedFcdlDate,
+            row.TotalAuthorizedDisbursement);
+        return new()
         {
             Form = ((int)FilingForm.Form471).ToString(CultureInfo.InvariantCulture),
             FundingYear = fundingYear.ToString(CultureInfo.InvariantCulture),
@@ -127,7 +148,13 @@ public static class ExportSchema
             Linked = linked ? "true" : "false",
             Form470Count = CountText(form470Count),
             Form471Count = CountText(form471Count),
+            FrnStatus = commitment.FrnStatus,
+            CommittedAmount = commitment.CommittedAmount,
+            FcdlDate = commitment.FcdlDate,
+            RevisedFcdlDate = commitment.RevisedFcdlDate,
+            DisbursedAmount = commitment.DisbursedAmount,
         };
+    }
 
     /// <summary>
     /// Table and CSV show the queried BEN when the published row did not include one.
@@ -145,6 +172,7 @@ public static class ExportSchema
         Definitions.Where(column => column.Group switch
         {
             ExportColumnGroup.Base => true,
+            ExportColumnGroup.FrnCommitment => columns.IncludeFrnCommitment,
             ExportColumnGroup.LookupTimestamp => columns.IncludeLookupTimestamps,
             ExportColumnGroup.LookupContext => columns.IncludeLookupContext,
             ExportColumnGroup.Budget => columns.IncludeBudget,
@@ -158,6 +186,7 @@ public static class ExportSchema
 public enum ExportColumnGroup
 {
     Base,
+    FrnCommitment,
     LookupTimestamp,
     LookupContext,
     Budget,
@@ -185,6 +214,11 @@ public readonly record struct ExportColumns
     }
 
     public bool IncludePortfolio
+    {
+        get; init;
+    }
+
+    public bool IncludeFrnCommitment
     {
         get; init;
     }
@@ -225,6 +259,16 @@ public sealed record ExportRow
     public string Form470Count { get; init; } = "";
 
     public string Form471Count { get; init; } = "";
+
+    public string FrnStatus { get; init; } = "";
+
+    public string CommittedAmount { get; init; } = "";
+
+    public string FcdlDate { get; init; } = "";
+
+    public string RevisedFcdlDate { get; init; } = "";
+
+    public string DisbursedAmount { get; init; } = "";
 
     public string ExportedUtc { get; init; } = "";
 
