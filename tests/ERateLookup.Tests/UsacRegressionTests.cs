@@ -37,13 +37,13 @@ public class UsacRegressionTests
             using var formsClient = new UsacClient(formsHttp, Path.Combine(directory, "forms"), () => now);
             var f470 = await formsClient.GetFilingsAsync("101552", 2027, FilingForm.Form470, false, default);
             var f471 = await formsClient.GetFilingsAsync("101552", 2027, FilingForm.Form471, false, default);
-            Check(f470.Data.Count == 1 && f471.Data.Count == 0 && formsHandler.Count == 2, "Form 471 empty result does not reuse Form 470 cache");
+            Check(f470.Data.Count == 1 && f471.Data.Count == 0 && formsHandler.PageRequests == 2, "Form 471 empty result does not reuse Form 470 cache");
             var emptyCached = await formsClient.GetFilingsAsync("101552", 2027, FilingForm.Form471, false, default);
-            Check(emptyCached.FromCache && emptyCached.Data.Count == 0 && formsHandler.Count == 2, "Empty Form 471 result cached normally");
+            Check(emptyCached.FromCache && emptyCached.Data.Count == 0 && formsHandler.PageRequests == 2, "Empty Form 471 result cached normally");
             await formsClient.GetFilingsAsync("101552", 2027, FilingForm.Form471, true, default);
-            Check(formsHandler.Count == 3, "Form 471 manual refresh bypasses empty cache");
+            Check(formsHandler.PageRequests == 3, "Form 471 manual refresh bypasses empty cache");
             now = now.AddHours(2); await formsClient.GetFilingsAsync("101552", 2027, FilingForm.Form471, false, default);
-            Check(formsHandler.Count == 4, "Empty Form 471 expires at two hours");
+            Check(formsHandler.PageRequests == 4, "Empty Form 471 expires at two hours");
             Check(UsacClient.FilingFilter("101552", 2027, FilingForm.Form471).Contains("epc_organization_id='101552'") && UsacClient.FilingFilter("101552", 2027, FilingForm.Form471).Contains("certified_datetime IS NOT NULL"), "Form 471 uses entity ID and certification date");
             var mapped = System.Text.Json.JsonSerializer.Deserialize<List<UsacRow>>("""[{"application_number":"1","billed_entity_number":"101552","form_version":"Current","filing_status":"Committed","service_category":"Category2"},{"application_number":"1","form_version":"Original","pdf_url":"https://publicdata.usac.org/example.pdf"}]""")!;
             var collapsed471 = UsacClient.Collapse(mapped);
@@ -91,11 +91,32 @@ sealed class FakeHandler : HttpMessageHandler
 
 sealed class FormHandler : HttpMessageHandler
 {
-    public int Count; public bool Fail;
+    public int Count;
+    public int PageRequests;
+    public bool Fail;
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         Count++;
-        var content = request.RequestUri!.AbsolutePath.Contains("9s6i-myen") ? "[]" : "[{\"application_number\":\"470-test\",\"billed_entity_number\":\"101552\"}]";
-        return Task.FromResult(new HttpResponseMessage(Fail ? HttpStatusCode.ServiceUnavailable : HttpStatusCode.OK) { Content = new StringContent(content) });
+        if (Fail)
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { Content = new StringContent("[]") });
+        }
+
+        var uri = request.RequestUri!;
+        var query = Uri.UnescapeDataString(uri.Query);
+        if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+        {
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"rowsUpdatedAt\":1}") });
+        }
+
+        if (query.Contains("count(*)", StringComparison.Ordinal))
+        {
+            var count = uri.AbsolutePath.Contains("9s6i-myen", StringComparison.Ordinal) ? "0" : "1";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"count\":\"" + count + "\"}]") });
+        }
+
+        PageRequests++;
+        var content = uri.AbsolutePath.Contains("9s6i-myen", StringComparison.Ordinal) ? "[]" : "[{\"application_number\":\"470-test\",\"billed_entity_number\":\"101552\"}]";
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) });
     }
 }

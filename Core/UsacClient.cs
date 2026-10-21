@@ -158,6 +158,36 @@ public sealed class UsacClient : IDisposable
     const string Form471Select =
         "application_number,epc_organization_id,organization_name as billed_entity_name,org_city as billed_entity_city,org_state as billed_entity_state,certified_datetime as certified_date_time,last_modified_timestamp as last_modified_date_time,form_version,nickname as form_nickname,chosen_category_of_service as service_category,form_471_status_name as filing_status,file_url as pdf_url,funding_request_amount,pre_discount_eligible_amount";
 
+    public const int FilingPageSize = 1000;
+    public const int MaxFilingRows = 50000;
+    public const string DatasetViewEndpoint = "https://opendata.usac.org/api/views/";
+    public const string ResultLimitMessage = "Result limit reached; a complete lookup could not be made.";
+
+    // :id is Socrata's row identifier. Live check on 2026-10-19: GET
+    // https://opendata.usac.org/resource/9s6i-myen.json?$select=:id&$limit=1
+    // returned HTTP 200 and [{":id":"row-xxfz-5tfw_miz2"}]. The Form 471 $select
+    // ordered by application_number,form_version,last_modified_timestamp,:id
+    // also returned HTTP 200 without adding :id to the select list.
+    public static string FilingOrder(FilingForm form)
+    {
+        return form switch
+        {
+            FilingForm.Form470 => "application_number,service_request_id,service_request_rfp_attachment",
+            FilingForm.Form471 => "application_number,form_version,last_modified_timestamp,:id",
+            _ => throw new ArgumentException("Unsupported form type.")
+        };
+    }
+
+    public static string BroadSearchLimitMessage(long count)
+    {
+        return count.ToString(CultureInfo.InvariantCulture) + " rows match; narrow the name or pass --ben";
+    }
+
+    public static string PagingDriftMessage(string datasetId, string before, string after)
+    {
+        return "Published dataset " + datasetId + " changed during paging (rowsUpdatedAt " + before + " to " + after + "). A complete lookup could not be made.";
+    }
+
     readonly HttpClient http;
     readonly Func<DateTimeOffset> clock;
     readonly TimeSpan ttl = TimeSpan.FromHours(2);
@@ -268,7 +298,7 @@ public sealed class UsacClient : IDisposable
     public async Task<QueryResult<List<UsacRow>>> QueryAsync(Dictionary<string, string> parameters, bool refresh, CancellationToken ct, string endpoint = Endpoint)
     {
         var query = EncodeQuery(parameters);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(endpoint + "?" + query)));
+        var hash = CacheKey(endpoint, query);
         if (!refresh)
         {
             var cached = await ReadCacheAsync(hash, ct).ConfigureAwait(false);
@@ -416,7 +446,7 @@ public sealed class UsacClient : IDisposable
         GetFilingsAsync(ben, year, FilingForm.Form470, refresh, ct);
 
     public Task<QueryResult<List<Filing>>> GetFilingsAsync(string ben, int year, FilingForm form, bool refresh, CancellationToken ct) =>
-        LoadFilingsAsync(form, FilingFilter(ben, year, form), ben, refresh, ct);
+        LoadFilingsAsync(form, FilingFilter(ben, year, form), ben, false, refresh, ct);
 
     public Task<QueryResult<List<Filing>>> SearchFilingsAsync(string? ben, string? name, int year, FilingForm form, bool refresh, CancellationToken ct)
     {
@@ -431,23 +461,32 @@ public sealed class UsacClient : IDisposable
         }
 
         var requestedBen = string.IsNullOrEmpty(ben) ? null : ben;
-        return LoadFilingsAsync(form, SearchFilter(requestedBen, name, year, form), requestedBen, refresh, ct);
+        return LoadFilingsAsync(form, SearchFilter(requestedBen, name, year, form), requestedBen, true, refresh, ct);
     }
 
-    async Task<QueryResult<List<Filing>>> LoadFilingsAsync(FilingForm form, string filter, string? requestedBen, bool refresh, CancellationToken ct)
+    async Task<QueryResult<List<Filing>>> LoadFilingsAsync(FilingForm form, string filter, string? requestedBen, bool nameSearch, bool refresh, CancellationToken ct)
     {
+        var endpoint = form == FilingForm.Form471 ? Form471Endpoint : Endpoint;
+        var datasetId = form == FilingForm.Form471 ? UsacSources.Form471Dataset : UsacSources.Form470Dataset;
+        var count = await CountRowsAsync(endpoint, filter, ct).ConfigureAwait(false);
+        if (count > MaxFilingRows)
+        {
+            throw new InvalidOperationException(nameSearch ? BroadSearchLimitMessage(count) : ResultLimitMessage);
+        }
+
+        var before = await RowsUpdatedAtAsync(datasetId, ct).ConfigureAwait(false);
         var all = new List<UsacRow>();
+        var pageKeys = new List<string>();
         var fetched = DateTimeOffset.MaxValue;
         var cached = true;
-        for (var offset = 0; offset < 50000; offset += 1000)
+        var complete = false;
+        for (var offset = 0; offset < MaxFilingRows; offset += FilingPageSize)
         {
             var parameters = new Dictionary<string, string>
             {
                 ["$where"] = filter,
-                ["$order"] = form == FilingForm.Form470
-                    ? "application_number,service_request_id,service_request_rfp_attachment"
-                    : "application_number,form_version,last_modified_timestamp",
-                ["$limit"] = "1000",
+                ["$order"] = FilingOrder(form),
+                ["$limit"] = FilingPageSize.ToString(CultureInfo.InvariantCulture),
                 ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
             };
             if (form == FilingForm.Form471)
@@ -455,7 +494,8 @@ public sealed class UsacClient : IDisposable
                 parameters["$select"] = Form471Select;
             }
 
-            var page = await QueryAsync(parameters, refresh, ct, form == FilingForm.Form471 ? Form471Endpoint : Endpoint).ConfigureAwait(false);
+            pageKeys.Add(CacheKey(endpoint, EncodeQuery(parameters)));
+            var page = await QueryAsync(parameters, refresh, ct, endpoint).ConfigureAwait(false);
             all.AddRange(page.Data);
             if (page.FetchedAt < fetched)
             {
@@ -463,25 +503,138 @@ public sealed class UsacClient : IDisposable
             }
 
             cached &= page.FromCache;
-            if (page.Data.Count < 1000)
+            if (page.Data.Count < FilingPageSize || all.Count >= count)
             {
-                if (form == FilingForm.Form471)
-                {
-                    if (requestedBen is null)
-                    {
-                        Form471Identity.ValidatePublishedRows(all);
-                    }
-                    else
-                    {
-                        Form471Identity.Validate(requestedBen, all);
-                    }
-                }
-
-                return new QueryResult<List<Filing>>(Collapse(all), fetched, cached);
+                complete = true;
+                break;
             }
         }
 
-        throw new InvalidOperationException("Result limit reached; a complete lookup could not be made.");
+        if (!complete)
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(ResultLimitMessage);
+        }
+
+        string after;
+        try
+        {
+            after = await RowsUpdatedAtAsync(datasetId, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!string.Equals(before, after, StringComparison.Ordinal))
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(PagingDriftMessage(datasetId, before, after));
+        }
+
+        if (form == FilingForm.Form471)
+        {
+            if (requestedBen is null)
+            {
+                Form471Identity.ValidatePublishedRows(all);
+            }
+            else
+            {
+                Form471Identity.Validate(requestedBen, all);
+            }
+        }
+
+        return new QueryResult<List<Filing>>(Collapse(all), fetched, cached);
+    }
+
+    async Task<long> CountRowsAsync(string endpoint, string filter, CancellationToken ct)
+    {
+        var url = endpoint + "?" + EncodeQuery(new Dictionary<string, string>
+        {
+            ["$select"] = "count(*)",
+            ["$where"] = filter
+        });
+        using var document = await ReadJsonAsync(url, ct).ConfigureAwait(false);
+        if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.GetArrayLength() == 0 || document.RootElement[0].ValueKind != JsonValueKind.Object)
+        {
+            throw new JsonException("USAC did not return a row count.");
+        }
+
+        foreach (var property in document.RootElement[0].EnumerateObject())
+        {
+            if (!property.Name.StartsWith("count", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var text = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : property.Value.GetRawText();
+            if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
+            {
+                return count;
+            }
+        }
+
+        throw new JsonException("USAC did not return a row count.");
+    }
+
+    async Task<string> RowsUpdatedAtAsync(string datasetId, CancellationToken ct)
+    {
+        var url = DatasetViewEndpoint + datasetId + ".json";
+        using var document = await ReadJsonAsync(url, ct).ConfigureAwait(false);
+        if (document.RootElement.ValueKind != JsonValueKind.Object || !document.RootElement.TryGetProperty("rowsUpdatedAt", out var value))
+        {
+            throw new JsonException("USAC view " + datasetId + " did not include rowsUpdatedAt.");
+        }
+
+        var text = value.ValueKind == JsonValueKind.String ? value.GetString() : value.GetRawText();
+        if (string.IsNullOrEmpty(text))
+        {
+            throw new JsonException("USAC view " + datasetId + " did not include rowsUpdatedAt.");
+        }
+
+        return text;
+    }
+
+    static string CacheKey(string endpoint, string query) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(endpoint + "?" + query)));
+
+    async Task ForgetCacheAsync(IReadOnlyList<string> hashes, CancellationToken ct)
+    {
+        if (hashes.Count == 0)
+        {
+            return;
+        }
+
+        await cacheGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ThrowIfDisposed();
+            foreach (var hash in hashes)
+            {
+                using var delete = cacheConnection.CreateCommand();
+                delete.CommandText = "DELETE FROM query_cache WHERE query_key=$key";
+                delete.Parameters.AddWithValue("$key", hash);
+                delete.ExecuteNonQuery();
+            }
+        }
+        finally
+        {
+            cacheGate.Release();
+        }
+    }
+
+    async Task<JsonDocument> ReadJsonAsync(string url, CancellationToken ct)
+    {
+        using var response = await SendAsync(url, ct).ConfigureAwait(false);
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            throw new HttpRequestException("USAC is limiting requests. Please try again shortly.");
+        }
+
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -510,19 +663,31 @@ public sealed class UsacClient : IDisposable
     public async Task<QueryResult<List<UsacRow>>> GetForm470VersionRowsAsync(string? ben, string? name, int year, string? applicationNumber, bool refresh, CancellationToken ct)
     {
         var filter = Form470VersionFilter(ben, name, year, applicationNumber);
+        var nameSearch = !string.IsNullOrWhiteSpace(name);
+        var count = await CountRowsAsync(Endpoint, filter, ct).ConfigureAwait(false);
+        if (count > MaxFilingRows)
+        {
+            throw new InvalidOperationException(nameSearch ? BroadSearchLimitMessage(count) : ResultLimitMessage);
+        }
+
+        var before = await RowsUpdatedAtAsync(UsacSources.Form470Dataset, ct).ConfigureAwait(false);
         var all = new List<UsacRow>();
+        var pageKeys = new List<string>();
         var fetched = DateTimeOffset.MaxValue;
         var cached = true;
-        for (var offset = 0; offset < 50000; offset += 1000)
+        var complete = false;
+        for (var offset = 0; offset < MaxFilingRows; offset += FilingPageSize)
         {
-            var page = await QueryAsync(new Dictionary<string, string>
+            var parameters = new Dictionary<string, string>
             {
                 ["$select"] = Form470VersionSelect,
                 ["$where"] = filter,
                 ["$order"] = Form470VersionOrder,
-                ["$limit"] = "1000",
+                ["$limit"] = FilingPageSize.ToString(CultureInfo.InvariantCulture),
                 ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
-            }, refresh, ct).ConfigureAwait(false);
+            };
+            pageKeys.Add(CacheKey(Endpoint, EncodeQuery(parameters)));
+            var page = await QueryAsync(parameters, refresh, ct).ConfigureAwait(false);
             all.AddRange(page.Data);
             if (page.FetchedAt < fetched)
             {
@@ -530,13 +695,37 @@ public sealed class UsacClient : IDisposable
             }
 
             cached &= page.FromCache;
-            if (page.Data.Count < 1000)
+            if (page.Data.Count < FilingPageSize || all.Count >= count)
             {
-                return new QueryResult<List<UsacRow>>(all, fetched, cached);
+                complete = true;
+                break;
             }
         }
 
-        throw new InvalidOperationException("Result limit reached; a complete lookup could not be made.");
+        if (!complete)
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(ResultLimitMessage);
+        }
+
+        string after;
+        try
+        {
+            after = await RowsUpdatedAtAsync(UsacSources.Form470Dataset, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!string.Equals(before, after, StringComparison.Ordinal))
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(PagingDriftMessage(UsacSources.Form470Dataset, before, after));
+        }
+
+        return new QueryResult<List<UsacRow>>(all, fetched, cached);
     }
 
     public async Task<QueryResult<bool>> HasNewCycleForm470Async(string ben, bool refresh, CancellationToken ct)

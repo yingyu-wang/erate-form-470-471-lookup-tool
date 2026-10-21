@@ -348,7 +348,16 @@ public class ExportSchemaGoldenTests
 
         public ScriptedHandler(string body) => this.body = body;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            var payload = uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal)
+                ? "{\"rowsUpdatedAt\":1}"
+                : query.Contains("count(*)", StringComparison.Ordinal)
+                    ? "[{\"count\":\"1\"}]"
+                    : body;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload) });
+        }
     }
 }

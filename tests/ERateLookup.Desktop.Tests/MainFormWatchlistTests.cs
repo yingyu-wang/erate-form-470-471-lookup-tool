@@ -207,7 +207,14 @@ public class MainFormWatchlistTests
     }
     sealed class EmptyFilings : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[]") });
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            var body = uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal)
+                ? "{\"rowsUpdatedAt\":1}"
+                : query.Contains("count(*)", StringComparison.Ordinal) ? "[{\"count\":\"0\"}]" : "[]";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+        }
     }
 }

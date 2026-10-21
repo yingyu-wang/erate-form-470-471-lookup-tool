@@ -122,7 +122,8 @@ public class Form470DiffTests
             var result = await client.GetForm470VersionRowsAsync("16057656", null, 2027, "270000266", true, default);
 
             Assert.Empty(result.Data);
-            var url = Uri.UnescapeDataString(Assert.Single(handler.Urls));
+            var page = Assert.Single(handler.Urls, url => Uri.UnescapeDataString(url).Contains("$offset", StringComparison.Ordinal));
+            var url = Uri.UnescapeDataString(page);
             Assert.Contains("jt8s-3q52", url, StringComparison.Ordinal);
             Assert.Contains("application_number='270000266'", url, StringComparison.Ordinal);
             Assert.Contains(UsacClient.Form470VersionOrder, url, StringComparison.Ordinal);
@@ -190,8 +191,24 @@ public class Form470DiffTests
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            Urls.Add(request.RequestUri!.ToString());
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+            var uri = request.RequestUri!;
+            Urls.Add(uri.ToString());
+            var query = Uri.UnescapeDataString(uri.Query);
+            string payload;
+            if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+            {
+                payload = "{\"rowsUpdatedAt\":1}";
+            }
+            else if (query.Contains("count(*)", StringComparison.Ordinal))
+            {
+                payload = "[{\"count\":\"0\"}]";
+            }
+            else
+            {
+                payload = body;
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload) });
         }
     }
 }

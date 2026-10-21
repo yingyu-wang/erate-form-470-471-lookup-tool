@@ -390,10 +390,11 @@ last written cell.
 
 ### What a row contains
 
-Without `--frn`, the CLI calls `UsacClient.GetFilingsAsync` (the desktop
-lookup). Form 470 reads dataset `jt8s-3q52` and keeps certified rows. Form
-471 reads dataset `9s6i-myen` and keeps rows with a certified timestamp. Rows
-are collapsed to the current version, one application per row.
+Without `--frn`, the CLI calls `UsacClient.SearchFilingsAsync`. A BEN-only
+lookup goes through `GetFilingsAsync`. Both page in `LoadFilingsAsync`. Form
+470 reads dataset `jt8s-3q52` and keeps certified rows. Form 471 reads dataset
+`9s6i-myen` and keeps rows with a certified timestamp. Rows are collapsed to
+the current version, one application per row.
 
 With `--frn`, the CLI calls the FRN status dataset `qdmp-ygft` instead. The
 select list is `UsacClient.FrnStatusSelect`: funding request number,
@@ -437,6 +438,11 @@ ordinary Form 470 or Form 471 lookup. `--diff` writes a table, CSV, or JSON.
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
 ```
+
+The version-row read uses the same `count(*)` pre-check, 50,000-row cap, and
+`rowsUpdatedAt` check as `LoadFilingsAsync`. Select, order, and the comparison
+are unchanged. A complete result of exactly 50,000 rows is returned. A count
+above 50,000 fails before any page is read.
 
 The query does not add `fcc_form_470_status='Certified'`. A Current row can be
 canceled while the Original row remains certified. Checked on 2026-10-19,
@@ -491,7 +497,8 @@ Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
 Exit 4 covers a Form 471 identity mismatch (`Form471IdentityMismatchException`),
 the filing-query result limit below, and a file write that throws one of those
 exceptions. The FRN query does not run the Form 471 identity check. Only
-`GetFilingsAsync` does, and only for Form 471.
+`LoadFilingsAsync` does, and only for Form 471. `GetFilingsAsync` and
+`SearchFilingsAsync` both reach that check.
 
 Any other exception is not mapped to these codes.
 
@@ -501,10 +508,23 @@ Any other exception is not mapped to these codes.
   page. It does not exit 4 when that page is full. The filter also includes
   the FRN number, BEN, funding year, and `form_version='Current'`, so a single
   FRN is normally one row.
-- A Form 470 or Form 471 lookup without `--frn` pages 1,000 rows at a time. If
-  every page through offset 49000 is full, `GetFilingsAsync` throws
-  `InvalidOperationException` (`Result limit reached; a complete lookup could
-  not be made.`) and the CLI exits 4.
+- A Form 470 or Form 471 lookup without `--frn` pages 1,000 rows at a time in
+  `LoadFilingsAsync`. Before the first page it reads `count(*)`. A name search
+  with more than 50,000 matching rows throws `InvalidOperationException`
+  (`N rows match; narrow the name or pass --ben`) and the CLI exits 4. A
+  BEN lookup over that cap throws `Result limit reached; a complete lookup
+  could not be made.` and also exits 4. The lookup does not return a partial
+  page set.
+- `LoadFilingsAsync` reads `rowsUpdatedAt` from `/api/views/<id>.json` before
+  the first page and after the last. If that value changes, it throws
+  `InvalidOperationException` and the CLI exits 4. Pages read for that
+  attempt are removed from the local cache, including when the second
+  metadata read fails, so a later lookup does not reuse a mixed set.
+- `--diff` pages in `GetForm470VersionRowsAsync` with those same guards on
+  dataset `jt8s-3q52`. The cap stays 50,000 rows. A name search over the cap
+  uses the narrow-name message. A BEN lookup over the cap uses the result-limit
+  message. Both exit 4 and do not return a partial page set. The diff columns
+  and comparison are unchanged.
 - `--fy` accepts 2016 through 2100. A year USAC has not published, including
   FY2027 for some BENs, is an empty published result (exit 2), not a bad
   argument.

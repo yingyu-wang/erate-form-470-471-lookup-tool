@@ -81,7 +81,7 @@ public class PortfolioChecks
             using (var retryHandler = new RetryHandler()) using (var retryHttp = new HttpClient(retryHandler))
             {
                 using var retryClient = new UsacClient(retryHttp, Path.Combine(folder, "retry")); await retryClient.GetFilingsAsync("1", 2027, true, default);
-                Check(retryHandler.Count == 3, "Rate-limited GET honors bounded retry attempts");
+                Check(retryHandler.Count == 6, "Rate-limited GET honors bounded retry attempts");
             }
             var future = Path.Combine(folder, "future"); Directory.CreateDirectory(future);
             using (var db = new SqliteConnection("Data Source=" + Path.Combine(future, "portfolio.sqlite3"))) { db.Open(); using var c = db.CreateCommand(); c.CommandText = "PRAGMA user_version=99"; c.ExecuteNonQuery(); }
@@ -95,8 +95,18 @@ public class PortfolioChecks
         public int Count;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            Count++; var query = Uri.UnescapeDataString(request.RequestUri!.Query);
+            Count++;
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
             if (query.Contains("billed_entity_number='2'")) return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest));
+            if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"rowsUpdatedAt\":1}", Encoding.UTF8, "application/json") });
+            if (query.Contains("count(*)", StringComparison.Ordinal))
+            {
+                var count = query.Contains("billed_entity_number='3'") ? "0" : "1";
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("[{\"count\":\"" + count + "\"}]", Encoding.UTF8, "application/json") });
+            }
+
             var body = query.Contains("billed_entity_number='3'") ? "[]" : """[{"application_number":"10","billed_entity_number":"1","billed_entity_name":"District","fcc_form_470_status":"Certified","function":"Wireless"}]""";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
         }
@@ -106,7 +116,12 @@ public class PortfolioChecks
         public int Count;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            var response = new HttpResponseMessage(++Count < 3 ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK) { Content = new StringContent("[]") };
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            var body = uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal)
+                ? "{\"rowsUpdatedAt\":1}"
+                : query.Contains("count(*)", StringComparison.Ordinal) ? "[{\"count\":\"0\"}]" : "[]";
+            var response = new HttpResponseMessage(++Count < 3 ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK) { Content = new StringContent(body) };
             response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.Zero); return Task.FromResult(response);
         }
     }
