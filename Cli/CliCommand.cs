@@ -9,7 +9,8 @@ public enum CliFormat
 {
     Table,
     Csv,
-    Json
+    Json,
+    Excel
 }
 
 internal sealed record CliOptions(
@@ -51,6 +52,7 @@ public static class CliCommand
           --diff               Compare published Form 470 Original and Current rows
           --csv                Write CSV, including the source link and 470/471 link columns
           --json               Write JSON instead of a text table
+          --xlsx, --excel      Write the 17 base columns to Excel. Requires --output
           --output <file>      Write the result to this file
           --help, -h           Show this help
 
@@ -64,7 +66,8 @@ public static class CliCommand
         history of intermediate revisions, and it does not determine whether a
         change was substantial. When --diff finds published rows, it exits 0
         whether or not those versions differ. It exits 2 when no Original or
-        Current row is published.
+        Current row is published. --diff writes a table, CSV, or JSON. It does
+        not write Excel.
 
         Every result row includes its USAC Open Data source link. The lookup is
         read-only: it does not create, change, certify, or submit a filing.
@@ -73,7 +76,8 @@ public static class CliCommand
         With --frn, each row also includes FrnStatus, CommittedAmount, FcdlDate,
         RevisedFcdlDate, and DisbursedAmount from the public FRN Status dataset.
         CommittedAmount is filled only when the published FRN status is Funded.
-        Application lookups leave those five columns blank. There is no EPC sign-in.
+        Application lookups leave those five columns blank. Excel does not
+        include those five columns in 1.0.6. There is no EPC sign-in.
 
         Exit codes:
           0  At least one published row matched
@@ -97,6 +101,7 @@ public static class CliCommand
         string? output = null;
         var csv = false;
         var json = false;
+        var xlsx = false;
         var diff = false;
         var help = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -169,6 +174,14 @@ public static class CliCommand
                         return Fail("Duplicate argument: --json");
                     json = true;
                     break;
+                case "--xlsx":
+                case "--excel":
+                    if (value is not null)
+                        return Fail($"{token} does not take a value.");
+                    if (!seen.Add("--xlsx"))
+                        return Fail($"Duplicate argument: {token}");
+                    xlsx = true;
+                    break;
                 default:
                     return Fail($"Unknown argument: {raw}");
             }
@@ -176,8 +189,12 @@ public static class CliCommand
 
         if (help)
             return new CliParseResult(null, true, null);
-        if (csv && json)
-            return Fail("Choose either --csv or --json.");
+        if ((csv ? 1 : 0) + (json ? 1 : 0) + (xlsx ? 1 : 0) > 1)
+            return Fail("Choose either --csv, --json, or --xlsx.");
+        if (diff && xlsx)
+            return Fail("--diff supports the table, CSV, and JSON only.");
+        if (xlsx && string.IsNullOrWhiteSpace(output))
+            return Fail("--xlsx requires --output <file.xlsx>.");
         if (form is null || fy is null || (ben is null && name is null))
             return Fail("Form, applicant name or BEN, and funding year are required.");
         if (form is not ("470" or "471" or "both"))
@@ -204,7 +221,7 @@ public static class CliCommand
             return Fail("--diff applies to Form 470.");
 
         var link = form == "both";
-        var format = csv ? CliFormat.Csv : json ? CliFormat.Json : CliFormat.Table;
+        var format = csv ? CliFormat.Csv : json ? CliFormat.Json : xlsx ? CliFormat.Excel : CliFormat.Table;
         FilingForm? filing = form switch
         {
             "471" => FilingForm.Form471,
@@ -216,6 +233,18 @@ public static class CliCommand
 
     internal static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
+        if (options.Diff && options.Format == CliFormat.Excel)
+        {
+            await stderr.WriteLineAsync("--diff supports the table, CSV, and JSON only.").ConfigureAwait(false);
+            return ExitBadArgs;
+        }
+
+        if (options.Format == CliFormat.Excel && string.IsNullOrWhiteSpace(options.OutputPath))
+        {
+            await stderr.WriteLineAsync("--xlsx requires --output <file.xlsx>.").ConfigureAwait(false);
+            return ExitBadArgs;
+        }
+
         try
         {
             if (options.Diff)
@@ -261,8 +290,15 @@ public static class CliCommand
                 EnsureLinkedApplicant(options, rows);
             }
 
-            var body = Render(options, exportRows, rows, fetched, form470Count, form471Count);
-            await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+            if (options.Format == CliFormat.Excel)
+            {
+                WriteExcelFile(options, exportRows, cancellationToken);
+            }
+            else
+            {
+                var body = Render(options, exportRows, rows, fetched, form470Count, form471Count);
+                await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+            }
             if (rows.Count == 0)
             {
                 await stderr.WriteLineAsync(MissingMessage(options)).ConfigureAwait(false);
@@ -496,9 +532,7 @@ public static class CliCommand
             return writer.ToString();
         }
 
-        var table = new List<string[]> { ExportSchema.Columns(ExportSchema.CliColumns).ToArray() };
-        foreach (var row in exportRows)
-            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), ExportSchema.CliColumns));
+        var table = Table(options, exportRows, ExportSchema.CliColumns);
 
         if (options.Format == CliFormat.Csv)
         {
@@ -508,6 +542,27 @@ public static class CliCommand
         }
 
         return RenderTable(table);
+    }
+
+    static List<string[]> Table(CliOptions options, IReadOnlyList<ExportRow> exportRows, ExportColumns columns)
+    {
+        var table = new List<string[]>
+        {
+            ExportSchema.Columns(columns).ToArray()
+        };
+        foreach (var row in exportRows)
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, options.Ben), columns));
+        return table;
+    }
+
+    static void WriteExcelFile(CliOptions options, IReadOnlyList<ExportRow> exportRows, CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath!));
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+        // Base columns only. The five FRN columns stay in the table, CSV, and JSON, and are deferred for Excel.
+        // Cells are inline strings, so amounts stay text.
+        DataExporter.WriteExcel(options.OutputPath!, Table(options, exportRows, default), cancellationToken);
     }
 
     static string RenderTable(List<string[]> table)

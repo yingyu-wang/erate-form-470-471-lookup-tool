@@ -51,8 +51,14 @@ public class ExportSchemaGoldenTests
             Assert.Equal(new[] { "", "", "", "", "" }, csv[1][17..]);
 
             var excelPath = Path.Combine(directory, "rows.xlsx");
-            DataExporter.WriteExcel(excelPath, csv);
-            Assert.Equal(csv, ReadSheet(excelPath));
+            var excelStdout = new StringWriter();
+            var excelCode = await CliCommand.RunAsync(Options(CliFormat.Excel) with { OutputPath = excelPath }, client, excelStdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, excelCode);
+            Assert.Equal("", excelStdout.ToString());
+            var sheet = ReadSheet(excelPath);
+            Assert.Equal(ExportSchema.BaseColumns, sheet[0]);
+            Assert.Equal(cells, sheet[1]);
+            Assert.DoesNotContain("FrnStatus", sheet[0]);
 
             var metadata = new ExportMetadata
             {
