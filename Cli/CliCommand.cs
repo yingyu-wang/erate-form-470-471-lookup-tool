@@ -21,7 +21,8 @@ internal sealed record CliOptions(
     string? ApplicationNumber,
     string? FundingRequestNumber,
     CliFormat Format,
-    string? OutputPath);
+    string? OutputPath,
+    bool Diff = false);
 
 internal sealed record CliParseResult(CliOptions? Options, bool Help, string? Error);
 
@@ -32,7 +33,7 @@ public static class CliCommand
     public const int ExitNotFound = 2;
     public const int ExitUsacUnreachable = 3;
     public const int ExitLookupFailed = 4;
-    public const string FrnEndpoint = "https://opendata.usac.org/resource/qdmp-ygft.json";
+    public const string FrnEndpoint = UsacClient.FrnStatusEndpoint;
 
     public const string HelpText = """
         E-rate Form 470 / 471 lookup
@@ -47,6 +48,7 @@ public static class CliCommand
           --fy <year>          Funding year (2016-2100)
           --app <number>       Keep one application number
           --frn <number>       Form 471 funding request number
+          --diff               Compare published Form 470 Original and Current rows
           --csv                Write CSV, including the source link and 470/471 link columns
           --json               Write JSON instead of a text table
           --output <file>      Write the result to this file
@@ -57,9 +59,21 @@ public static class CliCommand
         link is printed only when every row shares one published BEN. A published
         Form 470 does not establish a Form 471.
 
+        --diff applies to Form 470. It compares the published Original and Current
+        rows in USAC Open Data dataset jt8s-3q52. It does not store a local
+        history of intermediate revisions, and it does not determine whether a
+        change was substantial. When --diff finds published rows, it exits 0
+        whether or not those versions differ. It exits 2 when no Original or
+        Current row is published.
+
         Every result row includes its USAC Open Data source link. The lookup is
         read-only: it does not create, change, certify, or submit a filing.
         Results are an observation of published data, not proof that no filing exists.
+
+        With --frn, each row also includes FrnStatus, CommittedAmount, FcdlDate,
+        RevisedFcdlDate, and DisbursedAmount from the public FRN Status dataset.
+        CommittedAmount is filled only when the published FRN status is Funded.
+        Application lookups leave those five columns blank. There is no EPC sign-in.
 
         Exit codes:
           0  At least one published row matched
@@ -83,6 +97,7 @@ public static class CliCommand
         string? output = null;
         var csv = false;
         var json = false;
+        var diff = false;
         var help = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
 
@@ -133,6 +148,13 @@ public static class CliCommand
                     else
                         output = value.Trim();
                     break;
+                case "--diff":
+                    if (value is not null)
+                        return Fail("--diff does not take a value.");
+                    if (!seen.Add(token))
+                        return Fail("Duplicate argument: --diff");
+                    diff = true;
+                    break;
                 case "--csv":
                     if (value is not null)
                         return Fail("--csv does not take a value.");
@@ -178,6 +200,8 @@ public static class CliCommand
             return Fail("--frn applies to Form 471 and cannot be combined with --form both.");
         if (frn is not null && form != "471")
             return Fail("--frn applies to Form 471.");
+        if (diff && form != "470")
+            return Fail("--diff applies to Form 470.");
 
         var link = form == "both";
         var format = csv ? CliFormat.Csv : json ? CliFormat.Json : CliFormat.Table;
@@ -187,13 +211,18 @@ public static class CliCommand
             "470" => FilingForm.Form470,
             _ => null
         };
-        return new CliParseResult(new CliOptions(filing, link, ben, name, year, app, frn, format, output), false, null);
+        return new CliParseResult(new CliOptions(filing, link, ben, name, year, app, frn, format, output, diff), false, null);
     }
 
     internal static async Task<int> RunAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
     {
         try
         {
+            if (options.Diff)
+            {
+                return await RunDiffAsync(options, client, stdout, stderr, cancellationToken).ConfigureAwait(false);
+            }
+
             IReadOnlyList<CliRow> rows;
             DateTimeOffset fetched;
             int? form470Count = null;
@@ -259,6 +288,91 @@ public static class CliCommand
         }
     }
 
+    static async Task<int> RunDiffAsync(CliOptions options, UsacClient client, TextWriter stdout, TextWriter stderr, CancellationToken cancellationToken)
+    {
+        var response = await client.GetForm470VersionRowsAsync(options.Ben, options.ApplicantName, options.FundingYear, options.ApplicationNumber, true, cancellationToken).ConfigureAwait(false);
+        var changes = Form470Diff.Compare(response.Data);
+        var applicationCount = response.Data.Select(row => row.Number).Distinct(StringComparer.Ordinal).Count();
+        var body = RenderDiff(options, changes, response.FetchedAt, applicationCount);
+        await WriteBodyAsync(options, body, stdout, cancellationToken).ConfigureAwait(false);
+        if (applicationCount == 0)
+        {
+            await stderr.WriteLineAsync($"No Form 470 Original or Current rows were published for {Who(options)}. An empty result is not proof that no filing exists.").ConfigureAwait(false);
+            return ExitNotFound;
+        }
+
+        var applications = applicationCount.ToString(CultureInfo.InvariantCulture);
+        var summary = changes.Count == 0
+            ? $"Original and Current match for {applications} Form 470 application(s) for {Who(options)}. "
+            : $"Found {changes.Count.ToString(CultureInfo.InvariantCulture)} Original-vs-Current difference(s) in {applications} Form 470 application(s) for {Who(options)}. ";
+        await stderr.WriteLineAsync(summary + Form470Diff.Disclaimer).ConfigureAwait(false);
+        return ExitFound;
+    }
+
+    static string RenderDiff(CliOptions options, IReadOnlyList<Form470FieldChange> changes, DateTimeOffset fetched, int applicationCount)
+    {
+        if (options.Format == CliFormat.Json)
+        {
+            var payload = new
+            {
+                form = (int)FilingForm.Form470,
+                diff = true,
+                linked = false,
+                ben = options.Ben,
+                applicantName = options.ApplicantName,
+                fundingYear = options.FundingYear,
+                applicationNumber = options.ApplicationNumber,
+                fetchedAt = fetched.ToString("O", CultureInfo.InvariantCulture),
+                applicationCount,
+                count = changes.Count,
+                rows = changes.Select(change => new
+                {
+                    change.ApplicationNumber,
+                    change.Ben,
+                    change.Name,
+                    change.Change,
+                    change.Scope,
+                    change.ServiceRequestId,
+                    change.Field,
+                    change.Original,
+                    change.Current,
+                    Source = UsacSources.Application(FilingForm.Form470, change.ApplicationNumber)
+                })
+            };
+            return JsonSerializer.Serialize(payload, JsonOptions);
+        }
+
+        var table = new List<string[]>
+        {
+            new[] { "ApplicationNumber", "BEN", "Name", "Change", "Scope", "ServiceRequestId", "Field", "Original", "Current", "Source" }
+        };
+        foreach (var change in changes)
+        {
+            table.Add(
+            [
+                change.ApplicationNumber,
+                change.Ben,
+                change.Name,
+                change.Change,
+                change.Scope,
+                change.ServiceRequestId,
+                change.Field,
+                change.Original,
+                change.Current,
+                UsacSources.Application(FilingForm.Form470, change.ApplicationNumber)
+            ]);
+        }
+
+        if (options.Format == CliFormat.Csv)
+        {
+            using var writer = new StringWriter();
+            DataExporter.WriteCsv(writer, table);
+            return writer.ToString();
+        }
+
+        return RenderTable(table);
+    }
+
     internal static async Task<QueryResult<List<UsacRow>>> FundingRequestsAsync(UsacClient client, CliOptions options, CancellationToken cancellationToken)
     {
         var where = UsacClient.ApplicantClause(FilingForm.Form471, options.Ben, options.ApplicantName, "ben");
@@ -270,7 +384,7 @@ public static class CliCommand
             where += " AND funding_request_number=" + UsacClient.Literal(options.FundingRequestNumber);
         return await client.QueryAsync(new Dictionary<string, string>
         {
-            ["$select"] = "funding_request_number,application_number,ben as billed_entity_number,organization_name as billed_entity_name,form_471_frn_status_name as filing_status,nickname as form_nickname,form_471_service_type_name as service_type,funding_commitment_request as funding_request_amount,form_version",
+            ["$select"] = UsacClient.FrnStatusSelect,
             ["$where"] = where,
             ["$order"] = "funding_request_number",
             ["$limit"] = "1000"
@@ -349,20 +463,36 @@ public static class CliCommand
         filing.PreDiscountAmount,
         UsacSources.Application(form, filing.Number));
 
-    static CliRow ToFrnRow(UsacRow row) => new(
-        (int)FilingForm.Form471,
-        row.Number,
-        row.FundingRequestNumber,
-        string.IsNullOrWhiteSpace(row.Status) ? "Unknown" : row.Status,
-        UsacTimestamps.CalendarDate(row.Certified),
-        row.Nickname,
-        row.Ben,
-        row.Name,
-        row.Service,
-        row.Pdf?.Url ?? row.PdfUrl,
-        row.RequestedAmount,
-        row.PreDiscountAmount,
-        UsacSources.FundingRequest(row.FundingRequestNumber, row.Number));
+    static CliRow ToFrnRow(UsacRow row)
+    {
+        // [Inference] CommittedAmount copies funding_commitment_request only when
+        // the published FRN status is Funded. Q8 (FCDL confirmation) is pending.
+        var commitment = FrnCommitment.FromPublished(
+            row.Status,
+            row.FundingCommitmentRequest,
+            row.FcdlLetterDate,
+            row.RevisedFcdlDate,
+            row.TotalAuthorizedDisbursement);
+        return new(
+            (int)FilingForm.Form471,
+            row.Number,
+            row.FundingRequestNumber,
+            string.IsNullOrWhiteSpace(row.Status) ? "Unknown" : row.Status,
+            UsacTimestamps.CalendarDate(row.Certified),
+            row.Nickname,
+            row.Ben,
+            row.Name,
+            row.Service,
+            row.Pdf?.Url ?? row.PdfUrl,
+            row.RequestedAmount,
+            row.PreDiscountAmount,
+            UsacSources.FundingRequest(row.FundingRequestNumber, row.Number),
+            commitment.FrnStatus,
+            commitment.CommittedAmount,
+            commitment.FcdlDate,
+            commitment.RevisedFcdlDate,
+            commitment.DisbursedAmount);
+    }
 
     static string Render(CliOptions options, IReadOnlyList<CliRow> rows, DateTimeOffset fetched, int? form470Count, int? form471Count)
     {
@@ -401,10 +531,12 @@ public static class CliCommand
             return JsonSerializer.Serialize(payload, JsonOptions);
         }
 
-        var table = new List<string[]>
+        var header = new List<string>
         {
-            new[] { "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count" }
+            "Form", "FundingYear", "BEN", "Name", "ApplicationNumber", "FundingRequestNumber", "Status", "CertifiedDate", "Nickname", "Services", "RequestedAmount", "PreDiscountAmount", "PDF", "Source", "Linked", "Form470Count", "Form471Count"
         };
+        header.AddRange(FrnCommitment.Columns);
+        var table = new List<string[]> { header.ToArray() };
         foreach (var row in TableRows(options, rows, form470Count, form471Count))
             table.Add(row);
 
@@ -443,7 +575,12 @@ public static class CliCommand
                 row.Source,
                 linked,
                 count470,
-                count471
+                count471,
+                row.FrnStatus,
+                row.CommittedAmount,
+                row.FcdlDate,
+                row.RevisedFcdlDate,
+                row.DisbursedAmount
             ];
         }
     }
@@ -551,4 +688,9 @@ internal sealed record CliRow(
     string Pdf,
     string RequestedAmount,
     string PreDiscountAmount,
-    string Source);
+    string Source,
+    string FrnStatus = "",
+    string CommittedAmount = "",
+    string FcdlDate = "",
+    string RevisedFcdlDate = "",
+    string DisbursedAmount = "");

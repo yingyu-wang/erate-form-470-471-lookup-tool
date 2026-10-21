@@ -5,11 +5,49 @@ terminal. It is a .NET 10 console program in `Cli/`. It does not open the
 Windows Forms, Avalonia, or Android screens. The lookup is read-only. It does
 not create, change, certify, or submit a filing.
 
+## Unreleased 1.0.6: committed and disbursed amounts
+
+`--frn` reads the public FRN Status dataset `qdmp-ygft`. It does not sign in
+to EPC. The table, CSV, and JSON gain five columns. Application lookups leave
+them blank. Desktop, Mac, Linux, and Android exports are unchanged.
+
+| Column | Published field | Rule |
+| --- | --- | --- |
+| `FrnStatus` | `form_471_frn_status_name` | The published status text. On 2026-10-19 the Current rows used `Funded`, `Pending`, `Denied`, and `Cancelled`. |
+| `CommittedAmount` | `funding_commitment_request` | **[Inference]** Copied only when `FrnStatus` is Funded. Blank for every other status. Q8 is pending: this has not been confirmed against an FCDL, including when `revised_fcdl_date` is set. |
+| `FcdlDate` | `fcdl_letter_date` | Calendar date of the wave. The dataset calls this field Wave Date. |
+| `RevisedFcdlDate` | `revised_fcdl_date` | Calendar date when USAC published one. Blank when the field is missing. |
+| `DisbursedAmount` | `total_authorized_disbursement` | Published total net amount disbursed. Blank when the field is missing. A missing value is not written as zero. |
+
+`RequestedAmount` on an FRN row is still the same `funding_commitment_request`,
+for every status. The select aliases it as `funding_request_amount`. That
+column is not the committed-amount rule.
+
+The query still requires `form_version='Current'`.
+
+Checked 2026-10-19 against
+[FRN 2099010373](https://opendata.usac.org/resource/qdmp-ygft.json?funding_request_number=2099010373&$select=funding_request_number,application_number,ben,funding_year,organization_name,form_471_frn_status_name,funding_commitment_request,fcdl_letter_date,revised_fcdl_date,total_authorized_disbursement,form_version,pending_reason)
+and the [dataset metadata](https://opendata.usac.org/api/views/qdmp-ygft.json).
+The Current row was Webster Groves School District, BEN 136910, FY 2020,
+application 201009092, status `Funded`, `funding_commitment_request` `14908.32`,
+`fcdl_letter_date` `2020-05-09T00:00:00.000`, `revised_fcdl_date`
+`2026-07-14T00:00:00.000`, `total_authorized_disbursement` `14908.32`,
+`pending_reason` `FCDL Issued`. An Original row for the same FRN was `Pending`
+with the same `funding_commitment_request` and no FCDL or disbursement fields
+in that response. The CLI does not return the Original row.
+Field descriptions used above are from that metadata page:
+`funding_commitment_request` is "The total amount for the Funding Request (FRN)
+after discount." `fcdl_letter_date` is "The date of the wave that a funding
+commitment was issued in." `revised_fcdl_date` is "Date the applicant FCDL was
+revised." `total_authorized_disbursement` is "Total net amount disbursed to a
+service provider or applicant."
+
 ## What changed in 1.0.5
 
 Version 1.0.5 adds four lookup features. It does not add a Category 2 budget
 helper, EPC authentication, Form 470 version diffing, or committed-amount
-downloads.
+downloads. Unreleased 1.0.6 adds `--diff` for Form 470 Original vs Current.
+That command is described below. It does not add local snapshot history.
 
 | Feature | Behavior |
 | --- | --- |
@@ -158,6 +196,7 @@ ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <yea
   --fy <year>          Funding year (2016-2100)
   --app <number>       Keep one application number
   --frn <number>       Form 471 funding request number
+  --diff               Compare published Form 470 Original and Current rows
   --csv                Write CSV, including the source link and 470/471 link columns
   --json               Write JSON instead of a text table
   --output <file>      Write the result to this file
@@ -174,6 +213,7 @@ The parser also accepts `-?` as help. The printed help does not list `-?`.
 | `--fy` | Yes | Integer year from 2016 through 2100 |
 | `--app` | No | One application number. Without `--frn`, rows from the filing query are kept only when the application number matches. With `--frn`, it is added to the FRN query. |
 | `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` `--form both --frn ...` exits 1 because a funding-request filter is not a 470-to-471 link. |
+| `--diff` | No | Form 470 only. `--form 471 --diff` and `--form both --diff` exit 1: `--diff applies to Form 470.` Takes no value. |
 | `--csv` | No | CSV body. Takes no value. |
 | `--json` | No | JSON body. Takes no value. |
 | `--output` | No | Writes the body to this path. Parent directories are created. |
@@ -245,7 +285,8 @@ Columns, in order:
 `Form`, `FundingYear`, `BEN`, `Name`, `ApplicationNumber`,
 `FundingRequestNumber`, `Status`, `CertifiedDate`, `Nickname`, `Services`,
 `RequestedAmount`, `PreDiscountAmount`, `PDF`, `Source`, `Linked`,
-`Form470Count`, `Form471Count`
+`Form470Count`, `Form471Count`, `FrnStatus`, `CommittedAmount`, `FcdlDate`,
+`RevisedFcdlDate`, `DisbursedAmount`
 
 `Linked` is `true` when the command used `--form both` and `false` for a
 single-form lookup. `Form470Count` and `Form471Count` are filled only for
@@ -274,9 +315,13 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 `--form both` also includes `form470Count` and `form471Count`. Each row has
 `form`, `applicationNumber`, `fundingRequestNumber`, `status`,
 `certifiedDate`, `nickname`, `ben`, `name`, `services`, `pdf`,
-`requestedAmount`, `preDiscountAmount`, and `source`. Omitted `--app` or
-`--frn` is JSON `null` on the top-level fields. Filing rows leave
-`fundingRequestNumber` as an empty string. `source` is the Open Data URL.
+`requestedAmount`, `preDiscountAmount`, `source`, `frnStatus`,
+`committedAmount`, `fcdlDate`, `revisedFcdlDate`, and `disbursedAmount`.
+Omitted `--app` or `--frn` is JSON `null` on the top-level fields. Filing
+rows leave `fundingRequestNumber` as an empty string and leave the five FRN
+Status fields as empty strings. `source` is the Open Data URL.
+`committedAmount` is an inference: see the unreleased 1.0.6 section. Q8 is
+pending.
 
 ### What a row contains
 
@@ -287,11 +332,15 @@ lookup goes through `GetFilingsAsync`. Both page in `LoadFilingsAsync`. Form
 the current version, one application per row.
 
 With `--frn`, the CLI calls the FRN status dataset `qdmp-ygft` instead. The
-select list is funding request number, application number, BEN, organization
-name, FRN status, nickname, service type, and `funding_commitment_request`.
-It does not request a certified date, a pre-discount amount, or a PDF, so
-those columns are empty on FRN rows. The query also requires
-`form_version='Current'`.
+select list is `UsacClient.FrnStatusSelect`: funding request number,
+application number, BEN, organization name, FRN status, nickname, service
+type, `funding_commitment_request` (also aliased as `funding_request_amount`),
+`fcdl_letter_date`, `revised_fcdl_date`, `total_authorized_disbursement`, and
+`form_version`. It does not request a certified date, a pre-discount amount,
+or a PDF, so those columns are empty on FRN rows. The query also requires
+`form_version='Current'`. `FrnStatus`, `FcdlDate`, `RevisedFcdlDate`, and
+`DisbursedAmount` are the published fields. `CommittedAmount` is an inference
+and is blank unless the status is Funded. Q8 is pending.
 
 Stderr on success:
 
@@ -312,6 +361,54 @@ No certified Form 470 or Form 471 found in currently published data for BEN 1436
 The count and the form number follow the query. An empty result is not proof
 that no filing exists. The help text says the same thing.
 
+## Form 470 Original vs Current (`--diff`)
+
+`--diff` compares the published Original and Current `form_version` rows for a
+Form 470 in USAC Open Data dataset `jt8s-3q52`. It is a separate read from the
+normal lookup. `UsacClient.Collapse` still keeps the Current version for an
+ordinary Form 470 or Form 471 lookup.
+
+```sh
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
+```
+
+The query does not add `fcc_form_470_status='Certified'`. A Current row can be
+canceled while the Original row remains certified. Checked on 2026-10-19,
+application `270000194` had Original status `Certified` and Current status
+`Canceled`:
+
+https://opendata.usac.org/resource/jt8s-3q52.json?$select=application_number,form_version,fcc_form_470_status,service_request_id&$where=application_number=%27270000194%27&$order=form_version
+
+Service lines are matched on `service_request_id`. An added or removed service
+is one row. A service present on both versions lists each changed field,
+including category, service type, function, and RFP attachment. Application
+fields include contacts and the published dates. Rows for one service request
+repeat once per RFP document; the diff compares the set of document URLs.
+
+When only one of Original or Current is present, the result is a `VersionGap`
+for `form_version`. Those service lines are not reported as added or removed.
+On 2026-10-19, application `270000594` had Current rows and no Original rows.
+Application `270000266` had both versions.
+
+The command does not store a local history of intermediate revisions. Open
+Data publishes Original and Current, not every edit between them. It does not
+determine whether a change was substantial.
+
+Table, CSV, and JSON use these columns: `ApplicationNumber`, `BEN`, `Name`,
+`Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,
+`Source`. `Change` is `Added`, `Removed`, `Changed`, `VersionGap`, or
+`Unexpected`. JSON adds `diff: true`, `applicationCount`, and `count`. `count`
+is the number of difference rows. An empty difference list with
+`applicationCount` greater than zero means the published versions match. That
+command exits 0. No published Original or Current row exits 2. The body is
+still written. Stderr includes: "This comparison reads published Original and
+Current rows from USAC Open Data dataset jt8s-3q52. It does not determine
+whether a change was substantial."
+
+`--csv` and `--json` still apply. CSV formula-like text is prefixed with `'`.
+The source link is the Open Data URL for that application number on
+`jt8s-3q52`.
+
 ## Exit codes
 
 Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
@@ -319,7 +416,7 @@ Constants in `CliCommand`: `ExitFound`, `ExitBadArgs`, `ExitNotFound`,
 
 | Code | Name in code | When |
 | --- | --- | --- |
-| 0 | Found | At least one row matched. `--help`, `-h`, and `-?` also exit 0. |
+| 0 | Found | At least one row matched. `--help`, `-h`, and `-?` also exit 0. `--diff` also exits 0 when published Original and Current rows match. |
 | 1 | Bad arguments | The parser rejected the command (message and help on stderr). An `ArgumentException` during the lookup also exits 1, with the exception message only. |
 | 2 | No match | USAC answered and the row list is empty. The body is still written. |
 | 3 | USAC unreachable | `HttpRequestException`, `TaskCanceledException`, or `JsonException`. Stderr starts with `USAC could not be reached.` |

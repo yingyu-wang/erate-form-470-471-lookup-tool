@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ERateLookup.Core;
 using Xunit;
 
@@ -30,6 +31,11 @@ public class LiveUsacTests
             Assert.All(older471.Data, filing => Assert.Equal("106359", filing.Ben));
             var future471 = await live.GetFilingsAsync("106359", 2027, FilingForm.Form471, true, default);
             Assert.NotNull(future471.Data);
+            var versions = await live.GetForm470VersionRowsAsync("16057656", null, 2027, "270000266", true, default);
+            Assert.Contains(versions.Data, row => row.Number == "270000266" && row.Version == "Original");
+            Assert.Contains(versions.Data, row => row.Number == "270000266" && row.Version == "Current");
+            Assert.All(versions.Data, row => Assert.Equal("270000266", row.Number));
+            Assert.NotNull(Form470Diff.Compare(versions.Data));
         }
         finally
         {
@@ -37,5 +43,31 @@ public class LiveUsacTests
             if (Directory.Exists(directory))
                 Directory.Delete(directory, true);
         }
+    }
+
+    [LiveUsacFact]
+    [Trait("Category", "Live")]
+    public async Task FrnStatusCommitmentFieldsArePresentForKnownFrn()
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        var parameters = new Dictionary<string, string>
+        {
+            ["$select"] = UsacClient.FrnStatusSelect,
+            ["$where"] = "funding_request_number='2099010373' AND form_version='Current'",
+            ["$limit"] = "5"
+        };
+        var url = UsacClient.FrnStatusEndpoint + "?" + UsacClient.EncodeQuery(parameters);
+        using var response = await http.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var row = Assert.Single(document.RootElement.EnumerateArray());
+        Assert.Equal("2099010373", row.GetProperty("funding_request_number").GetString());
+        Assert.Equal("Current", row.GetProperty("form_version").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("filing_status").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("funding_commitment_request").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("funding_request_amount").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("fcdl_letter_date").GetString()));
+        Assert.True(row.TryGetProperty("revised_fcdl_date", out _));
+        Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("total_authorized_disbursement").GetString()));
     }
 }
