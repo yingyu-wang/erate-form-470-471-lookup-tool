@@ -11,11 +11,16 @@ from unittest.mock import patch
 import zipfile
 
 VERIFIER = Path(__file__).with_name("verify_android_apk.py")
-BADGING = """package: name='com.yingyuwang.eratelookup.android' versionCode='115' versionName='1.0.6'
+BADGING = """package: name='com.yingyuwang.eratelookup.android' versionCode='114' versionName='1.0.5'
 sdkVersion:'26'
 launchable-activity: name='com.yingyuwang.eratelookup.android.MainActivity'
 uses-permission: name='android.permission.INTERNET'
 application-icon-160:'res/drawable/app_icon.png'
+"""
+CSPROJ = """<Project><PropertyGroup>
+<ApplicationVersion>114</ApplicationVersion>
+<ApplicationDisplayVersion>1.0.5</ApplicationDisplayVersion>
+</PropertyGroup></Project>
 """
 
 
@@ -28,6 +33,8 @@ class VerifierTests(unittest.TestCase):
         self.apk = root / "preview ; $(touch injected)-Signed.apk"
         self.badging = root / "badging ; $(touch injected).txt"
         self.badging.write_text(BADGING, encoding="utf-8")
+        self.csproj = root / "Fixture.Android.csproj"
+        self.csproj.write_text(CSPROJ, encoding="utf-8")
         with zipfile.ZipFile(self.apk, "w") as apk:
             for name in ["classes.dex", "assets/LICENSE.txt", "assets/THIRD_PARTY_NOTICES.md"]:
                 apk.writestr(name, "fixture")
@@ -38,7 +45,7 @@ class VerifierTests(unittest.TestCase):
                 apk.writestr(f"lib/{abi}/libe_sqlite3.so", header)
 
     def run_verifier(self, *extra):
-        argv = [str(VERIFIER), str(self.apk), "--badging-file", str(self.badging), *extra]
+        argv = [str(VERIFIER), str(self.apk), "--badging-file", str(self.badging), "--csproj", str(self.csproj), *extra]
         with patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return runpy.run_path(str(VERIFIER), run_name="__main__")
 
@@ -48,6 +55,16 @@ class VerifierTests(unittest.TestCase):
     def test_broad_storage_permission_is_rejected(self):
         self.badging.write_text(BADGING + "uses-permission: name='android.permission.MANAGE_EXTERNAL_STORAGE'\n", encoding="utf-8")
         with self.assertRaises(AssertionError):
+            self.run_verifier()
+
+    def test_version_must_match_csproj(self):
+        self.csproj.write_text(CSPROJ.replace(">114<", ">115<"), encoding="utf-8")
+        with self.assertRaises(AssertionError):
+            self.run_verifier()
+
+    def test_duplicate_version_property_is_rejected(self):
+        self.csproj.write_text(CSPROJ.replace("</PropertyGroup>", "<ApplicationVersion>116</ApplicationVersion></PropertyGroup>"), encoding="utf-8")
+        with self.assertRaises(SystemExit):
             self.run_verifier()
 
     def test_arbitrary_aapt_executable_is_rejected(self):
