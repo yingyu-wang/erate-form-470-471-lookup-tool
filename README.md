@@ -44,7 +44,7 @@ application-menu shortcut with the app icon.
 2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
 3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
 4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.
-5. Try **CENIC**, BEN **225495**, FY **2027**, **Form 470**. Select filings and use **Save selected CSV / Excel** to choose an export destination.
+5. Try **CENIC**, BEN **225495**, FY **2027**, **Form 470**. Select filings and use **Save selected (CSV / Excel / JSON)** to choose an export destination.
 
 Requires **Android 8.0+** and an **ARM64** phone/tablet; x64 emulators are also included. 32-bit-only devices are unsupported. Android is a **development preview**; physical-device UI testing remains outstanding. Builds use a generated debug signing key. If a newer preview reports a signature conflict, export needed files, uninstall the previous preview, then install the new APK. Uninstalling clears the app’s local cache/settings.
 
@@ -56,7 +56,7 @@ See the [complete Android installation, update, troubleshooting, and USB guide](
 - Search names locally after two characters, with up to 15 suggestions.
 - View all distinct certified applications in the published dataset, one row per application.
 - View C2 budget snapshot information with forecast labeling where applicable.
-- Select all, unselect all, or choose individual/range selections; export only selected filings to CSV or Excel.
+- Select all, unselect all, or choose individual/range selections; export only selected filings to CSV, Excel, or JSON.
 - Choose Mint Glass, Midnight, or Classic themes. The app remembers your choice.
 - Use bundled seed data to create the local SQLite database without an initial download.
 
@@ -84,7 +84,7 @@ The [implementation plan](docs/V1_0_2_PLAN.md), [technical design](docs/V1_0_2_D
 
 ## First test
 
-Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verification returned four applications. Select two and check that CSV and Excel contain only those selected filings. Live counts may change as USAC publishes data.
+Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verification returned four applications. Select two and check that CSV, Excel, and JSON contain only those selected filings. Live counts may change as USAC publishes data.
 
 ## Command line
 

@@ -1,7 +1,7 @@
 # Linux x64 / ARM64 — E-rate Lookup v1.0.1
 
 The Linux GUI shares the macOS Avalonia interface and the Windows/Android lookup,
-SQLite, budget, and CSV/Excel code. These portable packages include .NET 10;
+SQLite, budget, and CSV/Excel/JSON code. These portable packages include .NET 10;
 you do not need to install .NET to run them.
 
 ## Choose a package
@@ -63,8 +63,8 @@ lost during extraction, run `chmod +x ERateLookup` in the app directory.
 
 Enter a BEN (for example **225495**, CENIC) or part of a California customer name,
 select FY2027 and Form 470, and search. Use **Ctrl-click** for individual rows,
-**Shift-click** for a range, or **Select all**. Export selected filings as CSV or
-Excel; PDF links open in your default browser via `xdg-open`.
+**Shift-click** for a range, or **Select all**. Export selected filings as CSV,
+Excel, or JSON; PDF links open in your default browser via `xdg-open`.
 
 The local SQLite cache and saved theme live under
 `$XDG_DATA_HOME/ERateLookup` (normally `~/.local/share/ERateLookup`). Live USAC

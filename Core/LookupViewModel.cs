@@ -292,50 +292,62 @@ public sealed class LookupViewModel
         DateTimeOffset fetchedAt,
         IReadOnlyList<Filing> results,
         IReadOnlySet<string> selectedNumbers,
+        bool? hasNewCycleForm470) =>
+        CreateExport(year, form, ben, fallbackCustomer, fetchedAt, results, selectedNumbers, hasNewCycleForm470).Table;
+
+    /// <summary>
+    /// CSV and Excel use the shared base columns. JSON uses the command-line camelCase row.
+    /// <paramref name="hasNewCycleForm470"/> is unused: budget columns stay in the optional budget group.
+    /// A completed lookup with no filings still exports one row. That row has a blank application number and a blank source.
+    /// </summary>
+    public PreparedExport CreateExport(
+        int year,
+        FilingForm form,
+        string ben,
+        string fallbackCustomer,
+        DateTimeOffset fetchedAt,
+        IReadOnlyList<Filing> results,
+        IReadOnlySet<string> selectedNumbers,
         bool? hasNewCycleForm470)
     {
-        var budget = directory.GetBudget(ben, year);
-        var rows = new List<string[]>
-        {
-            new[] { "ExportedUTC", "LookupFetchedUTC", "DirectoryUpdatedUTC", "FundingYear", "BEN", "Customer", "LookupResult", "FormType", "ApplicationNumber", "FilingStatus", "CertifiedDate", "Nickname", "Services", "PDF", "BudgetCycle", "USACBudgetStatus", "BudgetDisplayStatus", "TotalC2BudgetPreDiscount", "CommittedC2BudgetPreDiscount", "PendingC2BudgetPreDiscount", "ReportedRemainingC2BudgetPreDiscount" }
-        };
-        var exported = clock().ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
-        var budgetState = budget is null ? "Not reported" : BudgetRow.ForecastView(budget.Version, hasNewCycleForm470) ? "Forecast" : budget.Version;
+        _ = hasNewCycleForm470;
         var items = results.Count > 0
-            ? results.Where(r => selectedNumbers.Contains(r.Number)).ToList()
-            : new List<Filing> { new("", ben, budget?.Name ?? fallbackCustomer, "", "", "", "") };
-        var emptyResult = surface == LookupSurface.Android
-            ? "No certified filing found in published data"
-            : $"No certified Form {(int)form} found in published data";
+            ? results.Where(filing => selectedNumbers.Contains(filing.Number)).ToList()
+            : new List<Filing> { new("", ben, directory.GetBudget(ben, year)?.Name ?? fallbackCustomer, "", "", "", "") };
+        var published = new List<ExportRow>(items.Count);
         foreach (var filing in items)
         {
-            rows.Add(
-            [
-                exported,
-                fetchedAt.ToString("O", CultureInfo.InvariantCulture),
-                directory.LastUpdated,
-                year.ToString(CultureInfo.InvariantCulture),
-                ben,
-                filing.Name,
-                results.Count > 0 ? "Filed" : emptyResult,
-                ((int)form).ToString(CultureInfo.InvariantCulture),
-                filing.Number,
-                results.Count > 0 ? filing.Status : "",
-                filing.Certified,
-                filing.Nickname,
-                filing.Services,
-                filing.Pdf,
-                budget?.Cycle ?? "Not reported",
-                budget?.Version ?? "Not reported",
-                budgetState,
-                budget?.Total ?? "Not reported",
-                budget?.Committed ?? "Not reported",
-                budget?.Pending ?? "Not reported",
-                budget?.Available ?? "Not reported"
-            ]);
+            var row = ExportSchema.FromFiling(form, filing, year, false, null, null);
+            if (string.IsNullOrWhiteSpace(filing.Number))
+                row = row with
+                {
+                    Source = ""
+                };
+            published.Add(row);
         }
 
-        return rows;
+        var table = new List<string[]> { ExportSchema.Columns().ToArray() };
+        var jsonRows = new List<ExportJsonRow>(published.Count);
+        foreach (var row in published)
+        {
+            table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(row, ben)));
+            jsonRows.Add(ExportSchema.ToJsonRow(row));
+        }
+
+        return new PreparedExport
+        {
+            Table = table,
+            Metadata = new ExportMetadata
+            {
+                Form = (int)form,
+                Linked = false,
+                Ben = ben,
+                ApplicantName = string.IsNullOrWhiteSpace(fallbackCustomer) ? null : fallbackCustomer,
+                FundingYear = year,
+                FetchedAt = fetchedAt,
+            },
+            JsonRows = jsonRows,
+        };
     }
 
     public static string SuggestedWatchlistName(string selectedName, string? budgetName) =>

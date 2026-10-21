@@ -138,7 +138,7 @@ public static class DataExporter
 
             WriteProperty(json, "ben", metadata.Ben);
             WriteProperty(json, "applicantName", metadata.ApplicantName);
-            json.WriteNumber("fundingYear", metadata.FundingYear);
+            WriteProperty(json, "fundingYear", metadata.FundingYear);
             WriteProperty(json, "applicationNumber", metadata.ApplicationNumber);
             WriteProperty(json, "fundingRequestNumber", metadata.FundingRequestNumber);
             json.WriteString("fetchedAt", metadata.FetchedAt.ToString("O", CultureInfo.InvariantCulture));
@@ -163,8 +163,55 @@ public static class DataExporter
     }
 
     /// <summary>
+    /// Writes CSV, Excel, or JSON based on the file extension.
+    /// <c>.json</c> uses <see cref="WriteJson{TRow}"/>. <c>.csv</c> uses <see cref="WriteCsv(string, IEnumerable{string[]}, CancellationToken)"/>.
+    /// <c>.xlsx</c> and a path with no extension use <see cref="WriteExcel"/>.
+    /// </summary>
+    public static void WritePrepared(string path, List<string[]> table, ExportMetadata metadata, IReadOnlyList<ExportJsonRow> jsonRows, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(jsonRows);
+        var extension = Path.GetExtension(path);
+        if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteJson(path, metadata, jsonRows, ct);
+            return;
+        }
+
+        if (extension.Equals(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteCsv(path, table, ct);
+            return;
+        }
+
+        if (extension.Equals(".xlsx", StringComparison.OrdinalIgnoreCase) || extension.Length == 0)
+        {
+            WriteExcel(path, table, ct);
+            return;
+        }
+
+        throw new ArgumentException("Choose a .csv, .xlsx, or .json file.");
+    }
+
+    /// <summary>
+    /// Replaces the extension with the save-dialog filter the user chose.
+    /// <paramref name="filterIndex"/> is 1-based, matching <c>SaveFileDialog.FilterIndex</c>.
+    /// </summary>
+    public static string ApplySaveFilterExtension(string path, int filterIndex, params string[] extensions)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            throw new ArgumentException("Choose a file.");
+        if (extensions is null || filterIndex < 1 || filterIndex > extensions.Length)
+            throw new ArgumentOutOfRangeException(nameof(filterIndex));
+        var extension = extensions[filterIndex - 1];
+        if (!extension.StartsWith('.'))
+            extension = "." + extension;
+        return Path.ChangeExtension(path, extension);
+    }
+
+    /// <summary>
     /// Same envelope as <see cref="WriteJson{TRow}"/>, with each row keyed by the supplied column names.
-    /// The command-line JSON path does not call this.
+    /// The command-line JSON path and the app JSON path do not call this.
     /// </summary>
     public static void WriteColumnJson(string path, ExportMetadata metadata, IReadOnlyList<string> columns, IReadOnlyList<string[]> rows, CancellationToken ct = default)
     {
