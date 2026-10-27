@@ -425,13 +425,7 @@ public static class CliCommand
 
     internal static async Task<QueryResult<List<UsacRow>>> FundingRequestsAsync(UsacClient client, CliOptions options, CancellationToken cancellationToken)
     {
-        var where = UsacClient.ApplicantClause(FilingForm.Form471, options.Ben, options.ApplicantName, "ben");
-        where += " AND funding_year=" + UsacClient.Literal(options.FundingYear.ToString(CultureInfo.InvariantCulture));
-        where += " AND form_version='Current'";
-        if (!string.IsNullOrEmpty(options.ApplicationNumber))
-            where += " AND application_number=" + UsacClient.Literal(options.ApplicationNumber);
-        if (!string.IsNullOrEmpty(options.FundingRequestNumber))
-            where += " AND funding_request_number=" + UsacClient.Literal(options.FundingRequestNumber);
+        var where = UsacClient.FundingRequestWhere(options.Ben, options.ApplicantName, options.FundingYear, options.ApplicationNumber, options.FundingRequestNumber);
         return await client.QueryAsync(new Dictionary<string, string>
         {
             ["$select"] = UsacClient.FrnStatusSelect,

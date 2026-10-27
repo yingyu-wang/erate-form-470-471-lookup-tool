@@ -42,7 +42,7 @@ public sealed class PortfolioStore
         using var tx = db.BeginTransaction();
         using var version = Command(db, tx, "PRAGMA user_version");
         var schema = Convert.ToInt32(version.ExecuteScalar(), CultureInfo.InvariantCulture);
-        if (schema > 2)
+        if (schema > 3)
             throw new InvalidOperationException("Saved portfolio data belongs to a newer app. Update the app; the data has not been changed.");
         if (schema == 0)
         {
@@ -67,6 +67,32 @@ public sealed class PortfolioStore
                   PRIMARY KEY(query_key,sequence,application));
                 CREATE TABLE lookup_outcomes(query_key TEXT PRIMARY KEY,sequence INTEGER NOT NULL,outcome TEXT NOT NULL,observed_utc TEXT NOT NULL);
                 PRAGMA user_version=2;
+                """);
+            migration.ExecuteNonQuery();
+        }
+        if (schema < 3)
+        {
+            // One row per query and funding request. reported_committed_amount stores the
+            // export CommittedAmount inference. It is not a funding commitment decision (Q8).
+            using var migration = Command(db, tx, """
+                CREATE TABLE frn_snapshots(
+                  query_key TEXT NOT NULL,
+                  funding_request_number TEXT NOT NULL,
+                  application_number TEXT NOT NULL,
+                  name TEXT NOT NULL,
+                  frn_status TEXT NOT NULL,
+                  reported_committed_amount TEXT NOT NULL,
+                  fcdl_date TEXT NOT NULL,
+                  revised_fcdl_date TEXT NOT NULL,
+                  disbursed_amount TEXT NOT NULL,
+                  sequence INTEGER NOT NULL,
+                  observed_utc TEXT NOT NULL,
+                  PRIMARY KEY(query_key, funding_request_number));
+                CREATE TABLE frn_observations(
+                  query_key TEXT PRIMARY KEY,
+                  sequence INTEGER NOT NULL,
+                  observed_utc TEXT NOT NULL);
+                PRAGMA user_version=3;
                 """);
             migration.ExecuteNonQuery();
         }
@@ -280,7 +306,7 @@ public sealed class PortfolioStore
     {
         using var db = Open();
         using var tx = db.BeginTransaction();
-        using var c = Command(db, tx, "UPDATE sequence SET value=value+1,cleared_through=value+1; DELETE FROM snapshots; DELETE FROM change_events; DELETE FROM lookup_outcomes;");
+        using var c = Command(db, tx, "UPDATE sequence SET value=value+1,cleared_through=value+1; DELETE FROM snapshots; DELETE FROM change_events; DELETE FROM lookup_outcomes; DELETE FROM frn_snapshots; DELETE FROM frn_observations;");
         c.ExecuteNonQuery();
         tx.Commit();
     }
@@ -312,4 +338,95 @@ public sealed class PortfolioStore
         f.RequestedAmount,
         f.PreDiscountAmount
     });
+
+    public static LookupKey FrnKey(LookupKey query) => new(query.Ben.Trim(), query.Year, FilingForm.Form471);
+
+    public FrnBaseline? ReadFrns(LookupKey query)
+    {
+        var key = FrnKey(query);
+        key.Validate();
+        using var db = Open();
+        return ReadFrns(db, null, key);
+    }
+
+    static FrnBaseline? ReadFrns(SqliteConnection db, SqliteTransaction? tx, LookupKey key)
+    {
+        using var run = Command(db, tx, "SELECT sequence, observed_utc FROM frn_observations WHERE query_key=$key", ("$key", key.Id));
+        using var header = run.ExecuteReader();
+        if (!header.Read())
+            return null;
+        var sequence = header.GetInt64(0);
+        var observed = DateTimeOffset.Parse(header.GetString(1), CultureInfo.InvariantCulture);
+        header.Close();
+        using var rows = Command(db, tx, """
+            SELECT funding_request_number, application_number, name, frn_status, reported_committed_amount, fcdl_date, revised_fcdl_date, disbursed_amount
+            FROM frn_snapshots WHERE query_key=$key ORDER BY funding_request_number
+            """, ("$key", key.Id));
+        using var reader = rows.ExecuteReader();
+        var frns = new List<ReportedFrn>();
+        while (reader.Read())
+            frns.Add(new ReportedFrn(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5), reader.GetString(6), reader.GetString(7)));
+        return new FrnBaseline(key, sequence, observed, frns);
+    }
+
+    public bool SaveFrns(LookupKey query, long sequence, QueryResult<List<UsacRow>> result, CancellationToken ct = default)
+    {
+        var key = FrnKey(query);
+        key.Validate();
+        if (result.FromCache)
+            return false;
+        var incoming = FrnSnapshot.FromRows(key.Ben, result.Data);
+        using var db = Open();
+        using var tx = db.BeginTransaction();
+        using var watermark = Command(db, tx, "SELECT cleared_through FROM sequence");
+        if (sequence <= Convert.ToInt64(watermark.ExecuteScalar(), CultureInfo.InvariantCulture))
+            return false;
+        var old = ReadFrns(db, tx, key);
+        if (old is not null && sequence <= old.Sequence)
+            return false;
+        var observed = result.FetchedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        var changes = old is null ? new List<FrnFieldChange>() : FrnSnapshot.Compare(old.Frns, incoming);
+        using var clear = Command(db, tx, "DELETE FROM frn_snapshots WHERE query_key=$key", ("$key", key.Id));
+        clear.ExecuteNonQuery();
+        foreach (var frn in incoming)
+        {
+            using var add = Command(db, tx, """
+                INSERT INTO frn_snapshots(query_key, funding_request_number, application_number, name, frn_status, reported_committed_amount, fcdl_date, revised_fcdl_date, disbursed_amount, sequence, observed_utc)
+                VALUES($key,$frn,$app,$name,$status,$reported,$fcdl,$revised,$disbursed,$seq,$utc)
+                """,
+                ("$key", key.Id), ("$frn", frn.FundingRequestNumber), ("$app", frn.ApplicationNumber), ("$name", frn.Name),
+                ("$status", frn.FrnStatus), ("$reported", frn.ReportedCommittedAmount), ("$fcdl", frn.FcdlDate),
+                ("$revised", frn.RevisedFcdlDate), ("$disbursed", frn.DisbursedAmount), ("$seq", sequence), ("$utc", observed));
+            add.ExecuteNonQuery();
+        }
+        using var mark = Command(db, tx, """
+            INSERT INTO frn_observations(query_key, sequence, observed_utc) VALUES($key,$seq,$utc)
+            ON CONFLICT(query_key) DO UPDATE SET sequence=excluded.sequence, observed_utc=excluded.observed_utc
+            """, ("$key", key.Id), ("$seq", sequence), ("$utc", observed));
+        mark.ExecuteNonQuery();
+        foreach (var change in changes)
+        {
+            var payload = new FilingChange("FRN " + change.FundingRequestNumber, change.Kind, change.Before, change.After);
+            using var add = Command(db, tx, "INSERT INTO change_events(query_key,sequence,application,observed_utc,payload) VALUES($key,$seq,$app,$utc,$data)",
+                ("$key", key.Id), ("$seq", sequence), ("$app", "FRN " + change.FundingRequestNumber + " · " + change.Kind),
+                ("$utc", observed), ("$data", JsonSerializer.Serialize(payload, Json)));
+            add.ExecuteNonQuery();
+        }
+        using var cleanup = Command(db, tx, "DELETE FROM change_events WHERE acknowledged_utc IS NOT NULL AND acknowledged_utc < $cutoff", ("$cutoff", clock().AddDays(-90).ToString("O")));
+        cleanup.ExecuteNonQuery();
+        ct.ThrowIfCancellationRequested();
+        tx.Commit();
+        return true;
+    }
+
+    public void AcknowledgeFrns(LookupKey query, long throughSequence)
+    {
+        var key = FrnKey(query);
+        using var db = Open();
+        using var c = Command(db, null, "UPDATE change_events SET acknowledged_utc=$utc WHERE query_key=$key AND sequence<=$seq AND acknowledged_utc IS NULL AND application LIKE 'FRN %'",
+            ("$key", key.Id), ("$seq", throughSequence), ("$utc", clock().ToString("O")));
+        c.ExecuteNonQuery();
+    }
 }
+
+public sealed record FrnBaseline(LookupKey Key, long Sequence, DateTimeOffset ObservedAt, List<ReportedFrn> Frns);

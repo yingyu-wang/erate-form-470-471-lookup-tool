@@ -295,6 +295,107 @@ public sealed class UsacClient : IDisposable
         return string.Join(" AND ", parts);
     }
 
+    /// <summary>
+    /// Current FRN Status rows for an applicant. The column list is
+    /// <see cref="FrnStatusSelect"/>. <c>CommittedAmount</c> is not selected
+    /// under that name; <see cref="FrnCommitment"/> maps it later.
+    /// </summary>
+    public static string FundingRequestWhere(string? ben, string? name, int year, string? applicationNumber, string? fundingRequestNumber)
+    {
+        var where = ApplicantClause(FilingForm.Form471, ben, name, "ben");
+        where += " AND funding_year=" + Literal(year.ToString(CultureInfo.InvariantCulture));
+        where += " AND form_version='Current'";
+        if (!string.IsNullOrEmpty(applicationNumber))
+        {
+            where += " AND application_number=" + Literal(applicationNumber);
+        }
+
+        if (!string.IsNullOrEmpty(fundingRequestNumber))
+        {
+            where += " AND funding_request_number=" + Literal(fundingRequestNumber);
+        }
+
+        return where;
+    }
+
+    /// <summary>
+    /// Reads every Current FRN Status row for one BEN and funding year.
+    /// Pages use <see cref="FrnStatusSelect"/> and <see cref="FrnStatusEndpoint"/>,
+    /// the same columns as <c>--frn</c>. The command line still requests one page.
+    /// This read continues until the published count is loaded or the filing row cap is hit.
+    /// </summary>
+    public async Task<QueryResult<List<UsacRow>>> GetFundingRequestsAsync(string ben, int year, bool refresh, CancellationToken ct)
+    {
+        if (year < 2016 || year > 2100)
+        {
+            throw new ArgumentException("Invalid funding year.");
+        }
+
+        var filter = FundingRequestWhere(ben, null, year, null, null);
+        var count = await CountRowsAsync(FrnStatusEndpoint, filter, ct).ConfigureAwait(false);
+        if (count > MaxFilingRows)
+        {
+            throw new InvalidOperationException(ResultLimitMessage);
+        }
+
+        var before = await RowsUpdatedAtAsync(UsacSources.FundingRequestDataset, ct).ConfigureAwait(false);
+        var all = new List<UsacRow>();
+        var pageKeys = new List<string>();
+        var fetched = DateTimeOffset.MaxValue;
+        var cached = true;
+        var complete = false;
+        for (var offset = 0; offset < MaxFilingRows; offset += FilingPageSize)
+        {
+            var parameters = new Dictionary<string, string>
+            {
+                ["$select"] = FrnStatusSelect,
+                ["$where"] = filter,
+                ["$order"] = "funding_request_number",
+                ["$limit"] = FilingPageSize.ToString(CultureInfo.InvariantCulture),
+                ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
+            };
+            pageKeys.Add(CacheKey(FrnStatusEndpoint, EncodeQuery(parameters)));
+            var page = await QueryAsync(parameters, refresh, ct, FrnStatusEndpoint).ConfigureAwait(false);
+            all.AddRange(page.Data);
+            if (page.FetchedAt < fetched)
+            {
+                fetched = page.FetchedAt;
+            }
+
+            cached &= page.FromCache;
+            if (page.Data.Count < FilingPageSize || all.Count >= count)
+            {
+                complete = true;
+                break;
+            }
+        }
+
+        if (!complete)
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(ResultLimitMessage);
+        }
+
+        string after;
+        try
+        {
+            after = await RowsUpdatedAtAsync(UsacSources.FundingRequestDataset, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw;
+        }
+
+        if (!string.Equals(before, after, StringComparison.Ordinal))
+        {
+            await ForgetCacheAsync(pageKeys, ct).ConfigureAwait(false);
+            throw new InvalidOperationException(PagingDriftMessage(UsacSources.FundingRequestDataset, before, after));
+        }
+
+        return new QueryResult<List<UsacRow>>(all, fetched == DateTimeOffset.MaxValue ? clock() : fetched, cached);
+    }
+
     public async Task<QueryResult<List<UsacRow>>> QueryAsync(Dictionary<string, string> parameters, bool refresh, CancellationToken ct, string endpoint = Endpoint)
     {
         var query = EncodeQuery(parameters);

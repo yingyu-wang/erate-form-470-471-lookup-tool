@@ -16,7 +16,7 @@ public sealed class PortfolioWindow : Window
     readonly ListBox entries = new() { Width = 260, Height = 110 };
     readonly TextBox listName = Field("List name", 150), ben = Field("BEN", 100), name = Field("Display name", 180), tags = Field("Tags", 160);
     readonly TextBox years = Field("Years, comma separated", 180), keyword = Field("Keyword", 180), service = Field("Service contains", 180);
-    readonly CheckBox changes = new() { Content = "Changes only" };
+    readonly CheckBox changes = new() { Content = "Changes only", Name = "Changes only, including FRN status and reported committed amount" };
     readonly StackPanel results = new() { Spacing = 8 };
     readonly TextBlock status = Text("Save BENs, choose years/forms, then refresh. Open saved works offline."), counts = Text("");
     readonly List<Control> gated = [];
@@ -47,7 +47,7 @@ public sealed class PortfolioWindow : Window
             Action("Clear selection", () => Do(() => { session.Selected.Clear(); Render(); })), counts), 3);
         Add(new ScrollViewer { Content = results }, 4);
         Add(Row(Action("Previous", () => Do(() => { page = Math.Max(0, page - 1); Render(); })), Action("Next", () => Do(() => { page++; Render(); })), Action("Change history", () => ShowText(session.ChangeHistory())), Action("Mark changes read", () => Do(() => { session.AcknowledgeDisplayed(); Render(); })), Action("Export selected", ExportAsync), Action("Deadlines", async () => { var text = await PortfolioInsights.DeadlinesAsync(session, windows, operation!.Token); if (!closed) await ShowText(text); }),
-            Action("History / summary", () => ShowText(PortfolioInsights.Summary(session, directory))), Action("Clear saved history", async () => { if (await Confirm("Delete all saved filing snapshots? Watchlists are retained.")) { session.Store.ClearHistory(); session.ClearView(); Render(); } })), 5);
+            Action("History / summary", () => ShowText(PortfolioInsights.Summary(session, directory))), Action("Clear saved history", async () => { if (await Confirm(PortfolioSession.ClearHistoryPrompt)) { session.Store.ClearHistory(); session.ClearView(); Render(); } })), 5);
         Add(status, 6); gated.AddRange(new Control[] { lists, listName, entries, ben, name, tags, years, forms, keyword, service, changes, results });
         lists.SelectionChanged += (_, _) => { listName.Text = (lists.SelectedItem as Watchlist)?.Name ?? ""; ReloadEntries(); };
         entries.SelectionChanged += (_, _) => { if (entries.SelectedItem is WatchlistEntry e) { ben.Text = e.Ben; name.Text = e.Name; tags.Text = e.Tags; } };
