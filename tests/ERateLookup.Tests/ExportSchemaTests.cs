@@ -353,6 +353,160 @@ public class ExportSchemaTests
         }
     }
 
+    [Fact]
+    public void ExcelReplacesTheDestinationOnlyAfterTheWorkbookIsComplete()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var previous = "previous workbook"u8.ToArray();
+            var kept = Path.Combine(directory, "kept.xlsx");
+            var replaced = Path.Combine(directory, "replaced.xlsx");
+            File.WriteAllBytes(kept, previous);
+            File.WriteAllBytes(replaced, previous);
+
+            using var canceled = new CancellationTokenSource();
+            canceled.Cancel();
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteExcel(kept, new List<string[]> { new[] { "Header" } }, canceled.Token));
+            Assert.Equal(previous, File.ReadAllBytes(kept));
+
+            Assert.Throws<ArgumentException>(() => DataExporter.WriteExcel(kept, new List<string[]> { new[] { "Header" } }, default, "'Sheet"));
+            Assert.Equal(previous, File.ReadAllBytes(kept));
+
+            using var during = new CancellationTokenSource();
+            var rows = new CancelOnSecondRow(during, new[] { "Header" }, new[] { "100.50" });
+            Assert.Throws<OperationCanceledException>(() => DataExporter.WriteExcel(kept, rows, during.Token));
+            Assert.Equal(previous, File.ReadAllBytes(kept));
+            Assert.DoesNotContain(Directory.EnumerateFiles(directory), path => path.EndsWith(".tmp", StringComparison.Ordinal));
+
+            DataExporter.WriteExcel(replaced, new List<string[]> { new[] { "Header" }, new[] { "100.50" } }, default);
+            Assert.NotEqual(previous, File.ReadAllBytes(replaced));
+            Assert.Equal(new[] { "Header" }, ReadSheet(replaced)[0]);
+            Assert.Equal("100.50", ReadSheet(replaced)[1][0]);
+            Assert.Equal(DataExporter.LookupSheetName, ReadWorkbookSheetName(replaced));
+            Assert.DoesNotContain(Directory.EnumerateFiles(directory), path => path.EndsWith(".tmp", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void UntypedDefaultSelectsTheCancellationTokenAndTheLookupSheet()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "rows.xlsx");
+            var named = Path.Combine(directory, "named.xlsx");
+            DataExporter.WriteExcel(path, new List<string[]> { new[] { "Amount" }, new[] { "100.50" } }, default);
+            DataExporter.WriteExcel(named, new List<string[]> { new[] { "Amount" } }, default, "O'Brien");
+            Assert.Equal(DataExporter.LookupSheetName, ReadWorkbookSheetName(path));
+            Assert.Equal("O'Brien", ReadWorkbookSheetName(named));
+            Assert.Equal("100.50", ReadSheet(path)[1][0]);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    [InlineData("'Sheet")]
+    [InlineData("Sheet'")]
+    [InlineData("'Sheet'")]
+    [InlineData("a:b")]
+    [InlineData("a\\b")]
+    [InlineData("a/b")]
+    [InlineData("a?b")]
+    [InlineData("a*b")]
+    [InlineData("a[b")]
+    [InlineData("a]b")]
+    [InlineData("bad\u0001name")]
+    [InlineData("bad\u0008name")]
+    [InlineData("\uFFFF")]
+    public void ExcelRejectsSheetNamesExcelOrXmlWouldReject(string sheetName)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "rows.xlsx");
+            var previous = "previous workbook"u8.ToArray();
+            File.WriteAllBytes(path, previous);
+            var error = Assert.Throws<ArgumentException>(() => DataExporter.WriteExcel(path, new List<string[]> { new[] { "Header" } }, default, sheetName));
+            Assert.Contains("sheet name", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(previous, File.ReadAllBytes(path));
+            Assert.DoesNotContain(Directory.EnumerateFiles(directory), file => file.EndsWith(".tmp", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ExcelAcceptsAThirtyOneCharacterNameAndAnInteriorApostrophe()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var longest = new string('A', 31);
+            var path = Path.Combine(directory, "rows.xlsx");
+            DataExporter.WriteExcel(path, new List<string[]> { new[] { "Header" } }, default, longest);
+            Assert.Equal(longest, ReadWorkbookSheetName(path));
+            Assert.Throws<ArgumentException>(() => DataExporter.WriteExcel(path, new List<string[]> { new[] { "Header" } }, default, longest + "B"));
+            Assert.Equal(longest, ReadWorkbookSheetName(path));
+
+            var named = Path.Combine(directory, "amp.xlsx");
+            DataExporter.WriteExcel(named, new List<string[]> { new[] { "Header" } }, default, "A&B");
+            Assert.Equal("A&B", ReadWorkbookSheetName(named));
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public void ExcelCellsReplaceCharactersXmlForbidsAndKeepAmountsAsText()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "ERateSchema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "rows.xlsx");
+            var emoji = "a\U0001F600b";
+            DataExporter.WriteExcel(path, new List<string[]>
+            {
+                new[] { "Text", "Amount" },
+                new[] { "a\u0001b\tc\u0000d", "100.50" },
+                new[] { "\uD800", "0" },
+                new[] { emoji, "200.00" }
+            });
+            var sheet = ReadSheet(path);
+            Assert.Equal("a\uFFFDb\tc\uFFFDd", sheet[1][0]);
+            Assert.Equal("100.50", sheet[1][1]);
+            Assert.Equal("\uFFFD", sheet[2][0]);
+            Assert.Equal("0", sheet[2][1]);
+            Assert.Equal(emoji, sheet[3][0]);
+            Assert.DoesNotContain(sheet.SelectMany(row => row).SelectMany(cell => cell), character => character is '\u0001' or '\0' or '\uD800');
+            var xml = FileXml(path, "xl/worksheets/sheet1.xml");
+            Assert.Contains("inlineStr", xml, StringComparison.Ordinal);
+            Assert.DoesNotContain("t=\"n\"", xml, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
     static ExportRow SampleRow() =>
         new()
         {
@@ -372,6 +526,22 @@ public class ExportSchemaTests
             Linked = "false",
         };
 
+    static string ReadWorkbookSheetName(string path)
+    {
+        using var archive = ZipFile.OpenRead(path);
+        using var workbook = archive.GetEntry("xl/workbook.xml")!.Open();
+        var xml = XDocument.Load(workbook);
+        return xml.Descendants().First(element => element.Name.LocalName == "sheet").Attribute("name")!.Value;
+    }
+
+    static string FileXml(string path, string entryName)
+    {
+        using var archive = ZipFile.OpenRead(path);
+        using var entry = archive.GetEntry(entryName)!.Open();
+        using var reader = new StreamReader(entry);
+        return reader.ReadToEnd();
+    }
+
     static List<string[]> ReadSheet(string path)
     {
         using var archive = ZipFile.OpenRead(path);
@@ -380,6 +550,43 @@ public class ExportSchemaTests
         return xml.Descendants().Where(element => element.Name.LocalName == "row").Select(row =>
             row.Elements().Where(element => element.Name.LocalName == "c").Select(cell =>
                 cell.Descendants().First(element => element.Name.LocalName == "t").Value).ToArray()).ToList();
+    }
+
+    sealed class CancelOnSecondRow : IReadOnlyList<string[]>
+    {
+        readonly CancellationTokenSource source;
+        readonly string[][] rows;
+
+        public CancelOnSecondRow(CancellationTokenSource source, params string[][] rows)
+        {
+            this.source = source;
+            this.rows = rows;
+        }
+
+        public int Count => rows.Length;
+
+        public string[] this[int index]
+        {
+            get
+            {
+                if (index > 0)
+                {
+                    source.Cancel();
+                }
+
+                return rows[index];
+            }
+        }
+
+        public IEnumerator<string[]> GetEnumerator()
+        {
+            for (var i = 0; i < rows.Length; i++)
+            {
+                yield return this[i];
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     sealed record SampleJsonRow(string ApplicationNumber, string Source);

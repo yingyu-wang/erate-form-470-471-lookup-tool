@@ -82,11 +82,18 @@ public class CliCommandTests
     [Theory]
     [InlineData("--xlsx")]
     [InlineData("--excel")]
-    public void DiffRejectsExcel(string flag)
+    public void DiffAcceptsExcel(string flag)
     {
         var parsed = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--diff", flag, "--output", "out.xlsx" });
-        Assert.Null(parsed.Options);
-        Assert.Equal("--diff supports the table, CSV, and JSON only.", parsed.Error);
+        Assert.Null(parsed.Error);
+        Assert.NotNull(parsed.Options);
+        Assert.True(parsed.Options.Diff);
+        Assert.Equal(CliFormat.Excel, parsed.Options.Format);
+        Assert.Equal("out.xlsx", parsed.Options.OutputPath);
+
+        var missing = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--diff", flag });
+        Assert.Null(missing.Options);
+        Assert.Equal("--xlsx requires --output <file.xlsx>.", missing.Error);
 
         var csv = CliCommand.Parse(new[] { "--form", "470", "--ben", "143618", "--fy", "2026", "--diff", "--csv", "--output", "out.csv" });
         Assert.Null(csv.Error);
@@ -96,7 +103,7 @@ public class CliCommandTests
     }
 
     [Fact]
-    public async Task DiffExcelRunDoesNotQuery()
+    public async Task DiffExcelWithoutOutputDoesNotQuery()
     {
         var directory = Temp();
         try
@@ -105,10 +112,10 @@ public class CliCommandTests
             using var http = new HttpClient(handler);
             using var client = new UsacClient(http, directory);
             var stderr = new StringWriter();
-            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true, OutputPath = "out.xlsx" };
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true };
             var code = await CliCommand.RunAsync(options, client, new StringWriter(), stderr, default);
             Assert.Equal(CliCommand.ExitBadArgs, code);
-            Assert.Equal("--diff supports the table, CSV, and JSON only." + Environment.NewLine, stderr.ToString());
+            Assert.Equal("--xlsx requires --output <file.xlsx>." + Environment.NewLine, stderr.ToString());
             Assert.Empty(handler.Urls);
         }
         finally
@@ -392,6 +399,260 @@ public class CliCommandTests
             Assert.Equal("frozen", sheet.PaneState);
             Assert.Equal("1", sheet.FrozenSplit);
             Assert.Equal("A2", sheet.TopLeftCell);
+            Assert.Equal(DataExporter.LookupSheetName, sheet.SheetName);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelWithoutFrnWritesExactlyTheBaseColumns()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "app.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"261003372","epc_organization_id":"143618","billed_entity_name":"Chula Vista Elem School Dist","form_version":"Current","filing_status":"Committed","form_nickname":"=SUM(A1)","certified_date_time":"2026-03-01T00:00:00.000","funding_request_amount":"100.50","pre_discount_eligible_amount":"200.00"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var options = Options(FilingForm.Form471, CliFormat.Excel) with { OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            var sheet = ReadSheet(output);
+            Assert.Equal(ExportSchema.BaseColumns, sheet.Rows[0]);
+            Assert.Equal(ExportSchema.Columns(ExportSchema.ExcelColumns(false)), sheet.Rows[0]);
+            Assert.Equal(17, sheet.Rows[0].Length);
+            Assert.DoesNotContain("FrnStatus", sheet.Rows[0]);
+            Assert.DoesNotContain("CommittedAmount", sheet.Rows[0]);
+            Assert.DoesNotContain("FcdlDate", sheet.Rows[0]);
+            Assert.DoesNotContain("RevisedFcdlDate", sheet.Rows[0]);
+            Assert.DoesNotContain("DisbursedAmount", sheet.Rows[0]);
+            Assert.Equal(ExportSchema.BaseColumns.Count * sheet.Rows.Count, sheet.CellCount);
+            AssertInlineText(sheet);
+            Assert.Equal("=SUM(A1)", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "Nickname")]);
+            Assert.Equal("100.50", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.Equal("200.00", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "PreDiscountAmount")]);
+            Assert.Equal(DataExporter.LookupSheetName, sheet.SheetName);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelWithFrnIncludesCommitmentColumnsAsText()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "nested", "frn.xlsx");
+        var csvOutput = Path.Combine(directory, "frn.csv");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"funding_request_number":"2099010373","application_number":"201009092","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Funded","form_nickname":"=SUM(A1)","funding_commitment_request":"14908.32","funding_request_amount":"14908.32","fcdl_letter_date":"2020-05-09T00:00:00.000","total_authorized_disbursement":"14908.32"},
+                  {"funding_request_number":"1799022629","application_number":"171000001","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Pending","funding_commitment_request":"14908.32","funding_request_amount":"14908.32"},
+                  {"funding_request_number":"1799008573","application_number":"171000002","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Denied","funding_commitment_request":"0","funding_request_amount":"0","fcdl_letter_date":"2017-08-25T00:00:00.000"},
+                  {"funding_request_number":"2099010999","application_number":"201009092","billed_entity_number":"136910","billed_entity_name":"Webster Groves School District","filing_status":"Funded","funding_commitment_request":"14908.32","funding_request_amount":"14908.32","fcdl_letter_date":"2020-05-09T00:00:00.000","revised_fcdl_date":"2026-07-14T00:00:00.000","total_authorized_disbursement":"14908.32"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var options = Options(FilingForm.Form471, CliFormat.Excel, 2020) with { Ben = "136910", FundingRequestNumber = "2099010373", OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+
+            var csvCode = await CliCommand.RunAsync(options with { Format = CliFormat.Csv, OutputPath = csvOutput }, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, csvCode);
+            var csv = ParseCsv(await File.ReadAllTextAsync(csvOutput));
+            var sheet = ReadSheet(output);
+            var expectedHeaders = ExportSchema.Columns(ExportSchema.ExcelColumns(true));
+            Assert.Equal(ExportSchema.Columns(ExportSchema.CliColumns), expectedHeaders);
+            Assert.Equal(expectedHeaders, sheet.Rows[0]);
+            Assert.Equal(csv[0], sheet.Rows[0]);
+            Assert.Equal(new[] { "FrnStatus", "CommittedAmount", "FcdlDate", "RevisedFcdlDate", "DisbursedAmount" }, sheet.Rows[0][17..]);
+            Assert.Equal(22, sheet.Rows[0].Length);
+            Assert.Equal(csv[1][17..], sheet.Rows[1][17..]);
+            Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "", "14908.32" }, sheet.Rows[1][17..]);
+            Assert.Equal("14908.32", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.Equal("=SUM(A1)", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "Nickname")]);
+            Assert.Contains("'=SUM(A1)", await File.ReadAllTextAsync(csvOutput), StringComparison.Ordinal);
+            Assert.Equal(new[] { "Pending", "", "", "", "" }, sheet.Rows[2][17..]);
+            Assert.Equal("14908.32", sheet.Rows[2][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.Equal(new[] { "Denied", "", "2017-08-25", "", "" }, sheet.Rows[3][17..]);
+            Assert.Equal("0", sheet.Rows[3][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.Equal(new[] { "Funded", "14908.32", "2020-05-09", "2026-07-14", "14908.32" }, sheet.Rows[4][17..]);
+            Assert.Equal(expectedHeaders.Count * sheet.Rows.Count, sheet.CellCount);
+            AssertInlineText(sheet);
+            Assert.Equal(DataExporter.LookupSheetName, sheet.SheetName);
+            Assert.Equal("1", sheet.FrozenSplit);
+            Assert.Equal("A2", sheet.TopLeftCell);
+            Assert.Equal("frozen", sheet.PaneState);
+            Assert.Equal("A1:" + ColumnName(sheet.Rows[0].Length) + sheet.Rows.Count, sheet.AutoFilter);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffWritesExcelWithTheCsvColumns()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "nested", "diff.xlsx");
+        var csvOutput = Path.Combine(directory, "diff.csv");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","service_category":"Category 2","service_type":"Internal Connections","function":"Switches","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"2","service_category":"Category 2","service_type":"Internal Connections","function":"Cabling","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","service_category":"Category 2","service_type":"Internal Connections","function":"=Wireless","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"3","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"WAN","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true, OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            Assert.Contains(Form470Diff.Disclaimer, stderr.ToString(), StringComparison.Ordinal);
+
+            var csvCode = await CliCommand.RunAsync(options with { Format = CliFormat.Csv, OutputPath = csvOutput }, client, new StringWriter(), new StringWriter(), default);
+            Assert.Equal(CliCommand.ExitFound, csvCode);
+            var csv = ParseCsv(await File.ReadAllTextAsync(csvOutput));
+            var sheet = ReadSheet(output);
+            Assert.Equal(new[] { "ApplicationNumber", "BEN", "Name", "Change", "Scope", "ServiceRequestId", "Field", "Original", "Current", "Source" }, sheet.Rows[0]);
+            Assert.Equal(csv[0], sheet.Rows[0]);
+            Assert.Equal(csv.Count, sheet.Rows.Count);
+            Assert.Contains(sheet.Rows, row => row[3] == "Added");
+            Assert.Contains(sheet.Rows, row => row[3] == "Removed");
+            Assert.Contains(sheet.Rows, row => row[3] == "Changed" && row[6] == "function" && row[7] == "Switches" && row[8] == "=Wireless");
+            Assert.Contains("'=Wireless", await File.ReadAllTextAsync(csvOutput), StringComparison.Ordinal);
+            Assert.DoesNotContain(sheet.Rows.SelectMany(row => row), cell => cell.StartsWith("'", StringComparison.Ordinal));
+            Assert.Equal(sheet.Rows[0].Length * sheet.Rows.Count, sheet.CellCount);
+            AssertInlineText(sheet);
+            Assert.Equal(DataExporter.Form470DiffSheetName, sheet.SheetName);
+            Assert.Equal("1", sheet.FrozenSplit);
+            Assert.Equal("A2", sheet.TopLeftCell);
+            Assert.Equal("frozen", sheet.PaneState);
+            Assert.Equal("A1:" + ColumnName(sheet.Rows[0].Length) + sheet.Rows.Count, sheet.AutoFilter);
+            Assert.Contains("jt8s-3q52", Uri.UnescapeDataString(handler.Urls[0]), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffExcelMatchWritesTheHeaderOnly()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "match.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"200","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"Internet Access","fcc_form_470_status":"Certified"},
+                  {"application_number":"200","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"Internet Access","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true, OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            Assert.Contains("match", stderr.ToString(), StringComparison.Ordinal);
+            var sheet = ReadSheet(output);
+            var header = Assert.Single(sheet.Rows);
+            Assert.Equal(new[] { "ApplicationNumber", "BEN", "Name", "Change", "Scope", "ServiceRequestId", "Field", "Original", "Current", "Source" }, header);
+            Assert.Equal(header.Length, sheet.CellCount);
+            AssertInlineText(sheet);
+            Assert.Equal(DataExporter.Form470DiffSheetName, sheet.SheetName);
+            Assert.Equal("A1:" + ColumnName(header.Length) + "1", sheet.AutoFilter);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task ExcelWithoutFrnReplacesXmlForbiddenTextAndKeepsBaseColumns()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "lookup.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"260007116","billed_entity_number":"143618","billed_entity_name":"Example","fcc_form_470_status":"Certified","form_nickname":"C2\u0001","form_version":"Current","funding_request_amount":"100.50"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            await File.WriteAllBytesAsync(output, "previous workbook"u8.ToArray());
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            var sheet = ReadSheet(output);
+            Assert.Equal(ExportSchema.BaseColumns, sheet.Rows[0]);
+            Assert.Equal(17, sheet.Rows[0].Length);
+            Assert.DoesNotContain("FrnStatus", sheet.Rows[0]);
+            Assert.Equal("C2\uFFFD", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "Nickname")]);
+            Assert.Equal("100.50", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.DoesNotContain(sheet.Rows.SelectMany(row => row), cell => cell.Contains('\u0001'));
+            AssertInlineText(sheet);
+            Assert.Equal((byte)'P', (await File.ReadAllBytesAsync(output))[0]);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffExcelReplacesXmlForbiddenTextInsteadOfCrashing()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "diff.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","function":"Switches","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","function":"Wan\u0001","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true, OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            Assert.Contains(Form470Diff.Disclaimer, stderr.ToString(), StringComparison.Ordinal);
+            var sheet = ReadSheet(output);
+            var changed = Assert.Single(sheet.Rows, row => row[6] == "function");
+            Assert.Equal("Switches", changed[7]);
+            Assert.Equal("Wan\uFFFD", changed[8]);
+            Assert.DoesNotContain(sheet.Rows.SelectMany(row => row), cell => cell.Contains('\u0001'));
+            AssertInlineText(sheet);
+            Assert.Equal(DataExporter.Form470DiffSheetName, sheet.SheetName);
         }
         finally
         {
@@ -982,6 +1243,15 @@ public class CliCommandTests
 
         var pane = xml.Descendants().First(element => element.Name.LocalName == "pane");
         var filter = xml.Descendants().First(element => element.Name.LocalName == "autoFilter");
+        string? sheetName = null;
+        var workbookEntry = archive.GetEntry("xl/workbook.xml");
+        Assert.NotNull(workbookEntry);
+        using (var workbookStream = workbookEntry.Open())
+        {
+            var workbook = System.Xml.Linq.XDocument.Load(workbookStream);
+            sheetName = workbook.Descendants().First(element => element.Name.LocalName == "sheet").Attribute("name")?.Value;
+        }
+
         return new SheetSnapshot(
             rows,
             count,
@@ -990,7 +1260,16 @@ public class CliCommandTests
             pane.Attribute("ySplit")?.Value,
             pane.Attribute("topLeftCell")?.Value,
             pane.Attribute("state")?.Value,
-            filter.Attribute("ref")?.Value);
+            filter.Attribute("ref")?.Value,
+            sheetName);
+    }
+
+    static void AssertInlineText(SheetSnapshot sheet)
+    {
+        Assert.All(sheet.CellTypes, type => Assert.Equal("inlineStr", type));
+        Assert.DoesNotContain("f", sheet.ElementNames);
+        Assert.DoesNotContain("v", sheet.ElementNames);
+        Assert.DoesNotContain(sheet.CellTypes, type => type == "n");
     }
 
     static string ColumnName(int n)
@@ -1014,7 +1293,8 @@ public class CliCommandTests
         string? FrozenSplit,
         string? TopLeftCell,
         string? PaneState,
-        string? AutoFilter);
+        string? AutoFilter,
+        string? SheetName);
 
     static string Temp() => Path.Combine(Path.GetTempPath(), "ERateCli-" + Guid.NewGuid().ToString("N"));
 

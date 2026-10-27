@@ -5,8 +5,9 @@ namespace ERateLookup.Core;
 
 /// <summary>
 /// Shared lookup export columns. App lookup CSV and Excel use <see cref="BaseColumns"/>.
-/// The command-line table and CSV use <see cref="CliColumns"/>, which appends
-/// the FRN commitment columns. Command-line Excel uses <see cref="BaseColumns"/> only.
+/// The command-line table, CSV, and JSON use <see cref="CliColumns"/>, which appends
+/// the FRN commitment columns. Command-line Excel uses <see cref="ExcelColumns"/>:
+/// the shared base, plus those FRN columns only when the caller asks for them.
 /// Other groups stay out until <see cref="ExportColumns"/> selects them.
 /// Category 2 budget columns are the budget group only.
 /// </summary>
@@ -73,10 +74,18 @@ public static class ExportSchema
     public static IReadOnlyList<string> BaseColumns => Columns();
 
     /// <summary>
-    /// Command-line table and CSV: the shared base plus the five FRN columns.
-    /// Excel uses <see cref="BaseColumns"/>. Those five names stay out of that list.
+    /// Command-line table, CSV, and JSON: the shared base plus the five FRN columns.
+    /// Those five names stay out of <see cref="BaseColumns"/>.
     /// </summary>
     public static ExportColumns CliColumns { get; } = new() { IncludeFrnCommitment = true };
+
+    /// <summary>
+    /// Command-line Excel columns. With <paramref name="includeFrnCommitment"/>, the five
+    /// FRN columns follow the 17 base columns in <see cref="CliColumns"/> order.
+    /// Without it, the workbook is the shared base only. App exports do not call this.
+    /// </summary>
+    public static ExportColumns ExcelColumns(bool includeFrnCommitment) =>
+        includeFrnCommitment ? CliColumns : default;
 
     public static IReadOnlyList<string> Names(ExportColumnGroup group) =>
         Definitions.Where(column => column.Group == group).Select(column => column.Name).ToArray();

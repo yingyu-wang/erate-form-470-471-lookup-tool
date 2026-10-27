@@ -8,9 +8,9 @@ not create, change, certify, or submit a filing.
 ## Unreleased 1.0.6: committed and disbursed amounts
 
 `--frn` reads the public FRN Status dataset `qdmp-ygft`. It does not sign in
-to EPC. The table, CSV, and JSON gain five columns. Application lookups leave
-them blank. Desktop, Mac, Linux, and Android exports do not include these five
-columns.
+to EPC. The table, CSV, and JSON gain five columns. Excel includes those five
+columns only when `--frn` is used. Application lookups leave them blank.
+Desktop, Mac, Linux, and Android exports do not include these five columns.
 
 | Column | Published field | Rule |
 | --- | --- | --- |
@@ -74,24 +74,29 @@ during `--form both`, the command exits 3 and does not print a partial link.
 
 Release files are unsigned by design. v1.0.5 is not tagged.
 
-## Excel export in 1.0.6
+## Excel export
 
-`--xlsx` (alias `--excel`) writes the 17 base columns through
-`DataExporter.WriteExcel`. It does not include `FrnStatus`, `CommittedAmount`,
-`FcdlDate`, `RevisedFcdlDate`, or `DisbursedAmount`. Those five columns stay
-in the table, CSV, and JSON. Adding them to Excel is deferred to a future
-release. The flag requires `--output`. The workbook is not written to the
-terminal. `--csv`, `--json`, and `--xlsx` together exit 1. `--diff` with
-`--xlsx` exits 1.
+`--xlsx` (alias `--excel`) writes a workbook through `DataExporter.WriteExcel`.
+The lookup sheet is named `E-rate lookup`. Without `--frn`, the columns are
+the 17 base columns through `Form471Count`. With `--frn`, that sheet appends
+`FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and
+`DisbursedAmount`, in that order, matching the table, CSV, and JSON. Version
+1.0.6 wrote only the 17 base columns and deferred the five FRN columns. The
+flag requires `--output`. The workbook is not written to the terminal.
+`--csv`, `--json`, and `--xlsx` together exit 1.
 
-Every workbook cell is an inline string, including `RequestedAmount` and
-`PreDiscountAmount`. The file does not use numeric cells. CSV prefixes a field
-that starts with `=`, `+`, `-`, `@`, tab, or carriage return with `'`. The
-Excel cell stores the original text without that prefix. The worksheet stores
-no formula element. The header row is frozen, and an autofilter covers the
-rows that were written.
+`--diff` can write Excel. The sheet is named `Form 470 diff` and uses the same
+columns as the diff CSV. Version 1.0.6 rejected `--diff` with `--xlsx`.
 
-Release files are unsigned by design. v1.0.6 is not tagged.
+Every workbook cell is an inline string, including `RequestedAmount`,
+`PreDiscountAmount`, `CommittedAmount`, and `DisbursedAmount`. The file does
+not use numeric cells. CSV prefixes a field that starts with `=`, `+`, `-`,
+`@`, tab, or carriage return with `'`. The Excel cell stores the original text
+without that prefix. The worksheet stores no formula element. The header row is
+frozen, and an autofilter covers the rows that were written.
+
+Release files are unsigned by design. This follow-on does not change the
+version number. v1.0.6 is not tagged.
 
 This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
@@ -219,7 +224,7 @@ ERateLookup.Cli --form 470|471|both (--ben <BEN> | --name <applicant>) --fy <yea
   --diff               Compare published Form 470 Original and Current rows
   --csv                Write CSV, including the source link and 470/471 link columns
   --json               Write JSON instead of a text table
-  --xlsx, --excel      Write the 17 base columns to Excel. Requires --output
+  --xlsx, --excel      Write Excel. With --frn, include the five FRN columns. Requires --output
   --output <file>      Write the result to this file
   --help, -h           Show this help
 ```
@@ -234,10 +239,10 @@ The parser also accepts `-?` as help. The printed help does not list `-?`.
 | `--fy` | Yes | Integer year from 2016 through 2100 |
 | `--app` | No | One application number. Without `--frn`, rows from the filing query are kept only when the application number matches. With `--frn`, it is added to the FRN query. |
 | `--frn` | No | Form 471 only. `--form 470 --frn ...` exits 1: `--frn applies to Form 471.` `--form both --frn ...` exits 1 because a funding-request filter is not a 470-to-471 link. |
-| `--diff` | No | Form 470 only. `--form 471 --diff` and `--form both --diff` exit 1: `--diff applies to Form 470.` `--diff` with `--xlsx` or `--excel` exits 1: `--diff supports the table, CSV, and JSON only.` Takes no value. |
+| `--diff` | No | Form 470 only. `--form 471 --diff` and `--form both --diff` exit 1: `--diff applies to Form 470.` With `--xlsx` or `--excel`, writes one sheet named `Form 470 diff`. Takes no value. |
 | `--csv` | No | CSV body. Takes no value. |
 | `--json` | No | JSON body. Takes no value. |
-| `--xlsx`, `--excel` | No | Excel workbook of the 17 base columns. The five FRN columns are not in the workbook in 1.0.6. Takes no value. `--excel` is an alias of `--xlsx`. Requires `--output`. |
+| `--xlsx`, `--excel` | No | Excel workbook. Without `--frn`, the 17 base columns. With `--frn`, those columns plus the five FRN columns, in CSV order. Takes no value. `--excel` is an alias of `--xlsx`. Requires `--output`. |
 | `--output` | With `--xlsx` | Writes the body to this path. Parent directories are created. Optional for the table, CSV, and JSON. The program does not check that the Excel path ends in `.xlsx`. |
 | `--help`, `-h`, `-?` | No | Prints help on stdout and exits 0. Does not run a lookup. |
 
@@ -245,7 +250,7 @@ Valued options accept a separate argument (`--form 470`) or an equals form
 (`--form=470`). Repeating a flag is an error (`Duplicate argument: ...`).
 `--csv`, `--json`, and `--xlsx` together exit 1: `Choose either --csv, --json, or --xlsx.`
 `--xlsx` or `--excel` without `--output` exits 1: `--xlsx requires --output <file.xlsx>.`
-`--diff` with `--xlsx` or `--excel` exits 1: `--diff supports the table, CSV, and JSON only.`
+`--diff` with `--xlsx` or `--excel` writes the diff workbook. It still requires `--output`.
 Omitting `--form`, both `--ben` and `--name`, or `--fy` exits 1: `Form, applicant name or BEN, and funding year
 are required.` Unknown text exits 1: `Unknown argument: ...`. Parse errors go
 to stderr, followed by the help text.
@@ -283,7 +288,14 @@ dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --json
 
 # Excel workbook. --xlsx requires --output. --excel is the same flag.
+# Without --frn the workbook is the 17 base columns.
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 2026 --xlsx --output chula.xlsx
+
+# FRN workbook. The five FRN columns follow the 17 base columns.
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --xlsx --output frn.xlsx
+
+# Form 470 diff workbook. One sheet, same columns as the diff CSV.
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff --xlsx --output diff.xlsx
 
 # Same FRN, also constrained to an application number
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --app 261003372 --frn 2699003124
@@ -317,9 +329,10 @@ Columns, in order:
 `Form470Count`, `Form471Count`, `FrnStatus`, `CommittedAmount`, `FcdlDate`,
 `RevisedFcdlDate`, `DisbursedAmount`
 
-`--xlsx` writes the 17 columns through `Form471Count`. It does not include
-the five FRN columns in 1.0.6. Adding them to Excel is deferred to a future
-release.
+`--xlsx` writes the 17 columns through `Form471Count` when `--frn` is omitted.
+With `--frn`, it also writes `FrnStatus`, `CommittedAmount`, `FcdlDate`,
+`RevisedFcdlDate`, and `DisbursedAmount` in that order. The table and CSV
+always include those five columns. Application rows leave them blank.
 
 `Linked` is `true` when the command used `--form both` and `false` for a
 single-form lookup. `Form470Count` and `Form471Count` are filled only for
@@ -371,22 +384,30 @@ write those four fields.
 
 ### `--xlsx`
 
-`--xlsx` and `--excel` call `DataExporter.WriteExcel` with
-`ExportSchema.BaseColumns`. The table and CSV also append the five FRN
-columns. The workbook does not. Adding those columns to Excel is deferred to
-a future release. The file is an `.xlsx` zip. It is not UTF-8 text and it has
-no BOM. `--diff` with either flag exits 1 before the lookup:
-`--diff supports the table, CSV, and JSON only.`
-Passing either flag without `--output` exits 1 before the lookup. Repeating
-`--xlsx` exits 1 with `Duplicate argument: --xlsx`. Repeating `--excel` exits
-1 with `Duplicate argument: --excel`. Passing both exits 1 with
+`--xlsx` and `--excel` call `DataExporter.WriteExcel`. The lookup sheet is
+named `E-rate lookup`. Without `--frn`, the columns are
+`ExportSchema.BaseColumns` (the call is `ExportSchema.ExcelColumns(false)`).
+With `--frn`, the columns are `ExportSchema.CliColumns`
+(`ExportSchema.ExcelColumns(true)`): the 17 base columns plus `FrnStatus`,
+`CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`, in
+the same order as the table and CSV. The file is an `.xlsx` zip. It is not
+UTF-8 text and it has no BOM. `--diff` uses the sheet described under Form 470
+Original vs Current. Passing either flag without `--output` exits 1 before the
+lookup. Repeating `--xlsx` exits 1 with `Duplicate argument: --xlsx`. Repeating
+`--excel` exits 1 with `Duplicate argument: --excel`. Passing both exits 1 with
 `Duplicate argument:` and the second flag.
 
 Each cell is an inline string (`t="inlineStr"`). Amounts stay text, such as
-`100.50`, rather than numeric cells. A value CSV would prefix with `'` is
-stored without that prefix. The sheet has a frozen header (`ySplit="1"`,
+`100.50` or `14908.32`, rather than numeric cells. A value CSV would prefix
+with `'` is stored without that prefix. A character that XML 1.0 forbids is
+replaced with U+FFFD so the rest of the cell is still written. Tab, line feed,
+and carriage return are kept. The sheet has a frozen header (`ySplit="1"`,
 `topLeftCell="A2"`, `state="frozen"`) and an autofilter from `A1` through the
 last written cell.
+
+The workbook is written to a temporary file in the same directory and replaces
+`--output` only after that write finishes. A failed or canceled write leaves an
+existing file in place. Diff workbooks use the same cell and replace rules.
 
 ### What a row contains
 
@@ -431,9 +452,8 @@ that no filing exists. The help text says the same thing.
 `--diff` compares the published Original and Current `form_version` rows for a
 Form 470 in USAC Open Data dataset `jt8s-3q52`. It is a separate read from the
 normal lookup. `UsacClient.Collapse` still keeps the Current version for an
-ordinary Form 470 or Form 471 lookup. `--diff` writes a table, CSV, or JSON.
-`--diff` with `--xlsx` or `--excel` exits 1:
-`--diff supports the table, CSV, and JSON only.`
+ordinary Form 470 or Form 471 lookup. `--diff` writes a table, CSV, JSON, or
+Excel. `--xlsx` and `--excel` require `--output`.
 
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
@@ -466,8 +486,8 @@ The command does not store a local history of intermediate revisions. Open
 Data publishes Original and Current, not every edit between them. It does not
 determine whether a change was substantial.
 
-Table, CSV, and JSON use these columns: `ApplicationNumber`, `BEN`, `Name`,
-`Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,
+Table, CSV, JSON, and Excel use these columns: `ApplicationNumber`, `BEN`,
+`Name`, `Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,
 `Source`. `Change` is `Added`, `Removed`, `Changed`, `VersionGap`, or
 `Unexpected`. JSON adds `diff: true`, `applicationCount`, and `count`. `count`
 is the number of difference rows. An empty difference list with
@@ -477,9 +497,18 @@ still written. Stderr includes: "This comparison reads published Original and
 Current rows from USAC Open Data dataset jt8s-3q52. It does not determine
 whether a change was substantial."
 
-`--csv` and `--json` still apply. CSV formula-like text is prefixed with `'`.
-The source link is the Open Data URL for that application number on
-`jt8s-3q52`.
+Excel is one worksheet named `Form 470 diff`
+(`DataExporter.Form470DiffSheetName`). It uses the same columns and row order
+as the CSV. It does not add a second sheet for `fetchedAt`, `applicationCount`,
+`count`, or the query envelope. Those stay in the JSON body. Stderr still
+reports whether the versions match. Cells are inline strings, with the same
+frozen header and autofilter as a lookup workbook. A value CSV would prefix
+with `'` is stored as the original text. An empty difference list still writes
+the header row.
+
+`--csv`, `--json`, and `--xlsx` still cannot be combined. CSV formula-like text
+is prefixed with `'`. The source link is the Open Data URL for that application
+number on `jt8s-3q52`.
 
 ## Exit codes
 
