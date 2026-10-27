@@ -7,6 +7,12 @@ namespace ERateLookup.Core;
 
 public static class DataExporter
 {
+    /// <summary>Worksheet name for a command-line or app lookup workbook.</summary>
+    public const string LookupSheetName = "E-rate lookup";
+
+    /// <summary>Worksheet name for a Form 470 Original vs Current diff workbook.</summary>
+    public const string Form470DiffSheetName = "Form 470 diff";
+
     public static void WriteCsv(string path, IEnumerable<string[]> rows, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -27,8 +33,17 @@ public static class DataExporter
             })));
         }
     }
-    public static void WriteExcel(string path, List<string[]> rows, CancellationToken ct = default)
+    public static void WriteExcel(string path, List<string[]> rows, CancellationToken ct = default) =>
+        WriteExcel(path, rows, LookupSheetName, ct);
+
+    /// <summary>
+    /// Writes one worksheet. Every cell is an inline string, including amounts.
+    /// A value that CSV prefixes with <c>'</c> is stored as the original text.
+    /// The sheet has no formula elements. The header row is frozen.
+    /// </summary>
+    public static void WriteExcel(string path, List<string[]> rows, string sheetName, CancellationToken ct = default)
     {
+        var safeSheetName = SheetNameAttribute(sheetName);
         ct.ThrowIfCancellationRequested();
         using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var zip = new ZipArchive(file, ZipArchiveMode.Create);
@@ -40,9 +55,9 @@ public static class DataExporter
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
         <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>
         """);
-        WriteText(zip, "xl/workbook.xml", """
+        WriteText(zip, "xl/workbook.xml", $"""
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="E-rate lookup" sheetId="1" r:id="rId1"/></sheets></workbook>
+        <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="{safeSheetName}" sheetId="1" r:id="rId1"/></sheets></workbook>
         """);
         WriteText(zip, "xl/_rels/workbook.xml.rels", """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -282,6 +297,16 @@ public static class DataExporter
         using var writer = new StreamWriter(stream, new UTF8Encoding(false));
         writer.Write(text);
     }
+    static string SheetNameAttribute(string sheetName)
+    {
+        if (string.IsNullOrWhiteSpace(sheetName) || sheetName.Length > 31 || sheetName.IndexOfAny([':', '\\', '/', '?', '*', '[', ']']) >= 0)
+        {
+            throw new ArgumentException("Excel sheet name must be 1 to 31 characters and cannot contain : \\ / ? * [ ].");
+        }
+
+        return sheetName.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal).Replace("\"", "&quot;", StringComparison.Ordinal);
+    }
+
     private static string Column(int n)
     {
         var result = "";
