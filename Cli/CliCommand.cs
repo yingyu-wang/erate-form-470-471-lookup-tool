@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 using ERateLookup.Core;
 
 namespace ERateLookup.Cli;
@@ -313,7 +314,7 @@ public static class CliCommand
             await stderr.WriteLineAsync(prefix + ex.Message).ConfigureAwait(false);
             return ExitUsacUnreachable;
         }
-        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or XmlException)
         {
             var prefix = options.LinkForms
                 ? "Lookup failed, so Form 470 and Form 471 were not linked. No filing determination was made. "
@@ -573,7 +574,7 @@ public static class CliCommand
         var directory = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath!));
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
-        DataExporter.WriteExcel(options.OutputPath!, table, sheetName, cancellationToken);
+        DataExporter.WriteExcel(options.OutputPath!, table, cancellationToken, sheetName);
     }
 
     static string RenderTable(List<string[]> table)

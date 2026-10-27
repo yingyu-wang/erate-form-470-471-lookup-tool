@@ -33,18 +33,45 @@ public static class DataExporter
             })));
         }
     }
-    public static void WriteExcel(string path, List<string[]> rows, CancellationToken ct = default) =>
-        WriteExcel(path, rows, LookupSheetName, ct);
-
     /// <summary>
     /// Writes one worksheet. Every cell is an inline string, including amounts.
     /// A value that CSV prefixes with <c>'</c> is stored as the original text.
-    /// The sheet has no formula elements. The header row is frozen.
+    /// Characters XML 1.0 forbids are replaced with U+FFFD. The sheet has no formula elements.
+    /// The header row is frozen. <paramref name="sheetName"/> null uses <see cref="LookupSheetName"/>.
+    /// The third argument stays the cancellation token, so an untyped <c>default</c> selects that overload.
+    /// The workbook is written to a temporary file in the same directory and replaces
+    /// <paramref name="path"/> only after the write finishes.
     /// </summary>
-    public static void WriteExcel(string path, List<string[]> rows, string sheetName, CancellationToken ct = default)
+    public static void WriteExcel(string path, IReadOnlyList<string[]> rows, CancellationToken ct = default, string? sheetName = null)
     {
-        var safeSheetName = SheetNameAttribute(sheetName);
+        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(rows);
+        var safeSheetName = SheetNameAttribute(sheetName ?? LookupSheetName);
         ct.ThrowIfCancellationRequested();
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrEmpty(directory))
+        {
+            throw new ArgumentException("Choose a file.");
+        }
+
+        Directory.CreateDirectory(directory);
+        var tempPath = Path.Combine(directory, "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            WriteWorkbook(tempPath, rows, safeSheetName, ct);
+            ct.ThrowIfCancellationRequested();
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(tempPath);
+            throw;
+        }
+    }
+
+    static void WriteWorkbook(string path, IReadOnlyList<string[]> rows, string safeSheetName, CancellationToken ct)
+    {
         using var file = new FileStream(path, FileMode.Create, FileAccess.Write);
         using var zip = new ZipArchive(file, ZipArchiveMode.Create);
         WriteText(zip, "[Content_Types].xml", """
@@ -93,10 +120,11 @@ public static class DataExporter
         xml.WriteStartElement("sheetData", ns);
         for (var i = 0; i < rows.Count; i++)
         {
+            var row = rows[i];
             ct.ThrowIfCancellationRequested();
             xml.WriteStartElement("row", ns);
             xml.WriteAttributeString("r", (i + 1).ToString());
-            for (var j = 0; j < rows[i].Length; j++)
+            for (var j = 0; j < row.Length; j++)
             {
                 xml.WriteStartElement("c", ns);
                 xml.WriteAttributeString("r", Column(j + 1) + (i + 1));
@@ -104,7 +132,7 @@ public static class DataExporter
                 xml.WriteStartElement("is", ns);
                 xml.WriteStartElement("t", ns);
                 xml.WriteAttributeString("xml", "space", "http://www.w3.org/XML/1998/namespace", "preserve");
-                xml.WriteString(rows[i][j]);
+                xml.WriteString(XmlCellText(row[j]));
                 xml.WriteEndElement();
                 xml.WriteEndElement();
                 xml.WriteEndElement();
@@ -299,12 +327,101 @@ public static class DataExporter
     }
     static string SheetNameAttribute(string sheetName)
     {
-        if (string.IsNullOrWhiteSpace(sheetName) || sheetName.Length > 31 || sheetName.IndexOfAny([':', '\\', '/', '?', '*', '[', ']']) >= 0)
+        if (string.IsNullOrWhiteSpace(sheetName)
+            || sheetName.Length > 31
+            || sheetName[0] == '\''
+            || sheetName[^1] == '\''
+            || sheetName.IndexOfAny([':', '\\', '/', '?', '*', '[', ']']) >= 0
+            || ContainsInvalidXml(sheetName))
         {
-            throw new ArgumentException("Excel sheet name must be 1 to 31 characters and cannot contain : \\ / ? * [ ].");
+            throw new ArgumentException("Excel sheet name must be 1 to 31 characters, cannot start or end with an apostrophe, and cannot contain : \\ / ? * [ ] or a character XML 1.0 forbids.");
         }
 
         return sheetName.Replace("&", "&amp;", StringComparison.Ordinal).Replace("<", "&lt;", StringComparison.Ordinal).Replace(">", "&gt;", StringComparison.Ordinal).Replace("\"", "&quot;", StringComparison.Ordinal);
+    }
+
+    static string XmlCellText(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || !ContainsInvalidXml(value))
+        {
+            return value ?? "";
+        }
+
+        var builder = new StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var length = XmlCharLength(value, i);
+            if (length == 0)
+            {
+                builder.Append('\uFFFD');
+            }
+            else
+            {
+                builder.Append(value, i, length);
+                i += length - 1;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    static bool ContainsInvalidXml(string value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            var length = XmlCharLength(value, i);
+            if (length == 0)
+            {
+                return true;
+            }
+
+            i += length - 1;
+        }
+
+        return false;
+    }
+
+    static int XmlCharLength(string value, int index)
+    {
+        var character = value[index];
+        if (char.IsHighSurrogate(character))
+        {
+            if (index + 1 < value.Length
+                && char.IsLowSurrogate(value[index + 1])
+                && IsXml10CodePoint(char.ConvertToUtf32(character, value[index + 1])))
+            {
+                return 2;
+            }
+
+            return 0;
+        }
+
+        if (char.IsLowSurrogate(character) || !IsXml10CodePoint(character))
+        {
+            return 0;
+        }
+
+        return 1;
+    }
+
+    static bool IsXml10CodePoint(int codePoint) =>
+        codePoint is 0x9 or 0xA or 0xD
+        || (codePoint >= 0x20 && codePoint <= 0xD7FF)
+        || (codePoint >= 0xE000 && codePoint <= 0xFFFD)
+        || (codePoint >= 0x10000 && codePoint <= 0x10FFFF);
+
+    static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 
     private static string Column(int n)

@@ -399,9 +399,15 @@ lookup. Repeating `--xlsx` exits 1 with `Duplicate argument: --xlsx`. Repeating
 
 Each cell is an inline string (`t="inlineStr"`). Amounts stay text, such as
 `100.50` or `14908.32`, rather than numeric cells. A value CSV would prefix
-with `'` is stored without that prefix. The sheet has a frozen header
-(`ySplit="1"`, `topLeftCell="A2"`, `state="frozen"`) and an autofilter from
-`A1` through the last written cell.
+with `'` is stored without that prefix. A character that XML 1.0 forbids is
+replaced with U+FFFD so the rest of the cell is still written. Tab, line feed,
+and carriage return are kept. The sheet has a frozen header (`ySplit="1"`,
+`topLeftCell="A2"`, `state="frozen"`) and an autofilter from `A1` through the
+last written cell.
+
+The workbook is written to a temporary file in the same directory and replaces
+`--output` only after that write finishes. A failed or canceled write leaves an
+existing file in place. Diff workbooks use the same cell and replace rules.
 
 ### What a row contains
 

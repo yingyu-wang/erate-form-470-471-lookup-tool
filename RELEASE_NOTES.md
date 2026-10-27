@@ -6,7 +6,8 @@ The v1.0.6 notes below deferred two Excel items. This follow-on completes them. 
 
 - `--xlsx` (alias `--excel`) includes `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` when `--frn` is used, in the same order and with the same headers as the command-line table, CSV, and JSON. Without `--frn`, Excel stays the 17 shared base columns. App and portfolio files still do not write those five columns. The shared base names and order are unchanged.
 - `--diff` writes Excel with `--xlsx` or `--excel`. The workbook is one sheet named `Form 470 diff`. Its columns match the diff table and CSV: `ApplicationNumber`, `BEN`, `Name`, `Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`, `Source`. JSON-only fields (`diff`, `applicationCount`, `count`, `fetchedAt`) stay in JSON and are not extra sheets. The header row is frozen and an autofilter covers the written rows. An empty difference list still writes the header row.
-- Workbook cells stay inline text, including amounts. A value that CSV prefixes with `'` is stored as the original text. The sheet has no formula elements.
+- Workbook cells stay inline text, including amounts. A value that CSV prefixes with `'` is stored as the original text. A character XML 1.0 forbids is replaced with U+FFFD. The sheet has no formula elements.
+- An Excel write goes to a temporary file in the same directory and replaces the destination only after the workbook is complete. A failed or canceled write leaves an existing file in place. Sheet names that start or end with an apostrophe, contain `: \ / ? * [ ]`, exceed 31 characters, or contain a character XML 1.0 forbids are refused before that file is replaced.
 
 ## v1.0.6 — October 20, 2026: shared export schema, Form 470 diff, and FRN commitment columns
 

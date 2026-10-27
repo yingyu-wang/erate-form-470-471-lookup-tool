@@ -592,6 +592,75 @@ public class CliCommandTests
     }
 
     [Fact]
+    public async Task ExcelWithoutFrnReplacesXmlForbiddenTextAndKeepsBaseColumns()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "lookup.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""[{"application_number":"260007116","billed_entity_number":"143618","billed_entity_name":"Example","fcc_form_470_status":"Certified","form_nickname":"C2\u0001","form_version":"Current","funding_request_amount":"100.50"}]""");
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            await File.WriteAllBytesAsync(output, "previous workbook"u8.ToArray());
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            var sheet = ReadSheet(output);
+            Assert.Equal(ExportSchema.BaseColumns, sheet.Rows[0]);
+            Assert.Equal(17, sheet.Rows[0].Length);
+            Assert.DoesNotContain("FrnStatus", sheet.Rows[0]);
+            Assert.Equal("C2\uFFFD", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "Nickname")]);
+            Assert.Equal("100.50", sheet.Rows[1][Array.IndexOf(sheet.Rows[0], "RequestedAmount")]);
+            Assert.DoesNotContain(sheet.Rows.SelectMany(row => row), cell => cell.Contains('\u0001'));
+            AssertInlineText(sheet);
+            Assert.Equal((byte)'P', (await File.ReadAllBytesAsync(output))[0]);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
+    public async Task DiffExcelReplacesXmlForbiddenTextInsteadOfCrashing()
+    {
+        var directory = Temp();
+        var output = Path.Combine(directory, "diff.xlsx");
+        try
+        {
+            var handler = new ScriptedHandler("""
+                [
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Original","service_request_id":"1","function":"Switches","fcc_form_470_status":"Certified"},
+                  {"application_number":"100","billed_entity_number":"143618","billed_entity_name":"Example","form_version":"Current","service_request_id":"1","function":"Wan\u0001","fcc_form_470_status":"Certified"}
+                ]
+                """);
+            using var http = new HttpClient(handler);
+            using var client = new UsacClient(http, directory);
+            var stdout = new StringWriter();
+            var stderr = new StringWriter();
+            var options = Options(FilingForm.Form470, CliFormat.Excel) with { Diff = true, OutputPath = output };
+            var code = await CliCommand.RunAsync(options, client, stdout, stderr, default);
+            Assert.Equal(CliCommand.ExitFound, code);
+            Assert.Equal("", stdout.ToString());
+            Assert.Contains(Form470Diff.Disclaimer, stderr.ToString(), StringComparison.Ordinal);
+            var sheet = ReadSheet(output);
+            var changed = Assert.Single(sheet.Rows, row => row[6] == "function");
+            Assert.Equal("Switches", changed[7]);
+            Assert.Equal("Wan\uFFFD", changed[8]);
+            Assert.DoesNotContain(sheet.Rows.SelectMany(row => row), cell => cell.Contains('\u0001'));
+            AssertInlineText(sheet);
+            Assert.Equal(DataExporter.Form470DiffSheetName, sheet.SheetName);
+        }
+        finally
+        {
+            Cleanup(directory);
+        }
+    }
+
+    [Fact]
     public async Task ExcelRunWithoutOutputDoesNotQuery()
     {
         var directory = Temp();
