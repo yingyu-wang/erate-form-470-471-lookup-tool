@@ -466,17 +466,21 @@ public sealed class PortfolioStore
 
     /// <summary>
     /// Stores one observation of published Form 470 version rows for a BEN and funding year.
-    /// A cached result does not advance history. Unchanged published rows do not add a revision
-    /// or a portfolio change. The first stored copy is a baseline.
+    /// A cached, empty, or unusable result is not stored. Unchanged published rows do not add
+    /// a revision or a portfolio change, but the stored sequence advances. The first stored
+    /// copy is a baseline. A sequence at or below <c>cleared_through</c> was invalidated by
+    /// <see cref="ClearHistory"/> and is rejected.
     /// </summary>
     public bool SaveForm470Revisions(LookupKey key, long sequence, QueryResult<List<UsacRow>> result, CancellationToken ct = default)
     {
         key.Validate();
         if (key.Form != FilingForm.Form470)
             throw new ArgumentException("Form 470 revisions are stored on a Form 470 lookup.");
-        if (result.FromCache)
+        if (result.FromCache || result.Data is null || result.Data.Count == 0)
             return false;
         var incoming = GroupForm470Rows(key, result.Data);
+        if (incoming.Count == 0)
+            return false;
         using var db = Open();
         using var tx = db.BeginTransaction();
         using var watermark = Command(db, tx, "SELECT cleared_through FROM sequence");
@@ -498,26 +502,23 @@ public sealed class PortfolioStore
             eligible++;
             WriteForm470Revision(db, tx, key, sequence, observed, application, rows);
         }
-        // A row with no application number is not evidence that a stored form disappeared.
-        var markMissing = incoming.Count > 0 || result.Data.Count == 0;
-        if (markMissing)
+        // Absence counts only inside a non-empty result. An empty or incomplete
+        // response returns above and must not become "no longer returned".
+        foreach (var application in ApplicationsForQuery(db, tx, key.Id))
         {
-            foreach (var application in ApplicationsForQuery(db, tx, key.Id))
+            if (seen.Contains(application))
+                continue;
+            ct.ThrowIfCancellationRequested();
+            var latest = ReadLatestForm470(db, tx, application);
+            if (latest is null || latest.QueryKey != key.Id)
+                continue;
+            if (latest.Sequence >= sequence)
             {
-                if (seen.Contains(application))
-                    continue;
-                ct.ThrowIfCancellationRequested();
-                var latest = ReadLatestForm470(db, tx, application);
-                if (latest is null || latest.QueryKey != key.Id)
-                    continue;
-                if (latest.Sequence >= sequence)
-                {
-                    blocked++;
-                    continue;
-                }
-                eligible++;
-                WriteForm470Revision(db, tx, key, sequence, observed, application, []);
+                blocked++;
+                continue;
             }
+            eligible++;
+            WriteForm470Revision(db, tx, key, sequence, observed, application, []);
         }
         if (eligible == 0 && blocked > 0)
             return false;
@@ -562,7 +563,13 @@ public sealed class PortfolioStore
         if (latest is not null && sequence <= latest.Sequence)
             return;
         if (latest is not null && Form470Revisions.Differences(latest.Rows, rows).Count == 0)
+        {
+            using var advance = Command(db, tx, "UPDATE form470_revisions SET sequence=$seq WHERE application_number=$app AND sequence=$old",
+                ("$seq", sequence), ("$app", application), ("$old", latest.Sequence));
+            if (advance.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("The stored Form 470 revision sequence could not be advanced.");
             return;
+        }
         if (latest is null && rows.Count == 0)
             return;
         var name = rows.Select(row => row.Name).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? latest?.Name ?? "";

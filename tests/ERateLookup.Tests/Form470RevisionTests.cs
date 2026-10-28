@@ -155,14 +155,18 @@ public class Form470RevisionTests
             store.SaveForm470Revisions(key, again, Live(ChangedRows(), now.AddMinutes(3)));
             Assert.Equal(unread.Count, store.UnreadChanges(key).Count);
 
+            var other = Row("Current", "1", "Switches", "Certified", "ada@example.org", "2026-09-15T00:00:00.000", null);
+            other.Number = "200";
             var removed = store.BeginObservation();
-            Assert.True(store.SaveForm470Revisions(key, removed, Live([], now.AddMinutes(4))));
-            Assert.Contains(store.UnreadChanges(key), item => item.Change.Kind == Form470Revisions.NotReturnedKind && item.Change.After == "");
+            Assert.True(store.SaveForm470Revisions(key, removed, Live([other], now.AddMinutes(4))));
+            Assert.Contains(store.UnreadChanges(key), item => item.Change.Kind == Form470Revisions.NotReturnedKind && item.Change.Application == "Form 470 100" && item.Change.After == "");
             Assert.False(store.SaveForm470Revisions(key, first, Live(BaselineRows(), now)));
+            Assert.False(store.SaveForm470Revisions(key, store.BeginObservation(), Live([], now.AddMinutes(5))));
+            Assert.False(store.SaveForm470Revisions(key, store.BeginObservation(), new QueryResult<List<UsacRow>>(null!, now.AddMinutes(5), false)));
 
             var blank = Row("Current", "1", "Switches", "Certified", "ada@example.org", "2026-09-15T00:00:00.000", null);
             blank.Number = "  ";
-            Assert.True(store.SaveForm470Revisions(key, store.BeginObservation(), Live([blank], now.AddMinutes(5))));
+            Assert.False(store.SaveForm470Revisions(key, store.BeginObservation(), Live([blank], now.AddMinutes(5))));
             Assert.Empty(store.ReadForm470Revisions(""));
             var wrongBen = Row("Current", "9", "Switches", "Certified", "ada@example.org", "2026-09-15T00:00:00.000", null);
             wrongBen.Ben = "999";
@@ -171,7 +175,7 @@ public class Form470RevisionTests
 
             var reopened = new PortfolioStore(folder, () => now);
             var history = reopened.ReadForm470Revisions("100");
-            Assert.Equal(new[] { first, changed, removed }, history.Select(revision => revision.Sequence).ToArray());
+            Assert.Equal(new[] { repeated, again, removed }, history.Select(revision => revision.Sequence).ToArray());
             Assert.Equal("Example Schools", history[0].Name);
             Assert.Equal(2027, history[0].FundingYear);
             Assert.Equal(changedAt, history[1].ObservedAt);
@@ -182,8 +186,8 @@ public class Form470RevisionTests
             Assert.Contains("Changed · Application · - · Current · fcc_form_470_status", compared, StringComparison.Ordinal);
             Assert.Contains("[Derived] Changes from observation 1 to 2", compared, StringComparison.Ordinal);
             var text = Form470Revisions.ViewText("100", history.AsEnumerable().Reverse().ToList(), "FY27");
-            var oldest = text.IndexOf("1 · sequence " + first.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-            var middle = text.IndexOf("2 · sequence " + changed.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            var oldest = text.IndexOf("1 · sequence " + repeated.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            var middle = text.IndexOf("2 · sequence " + again.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
             var newest = text.IndexOf("3 · sequence " + removed.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
             Assert.True(oldest >= 0 && oldest < middle && middle < newest);
             Assert.Contains("oldest first", text, StringComparison.Ordinal);
@@ -271,6 +275,72 @@ public class Form470RevisionTests
                 Directory.Delete(folder, true);
         }
     }
+
+    [Fact]
+    public async Task OlderLookupCannotReplaceNewerOrClearedHistory()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "ERate470Race-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var now = new DateTimeOffset(2026, 10, 28, 16, 0, 0, TimeSpan.Zero);
+            var store = new PortfolioStore(folder, () => now);
+            var key = new LookupKey("16057656", 2027, FilingForm.Form470);
+            var baseline = store.BeginObservation();
+            Assert.True(store.SaveForm470Revisions(key, baseline, Live(BaselineRows(), now)));
+
+            var older = store.BeginObservation();
+            var newer = store.BeginObservation();
+            Assert.True(store.SaveForm470Revisions(key, newer, Live(ChangedRows(), now.AddMinutes(2))));
+            Assert.False(store.SaveForm470Revisions(key, older, Live(BaselineRows(), now.AddMinutes(3))));
+            Assert.Equal("Canceled", CurrentStatus(store));
+            Assert.Contains(store.UnreadChanges(key), item => item.Change.Kind == "Changed · Current · fcc_form_470_status");
+
+            var inFlight = store.BeginObservation();
+            var confirmed = store.BeginObservation();
+            Assert.True(store.SaveForm470Revisions(key, confirmed, Live(ChangedRows(), now.AddMinutes(4))));
+            Assert.Equal(confirmed, store.ReadForm470Revisions("100")[^1].Sequence);
+            Assert.False(store.SaveForm470Revisions(key, inFlight, Live(BaselineRows(), now.AddMinutes(5))));
+            Assert.Equal(confirmed, store.ReadForm470Revisions("100")[^1].Sequence);
+            Assert.Equal("Canceled", CurrentStatus(store));
+            var unreadBeforeEmpty = store.UnreadChanges(key).Count;
+            Assert.False(store.SaveForm470Revisions(key, store.BeginObservation(), Live([], now.AddMinutes(6))));
+            Assert.False(store.SaveForm470Revisions(key, store.BeginObservation(), new QueryResult<List<UsacRow>>(null!, now, false)));
+            Assert.Equal(unreadBeforeEmpty, store.UnreadChanges(key).Count);
+            Assert.DoesNotContain(store.UnreadChanges(key), item => item.Change.Kind == Form470Revisions.NotReturnedKind);
+
+            var duringFetch = new ClearDuringFetchHandler(store);
+            using var http = new HttpClient(duringFetch);
+            using var client = new UsacClient(http, Path.Combine(folder, "cache"));
+            await Form470Revisions.ObserveLookupAsync(client, store, key.Ben, key.Year, true, default);
+            Assert.Empty(store.ReadForm470Revisions("100"));
+            Assert.Empty(store.UnreadChanges(key));
+
+            Assert.True(store.SaveForm470Revisions(key, store.BeginObservation(), Live(BaselineRows(), now.AddMinutes(7))));
+            var overlap = new OverlapHandler();
+            using var overlapHttp = new HttpClient(overlap);
+            using var overlapClient = new UsacClient(overlapHttp, Path.Combine(folder, "cache-overlap"));
+            var first = Form470Revisions.ObserveLookupAsync(overlapClient, store, key.Ben, key.Year, true, default);
+            Assert.True(await overlap.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+            await Form470Revisions.ObserveLookupAsync(overlapClient, store, key.Ben, key.Year, true, default);
+            overlap.Release.TrySetResult(true);
+            await first;
+            Assert.Equal("Canceled", CurrentStatus(store));
+            Assert.Equal("WAN", CurrentFunctions(store).Single(function => function == "WAN"));
+            Assert.DoesNotContain(store.ReadForm470Revisions("100")[^1].Rows, row => row.Version == "Current" && row.Function == "Cabling");
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, true);
+        }
+    }
+
+    static string CurrentStatus(PortfolioStore store) =>
+        store.ReadForm470Revisions("100")[^1].Rows.First(row => row.Version == "Current").Status470;
+
+    static IEnumerable<string> CurrentFunctions(PortfolioStore store) =>
+        store.ReadForm470Revisions("100")[^1].Rows.Where(row => row.Version == "Current").Select(row => row.Function);
 
     static string Signature(Form470FieldChange change) => string.Join("|", change.Change, change.Scope, change.ServiceRequestId, change.Field, change.Original, change.Current);
 
@@ -360,5 +430,59 @@ public class Form470RevisionTests
               {"application_number":"270000266","billed_entity_number":"16057656","billed_entity_name":"Example Schools","form_version":"Current","form_nickname":"FY27","fcc_form_470_status":"Canceled","certified_date_time":"2026-08-18T22:10:31.000","last_modified_date_time":"2026-10-06T00:00:00.000","allowable_contract_date":"2026-10-06T00:00:00.000","service_request_id":"4","service_category":"Category 1","service_type":"Data Transmission and/or Internet Access","function":"WAN","contact_email":"bea@example.org"}
             ]
             """;
+    }
+
+    sealed class ClearDuringFetchHandler : HttpMessageHandler
+    {
+        readonly PortfolioStore store;
+        int cleared;
+
+        public ClearDuringFetchHandler(PortfolioStore store) => this.store = store;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Exchange(ref cleared, 1) == 0)
+                store.ClearHistory();
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            var body = uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal)
+                ? """{"rowsUpdatedAt":1}"""
+                : query.Contains("count(*)", StringComparison.Ordinal)
+                    ? """[{"count":"1"}]"""
+                    : """[{"application_number":"100","billed_entity_number":"16057656","billed_entity_name":"Restored","form_version":"Current","fcc_form_470_status":"Certified","service_request_id":"1","function":"Switches"}]""";
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+        }
+    }
+
+    sealed class OverlapHandler : HttpMessageHandler
+    {
+        int versionPages;
+        public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var uri = request.RequestUri!;
+            var query = Uri.UnescapeDataString(uri.Query);
+            string body;
+            if (uri.AbsolutePath.Contains("/api/views/", StringComparison.Ordinal))
+                body = """{"rowsUpdatedAt":1}""";
+            else if (query.Contains("count(*)", StringComparison.Ordinal))
+                body = """[{"count":"1"}]""";
+            else
+            {
+                var page = Interlocked.Increment(ref versionPages);
+                if (page == 1)
+                {
+                    Entered.TrySetResult(true);
+                    await Release.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                    body = """[{"application_number":"100","billed_entity_number":"16057656","billed_entity_name":"Example Schools","form_version":"Current","fcc_form_470_status":"Certified","service_request_id":"3","function":"Cabling"}]""";
+                }
+                else
+                    body = """[{"application_number":"100","billed_entity_number":"16057656","billed_entity_name":"Example Schools","form_version":"Current","fcc_form_470_status":"Canceled","service_request_id":"4","function":"WAN"}]""";
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+        }
     }
 }

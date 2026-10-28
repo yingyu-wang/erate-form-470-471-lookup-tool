@@ -120,8 +120,11 @@ A Form 470 lookup, and a watchlist refresh that includes Form 470, stores the
 published Original and Current rows for each application returned by the
 existing version-row query (`jt8s-3q52`, the same fields as `--diff`). The
 rows are kept in the local portfolio database. History survives a restart.
-A cached response does not add a revision. An unchanged published copy does
-not add a revision or an unread change. The first stored copy is a baseline.
+A cached, empty, or failed response does not add a revision. An unchanged
+published copy does not add a revision or an unread change, and the stored
+sequence moves forward so an older request cannot replace it. The observation
+sequence is taken before the network read. Clearing history while a read is
+still running discards that read. The first stored copy is a baseline.
 
 Choose **Form 470 revisions** while a Form 470 application is selected. The
 list is oldest first. Between two observations the app shows fields, services,
@@ -132,10 +135,11 @@ Open Data still publishes Original and Current, not every edit between them.
 The latest observation also shows the published Original versus Current
 comparison, with the same disclaimer as `--diff`.
 
-If a later live query for that BEN and funding year no longer returns the
+If a later non-empty live result for that BEN and funding year omits the
 application, the history records **No longer returned by this Form 470 version
-query**. That label does not establish withdrawal or denial. A missing value
-stays blank. It is not stored as zero.
+query**. That label does not establish withdrawal or denial. An empty or
+incomplete response does not create that entry. A missing value stays blank.
+It is not stored as zero.
 
 An unread difference is a portfolio change on that Form 470 row. **Changes
 only**, **Change history**, and **Mark changes read** include it. The shared

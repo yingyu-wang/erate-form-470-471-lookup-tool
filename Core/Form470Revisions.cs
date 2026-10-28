@@ -228,13 +228,15 @@ public static class Form470Revisions
         ArgumentNullException.ThrowIfNull(store);
         var key = new LookupKey(ben.Trim(), year, FilingForm.Form470);
         key.Validate();
+        // Allocated before the read so a slower request cannot outrank one that
+        // started later, and ClearHistory during the fetch invalidates this attempt.
+        var sequence = store.BeginObservation();
         var versions = await client.GetForm470VersionRowsAsync(key.Ben, null, year, null, refresh, cancellationToken).ConfigureAwait(false);
-        if (versions.FromCache)
+        if (versions.FromCache || versions.Data is null || versions.Data.Count == 0)
         {
             return;
         }
 
-        var sequence = store.BeginObservation();
         store.SaveForm470Revisions(key, sequence, versions, cancellationToken);
     }
 
