@@ -484,7 +484,10 @@ Application `270000266` had both versions.
 
 The command does not store a local history of intermediate revisions. Open
 Data publishes Original and Current, not every edit between them. It does not
-determine whether a change was substantial.
+determine whether a change was substantial. `--diff` output is unchanged:
+the same columns, sheet name, and messages. Windows, macOS, Linux, and Android
+store later observed copies of those published rows on the device. That history
+is separate from this command. See [the portfolio guide](PORTFOLIO_GUIDE.md).
 
 Table, CSV, JSON, and Excel use these columns: `ApplicationNumber`, `BEN`,
 `Name`, `Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,

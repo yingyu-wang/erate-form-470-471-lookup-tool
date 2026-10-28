@@ -20,7 +20,7 @@ public sealed class MainWindow : Window
     private readonly ComboBox form = new() { Width = 115 };
     private readonly ComboBox theme = new() { Width = 135 };
     private readonly Button search = Button("Search"), refresh = Button("Refresh live"), choose = Button("Check selected customer");
-    private readonly Button open = Button("Open selected PDF"), export = Button("Export selected (CSV / Excel / JSON)");
+    private readonly Button open = Button("Open selected PDF"), revisions = Button("Form 470 revisions"), export = Button("Export selected (CSV / Excel / JSON)");
     private readonly Button saveBen = Button("Add BEN to watchlist");
     private readonly Button saveMatches = Button("Add selected BENs to watchlist");
     private readonly TextBlock matchSelection = Text("");
@@ -89,7 +89,7 @@ public sealed class MainWindow : Window
         portfolio.Click += async (_, _) => { try { await new PortfolioWindow(client, Path.GetDirectoryName(cache)!, directory, windows).ShowDialog(this); } catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Portfolio"); await MessageAsync(ex.Message); } };
         actions.Children.Add(saveBen);
         saveBen.Click += async (_, _) => await AddBenToWatchlistAsync();
-        foreach (var b in new[] { open, all, none, export, sync, windowInfo }) { buttons.Add(b); actions.Children.Add(b); }
+        foreach (var b in new[] { open, revisions, all, none, export, sync, windowInfo }) { buttons.Add(b); actions.Children.Add(b); }
         selection.Margin = new Thickness(8, 12, 8, 0); actions.Children.Add(selection); actions.Children.Add(Text("Theme")); actions.Children.Add(theme); Add(actions, 7);
         Add(Text($"Filing cache: 2 hours. Refresh live bypasses it. Names search the local California directory.\nHold {(OperatingSystem.IsMacOS() ? "Command (⌘)" : "Ctrl")} to select individual rows; Shift selects a range. USAC data may lag EPC submissions."), 8); Add(windowNotice, 9);
         Content = root; buttons.AddRange(new[] { search, refresh, choose }); ApplyTheme(); ready = true;
@@ -101,7 +101,7 @@ public sealed class MainWindow : Window
         year.SelectionChanged += async (_, _) => { if (!ready || busy) return; Reset("Funding year changed. Search again."); await WindowNoticeAsync(true); };
         form.SelectionChanged += async (_, _) => { if (!ready || busy) return; selectedForm = form.SelectedIndex == 1 ? FilingForm.Form471 : FilingForm.Form470; numberColumn.Header = $"Form {(int)selectedForm}"; servicesColumn.Header = selectedForm == FilingForm.Form471 ? "Service category" : "Requested services"; Reset("Form type changed. Search again."); await WindowNoticeAsync(true); };
         grid.SelectionChanged += (_, _) => UpdateSelection(); all.Click += (_, _) => { grid.SelectedItems.Clear(); foreach (var row in results) grid.SelectedItems.Add(row); }; none.Click += (_, _) => grid.SelectedItems.Clear();
-        open.Click += async (_, _) => await OpenAsync(); grid.DoubleTapped += async (_, _) => await OpenAsync(); export.Click += async (_, _) => await ExportAsync(); sync.Click += async (_, _) => await SyncAsync(true); windowInfo.Click += async (_, _) => await WindowNoticeAsync(true);
+        open.Click += async (_, _) => await OpenAsync(); revisions.Click += async (_, _) => await ShowRevisionsAsync(); grid.DoubleTapped += async (_, _) => await OpenAsync(); export.Click += async (_, _) => await ExportAsync(); sync.Click += async (_, _) => await SyncAsync(true); windowInfo.Click += async (_, _) => await WindowNoticeAsync(true);
         theme.SelectionChanged += (_, _) => { if (!ready) return; ApplyTheme(); try { File.WriteAllText(themePath, theme.SelectedItem as string ?? "Mint Glass"); } catch (IOException) { } catch (UnauthorizedAccessException) { } };
         Opened += async (_, _) => { budget.Text = "California directory / C2 snapshot: " + directory.LastUpdated; if (refreshOnOpen && directory.NeedsRefresh) await SyncAsync(false); };
         Closed += (_, _) => { typing.Stop(); lifetime.Cancel(); client.Dispose(); http.Dispose(); backdrop?.Dispose(); }; UpdateSelection();
@@ -126,9 +126,9 @@ public sealed class MainWindow : Window
     private void UpdateSelection()
     {
         selection.Text = $"{grid.SelectedItems.Count} of {results.Count} selected";
-        detail.Text = (grid.SelectedItem as Filing)?.Nickname ?? "";
+        detail.Text = RevisionDetail(grid.SelectedItem as Filing);
         all.IsEnabled = none.IsEnabled = !busy && complete && results.Count > 0;
-        export.IsEnabled = !busy && complete; open.IsEnabled = !busy && grid.SelectedItems.Count > 0;
+        export.IsEnabled = !busy && complete; open.IsEnabled = revisions.IsEnabled = !busy && grid.SelectedItems.Count > 0;
         saveBen.IsEnabled = !busy && selectedBen.Length > 0;
     }
     private void SetBusy(bool value)
@@ -170,7 +170,58 @@ public sealed class MainWindow : Window
         complete = false; results = []; grid.ItemsSource = null; selectedBen = ben; selectedName = name; hasCycle470 = null; ShowBudget(); status.Text = $"Checking Form {(int)selectedForm}, BEN {ben}, FY{selectedYear}…";
         var outcome = await screen.LookupAsync(ben, selectedYear, selectedForm, force, name, lifetime.Token);
         results = outcome.Filings.ToList(); fetched = outcome.FetchedAt; complete = outcome.Complete; hasCycle470 = outcome.HasNewCycleForm470; grid.ItemsSource = results; foreach (var row in results) grid.SelectedItems.Add(row);
-        ShowBudget(); UpdateSelection(); status.Text = outcome.Status;
+        var revisionNote = "";
+        if (selectedForm == FilingForm.Form470)
+            revisionNote = await ObserveForm470Async();
+        ShowBudget(); UpdateSelection(); status.Text = outcome.Status + revisionNote;
+    }
+    private async Task<string> ObserveForm470Async()
+    {
+        try
+        {
+            await Form470Revisions.ObserveLookupAsync(client, new PortfolioStore(portfolioDirectory), selectedBen, selectedYear, force, lifetime.Token);
+            return "";
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex) && !lifetime.IsCancellationRequested)
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return " " + Form470Revisions.RefreshFailedNote;
+        }
+    }
+    private string RevisionDetail(Filing? filing)
+    {
+        if (filing is null)
+            return "";
+        if (selectedForm != FilingForm.Form470)
+            return filing.Nickname;
+        try
+        {
+            var store = new PortfolioStore(portfolioDirectory);
+            return Form470Revisions.SelectionSummary(filing.Number, store.ReadForm470Revisions(filing.Number), filing.Nickname);
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return filing.Nickname;
+        }
+    }
+    private async Task ShowRevisionsAsync()
+    {
+        if (grid.SelectedItem is not Filing filing || selectedForm != FilingForm.Form470)
+        {
+            await MessageAsync("Select a Form 470 application to see locally observed revisions.");
+            return;
+        }
+        try
+        {
+            var store = new PortfolioStore(portfolioDirectory);
+            await MessageAsync(Form470Revisions.ViewText(filing.Number, store.ReadForm470Revisions(filing.Number), filing.Nickname));
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            await MessageAsync(ex.Message);
+        }
     }
     private void ShowBudget()
     {

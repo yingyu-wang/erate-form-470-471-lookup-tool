@@ -12,7 +12,7 @@ public sealed class PortfolioForm : Form
     readonly TextBox listName = new() { Width = 150, PlaceholderText = "List name" }, ben = new() { Width = 100, PlaceholderText = "BEN" }, name = new() { Width = 180, PlaceholderText = "Display name" }, tags = new() { Width = 150, PlaceholderText = "Tags" };
     readonly TextBox years = new() { Width = 150, Text = (DateTime.Now.Year + 1).ToString() }, keyword = new() { Width = 180, PlaceholderText = "Keyword" }, service = new() { Width = 180, PlaceholderText = "Service contains" };
     readonly ComboBox forms = new() { Width = 110, DropDownStyle = ComboBoxStyle.DropDownList };
-    readonly CheckBox changes = new() { Text = "Changes only", AutoSize = true, AccessibleDescription = "Includes FRN status, reported committed amount, FCDL dates, and disbursed amount." };
+    readonly CheckBox changes = new() { Text = "Changes only", AutoSize = true, AccessibleDescription = "Includes Form 470 revision differences, FRN status, reported committed amount, FCDL dates, and disbursed amount." };
     readonly CheckedListBox results = new() { Dock = DockStyle.Fill, CheckOnClick = true, HorizontalScrollbar = true };
     readonly Label status = new() { AutoSize = true, MaximumSize = new(1050, 0) }, counts = new() { AutoSize = true };
     readonly List<Control> gated = [];
@@ -52,6 +52,7 @@ public sealed class PortfolioForm : Form
         layout.Controls.Add(Row(Action("Previous", () => Do(() => { page = Math.Max(0, page - 1); Render(); })), Action("Next", () => Do(() => { page++; Render(); })),
             Action("Change history", () => Do(() => ShowText(session.ChangeHistory(), "Unread changes"))), Action("Mark changes read", () => Do(() => { session.AcknowledgeDisplayed(); Render(); })), Action("Export selected", ExportAsync), Action("Deadlines", async () => { var text = await PortfolioInsights.DeadlinesAsync(session, windows, operation!.Token); if (!IsDisposed) ShowText(text, "Source-backed dates"); }), Action("History / summary", () => Do(() => ShowText(PortfolioInsights.Summary(session, directory), "District history / summary"))),
             Action("Open selected PDF", () => Do(() => { if (results.SelectedItem is PortfolioRow r && Uri.TryCreate(r.Filing?.Pdf, UriKind.Absolute, out var uri) && uri.Scheme == "https") System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); else throw new InvalidOperationException("Select an application with an HTTPS document link."); })),
+            Action("Form 470 revisions", () => Do(() => { if (results.SelectedItem is not PortfolioRow row) throw new InvalidOperationException("Select a Form 470 application."); ShowText(session.Form470RevisionText(row), "Form 470 revisions"); })),
             Action("Clear saved history", () => Do(() => { if (MessageBox.Show(this, PortfolioSession.ClearHistoryPrompt, "Clear history", MessageBoxButtons.YesNo) == DialogResult.Yes) { session.Store.ClearHistory(); session.ClearView(); Render(); } }))), 0, 5);
         layout.Controls.Add(status, 0, 6);
         gated.AddRange(new Control[] { lists, listName, entries, ben, name, tags, years, forms, keyword, service, changes, results });

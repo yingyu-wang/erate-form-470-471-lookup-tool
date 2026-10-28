@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Form 470 diff and revision history in the apps
+
+Version numbers are unchanged. `--diff` output is unchanged.
+
+- Windows, macOS, Linux, and Android can show what changed between locally observed copies of a Form 470. Linux uses the macOS window. The comparison reuses `Form470Diff` (the same field and service matching as `--diff`, including services, dates, status, and the RFP document list). It does not duplicate that logic and it does not call a different USAC dataset.
+- A live Form 470 lookup, and a watchlist refresh that includes Form 470, stores the published Original and Current rows from dataset `jt8s-3q52`. The portfolio database upgrades to schema version 4 in the existing transactional migration. `form470_revisions` keeps each distinct observation. A newer unknown schema is still refused. Existing watchlists, filing snapshots, and FRN snapshots stay in place.
+- The first stored copy is a baseline. A later live copy writes portfolio `change_events` when a published field, service, date, status, or RFP document list differs. Added, removed, and changed rows use the same change kinds as `--diff`. An application that is no longer returned is one unread change. That label does not establish withdrawal or denial. Unchanged rows, including reordered services and omitted checkboxes that mean false, do not raise a change. A missing value stays blank. A cached response does not advance history. An older request cannot replace a newer observation.
+- **[Derived] The difference between observations is computed in the app.** It is not a USAC revision log. Open Data still publishes Original and Current, not every edit between them. The text says so. The latest stored copy also shows the published Original versus Current comparison, with the existing `--diff` disclaimer. Nothing derived is labeled as a USAC fact.
+- **Form 470 revisions** is available on the lookup screen and on a saved Form 470 row. History is oldest first and survives a restart. **Changes only**, **Change history**, and **Mark changes read** include an unread revision. The shared 17-column export and the command-line diff columns are unchanged. Portfolio files stay the base columns plus `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`. **Clear saved history** deletes Form 470 revisions with filing and FRN snapshots. Watchlists are kept. A failed or canceled revision refresh keeps the previous revisions.
+
 The v1.0.6 notes below deferred two Excel items. This follow-on completes them. Version numbers are unchanged. Q8 is still pending: `CommittedAmount` is still `funding_commitment_request` only when the published FRN status is Funded. That inference is not a confirmed commitment letter.
 
 ### FRN status in saved BEN portfolios

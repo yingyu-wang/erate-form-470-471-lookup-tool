@@ -154,9 +154,11 @@ public class PortfolioChecks
                 db.Open();
                 using var command = db.CreateCommand();
                 command.CommandText = "PRAGMA user_version";
-                Assert.Equal(3, Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture));
+                Assert.Equal(4, Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture));
                 command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='frn_snapshots'";
                 Assert.Equal("frn_snapshots", command.ExecuteScalar());
+                command.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='form470_revisions'";
+                Assert.Equal("form470_revisions", command.ExecuteScalar());
             }
 
             var key = new LookupKey("136910", 2020, FilingForm.Form470);

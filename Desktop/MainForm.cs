@@ -22,6 +22,7 @@ public sealed class MainForm : Form
     private readonly DataGridView grid = new() { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false, MultiSelect = true, SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoGenerateColumns = false, RowHeadersVisible = false, BackgroundColor = Color.White, BorderStyle = BorderStyle.None };
     private readonly Label details = new() { AutoSize = true, MaximumSize = new Size(1000, 0) };
     private readonly Button open = new() { Text = "Open selected Form 470", AutoSize = true };
+    private readonly Button revisions = new() { Text = "Form 470 revisions", AutoSize = true };
     private readonly Button export = new() { Text = "Export selected (CSV / Excel / JSON)", AutoSize = true };
     private readonly Button selectAll = new() { Text = "Select all", AutoSize = true, Enabled = false };
     private readonly Button unselectAll = new() { Text = "Unselect all", AutoSize = true, Enabled = false };
@@ -85,13 +86,13 @@ public sealed class MainForm : Form
         var portfolio = new Button { Text = "Saved BENs / Watchlists", AutoSize = true }; actions.Controls.Add(portfolio);
         portfolio.Click += (_, _) => { try { using var dialog = new PortfolioForm(client, Path.GetDirectoryName(cache)!, directory, filingWindow); dialog.ShowDialog(this); } catch (Exception ex) when (AppExceptions.IsOperational(ex)) { AppLog.Error(ex, "Portfolio"); MessageBox.Show(this, ex.Message, "Portfolio"); } };
         actions.Controls.Add(saveBen);
-        saveBen.Click += (_, _) => AddBenToWatchlist(); actions.Controls.Add(open); actions.Controls.Add(selectAll); actions.Controls.Add(unselectAll); actions.Controls.Add(selectionCount); actions.Controls.Add(export); actions.Controls.Add(syncDirectory); actions.Controls.Add(windowInfo);
+        saveBen.Click += (_, _) => AddBenToWatchlist(); actions.Controls.Add(open); actions.Controls.Add(revisions); actions.Controls.Add(selectAll); actions.Controls.Add(unselectAll); actions.Controls.Add(selectionCount); actions.Controls.Add(export); actions.Controls.Add(syncDirectory); actions.Controls.Add(windowInfo);
         actions.Controls.Add(new Label() { Text = "Theme", AutoSize = true, Margin = new Padding(15, 10, 5, 0) }); themePicker.Items.AddRange(new object[] { "Mint Glass", "Midnight", "Classic" }); actions.Controls.Add(themePicker); layout.Controls.Add(actions, 0, 7);
         layout.Controls.Add(new Label() { Text = "SQLite cache lasts 2 hours. Refresh live bypasses it. USAC publication may lag EPC submissions.\nNames search the local California entity directory as you type. Budget amounts are pre-discount; committed is not disbursed.", AutoSize = true, ForeColor = Color.DimGray, Margin = new Padding(0, 16, 0, 0) }, 0, 8);
         status.ForeColor = Color.FromArgb(33, 76, 66); status.Font = new Font("Segoe UI", 10, FontStyle.Bold); status.BackColor = Color.Transparent;
         grid.EnableHeadersVisualStyles = false; grid.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(222, 239, 234); grid.ColumnHeadersDefaultCellStyle.ForeColor = Color.FromArgb(20, 60, 50); grid.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 10, FontStyle.Bold); grid.ColumnHeadersHeight = 36;
         grid.DefaultCellStyle.SelectionBackColor = Color.FromArgb(208, 232, 223); grid.DefaultCellStyle.SelectionForeColor = Color.FromArgb(14, 54, 43); grid.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 250, 247); grid.GridColor = Color.FromArgb(225, 234, 229); grid.RowTemplate.Height = 32;
-        foreach (var button in new[] { search, refresh, choose, open, export, selectAll, unselectAll, syncDirectory, windowInfo, saveBen, saveMatches })
+        foreach (var button in new[] { search, refresh, choose, open, revisions, export, selectAll, unselectAll, syncDirectory, windowInfo, saveBen, saveMatches })
         {
             button.FlatStyle = FlatStyle.Flat; button.FlatAppearance.BorderColor = Color.FromArgb(167, 198, 184); button.BackColor = Color.FromArgb(245, 252, 248); button.ForeColor = Color.FromArgb(24, 70, 55); button.Font = new Font("Segoe UI", 10, FontStyle.Bold); button.Padding = new Padding(8, 3, 8, 3);
         }
@@ -99,7 +100,8 @@ public sealed class MainForm : Form
         status.Text = "Enter a BEN or customer name. Funding year defaults to 2027.";
         search.Click += async (_, _) => await SearchAsync(false); refresh.Click += async (_, _) => await SearchAsync(true); choose.Click += async (_, _) => await ChooseAsync(); matches.DoubleClick += async (_, _) => await ChooseAsync();
         matches.SelectedIndexChanged += (_, _) => UpdateMatchSelection(); saveMatches.Click += (_, _) => AddMatchesToWatchlist();
-        grid.SelectionChanged += (_, _) => { details.Text = SelectedFiling()?.Nickname ?? ""; UpdateSelection(); };
+        grid.SelectionChanged += (_, _) => { details.Text = RevisionDetail(SelectedFiling()); UpdateSelection(); };
+        revisions.Click += (_, _) => ShowRevisions();
         selectAll.Click += (_, _) => grid.SelectAll(); unselectAll.Click += (_, _) => grid.ClearSelection(); grid.CellDoubleClick += (_, _) => OpenForm(); open.Click += (_, _) => OpenForm(); export.Click += (_, _) => Export(); AcceptButton = search;
         customer.TextChanged += (_, _) => { typingTimer.Stop(); if (!busy) { ResetLookup("Customer changed. Search again."); typingTimer.Start(); } };
         typingTimer.Tick += (_, _) => { typingTimer.Stop(); Suggest(); };
@@ -199,7 +201,7 @@ public sealed class MainForm : Form
     }
     private void UpdateMatchSelection()
     { var count = matches.SelectedItems.Count; matchSelection.Text = $"{count} selected · Ctrl/Shift for multiple"; saveMatches.Enabled = !busy && matchGroup.Visible && count > 0; choose.Enabled = !busy && matchGroup.Visible && count == 1; }
-    private void SetBusy(bool value) { busy = value; search.Enabled = refresh.Enabled = customer.Enabled = state.Enabled = year.Enabled = formPicker.Enabled = open.Enabled = export.Enabled = matches.Enabled = !value; UseWaitCursor = value; UpdateSelection(); UpdateMatchSelection(); }
+    private void SetBusy(bool value) { busy = value; search.Enabled = refresh.Enabled = customer.Enabled = state.Enabled = year.Enabled = formPicker.Enabled = open.Enabled = revisions.Enabled = export.Enabled = matches.Enabled = !value; UseWaitCursor = value; UpdateSelection(); UpdateMatchSelection(); }
     private void ShowMatches(bool value) { matchGroup.Visible = value; layout.RowStyles[4].Height = value ? 175 : 0; UpdateMatchSelection(); }
     private async Task ExecuteAsync(Func<Task> action)
     {
@@ -235,7 +237,61 @@ public sealed class MainForm : Form
         lookupComplete = false; results = []; grid.DataSource = null; details.Text = ""; selectedBen = ben; selectedName = name; hasCycle470 = null; ShowBudget(ben); status.Text = $"Checking BEN {ben}, funding year {selectedYear}…";
         var outcome = await screen.LookupAsync(ben, selectedYear, selectedForm, refreshRequested, name, lifetime.Token);
         results = outcome.Filings.ToList(); lookupComplete = outcome.Complete; lookupFetched = outcome.FetchedAt; hasCycle470 = outcome.HasNewCycleForm470; grid.DataSource = results; grid.SelectAll(); UpdateSelection();
-        ShowBudget(ben); status.Text = outcome.Status;
+        string revisionNote = "";
+        if (selectedForm == FilingForm.Form470)
+            revisionNote = await ObserveForm470Async();
+        ShowBudget(ben); status.Text = outcome.Status + revisionNote;
+    }
+    private async Task<string> ObserveForm470Async()
+    {
+        try
+        {
+            await Form470Revisions.ObserveLookupAsync(client, new PortfolioStore(portfolioDirectory), selectedBen, selectedYear, refreshRequested, lifetime.Token);
+            if (!IsDisposed)
+                details.Text = RevisionDetail(SelectedFiling());
+            return "";
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex) && !lifetime.IsCancellationRequested)
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return " " + Form470Revisions.RefreshFailedNote;
+        }
+    }
+    private string RevisionDetail(Filing? filing)
+    {
+        if (filing is null)
+            return "";
+        if (selectedForm != FilingForm.Form470)
+            return filing.Nickname;
+        try
+        {
+            var store = new PortfolioStore(portfolioDirectory);
+            return Form470Revisions.SelectionSummary(filing.Number, store.ReadForm470Revisions(filing.Number), filing.Nickname);
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return filing.Nickname;
+        }
+    }
+    private void ShowRevisions()
+    {
+        var filing = SelectedFiling();
+        if (selectedForm != FilingForm.Form470 || filing is null)
+        {
+            MessageBox.Show(this, "Select a Form 470 application to see locally observed revisions.");
+            return;
+        }
+        try
+        {
+            var store = new PortfolioStore(portfolioDirectory);
+            MessageBox.Show(this, Form470Revisions.ViewText(filing.Number, store.ReadForm470Revisions(filing.Number), filing.Nickname), "Form 470 revisions");
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            MessageBox.Show(this, ex.Message, "Form 470 revisions");
+        }
     }
     private void Suggest()
     {

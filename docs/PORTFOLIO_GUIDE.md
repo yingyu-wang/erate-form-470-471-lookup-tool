@@ -114,6 +114,37 @@ not stored as zero. Portfolio files do not add `FrnStatus`, `CommittedAmount`,
 `FcdlDate`, `RevisedFcdlDate`, or `DisbursedAmount`. The shared base stays 17
 columns.
 
+## Form 470 revision history
+
+A Form 470 lookup, and a watchlist refresh that includes Form 470, stores the
+published Original and Current rows for each application returned by the
+existing version-row query (`jt8s-3q52`, the same fields as `--diff`). The
+rows are kept in the local portfolio database. History survives a restart.
+A cached response does not add a revision. An unchanged published copy does
+not add a revision or an unread change. The first stored copy is a baseline.
+
+Choose **Form 470 revisions** while a Form 470 application is selected. The
+list is oldest first. Between two observations the app shows fields, services,
+dates, status, and RFP documents that were added, removed, or changed. That
+comparison reuses the Form 470 diff. It is labeled **[Derived]**. It is not a
+USAC revision log, and it does not decide whether a change was substantial.
+Open Data still publishes Original and Current, not every edit between them.
+The latest observation also shows the published Original versus Current
+comparison, with the same disclaimer as `--diff`.
+
+If a later live query for that BEN and funding year no longer returns the
+application, the history records **No longer returned by this Form 470 version
+query**. That label does not establish withdrawal or denial. A missing value
+stays blank. It is not stored as zero.
+
+An unread difference is a portfolio change on that Form 470 row. **Changes
+only**, **Change history**, and **Mark changes read** include it. The shared
+17-column export is unchanged. Portfolio files stay the base columns plus
+`LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`.
+**Clear saved history** deletes Form 470 revisions with filing and FRN
+snapshots. Watchlists are kept. A failed or canceled revision refresh keeps
+the previous revisions.
+
 ## Filter, select, and export
 
 Keyword matches source entity name, BEN, application number, nickname, or service

@@ -56,7 +56,7 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Refresh watchlist",()=>RefreshAsync(false)));root.AddView(Button("Refresh selected BEN",()=>RefreshAsync(true)));
         root.AddView(Button("Open saved / offline",()=>Do(()=>{session.LoadSaved(Queries(false));page=0;Render();status.Text="Saved results; no network request made.";})));
         root.AddView(Button("Cancel",()=>Do(()=>operation?.Cancel()),false));
-        keyword=Field(root,"Keyword");service=Field(root,"Service contains");changes=new CheckBox(this){Text="Changes only",ContentDescription="Includes FRN status and reported committed amount"};root.AddView(changes);gated.Add(changes);
+        keyword=Field(root,"Keyword");service=Field(root,"Service contains");changes=new CheckBox(this){Text="Changes only",ContentDescription="Includes Form 470 revision differences, FRN status, and reported committed amount"};root.AddView(changes);gated.Add(changes);
         root.AddView(Button("Apply filters",()=>Do(()=>{page=0;Render();})));
         root.AddView(Button("Select visible",()=>Do(()=>{foreach(var r in visible)session.Selected.Add(r.Id);Render();})));
         root.AddView(Button("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})));
@@ -113,6 +113,8 @@ public sealed class PortfolioActivity : Activity
             var share=new Button(this){Text="Share filing summary"};share.Click+=async(_,_)=>await Run(()=>Do(()=>{var intent=new Intent(Intent.ActionSend);intent.SetType("text/plain");intent.PutExtra(Intent.ExtraText,PortfolioSession.ShareText(r));StartActivity(Intent.CreateChooser(intent,"Share filing"));}));results.AddView(share);
             if(System.Uri.TryCreate(r.Filing?.Pdf,UriKind.Absolute,out var uri)&&uri.Scheme=="https")
             {var open=new Button(this){Text="Open application PDF"};open.Click+=async(_,_)=>await Run(()=>Do(()=>StartActivity(new Intent(Intent.ActionView,global::Android.Net.Uri.Parse(uri.AbsoluteUri)))));results.AddView(open);}
+            if(r.Query.Form==FilingForm.Form470&&!string.IsNullOrWhiteSpace(r.Filing?.Number))
+            {var row=r;var history=new Button(this){Text="Form 470 revisions"};history.Click+=(_,_)=>new AlertDialog.Builder(this)!.SetTitle("Form 470 revisions")!.SetMessage(session.Form470RevisionText(row))!.SetPositiveButton("Close",(_,_)=>{})!.Show();results.AddView(history);}
         }
         UpdateCounts();
     }
