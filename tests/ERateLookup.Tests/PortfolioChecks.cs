@@ -92,6 +92,33 @@ public class PortfolioChecks
     }
 
     [Fact]
+    public void PortfolioRowStillDeconstructsToSixValues()
+    {
+        var key = new LookupKey("136910", 2020, FilingForm.Form471);
+        var filing = new Filing("201009092", key.Ben, "Webster", "", "", "", "");
+        var observed = new DateTimeOffset(2026, 10, 27, 12, 0, 0, TimeSpan.Zero);
+        var row = new PortfolioRow(key, filing, observed, "Success", "Reported committed amount", "Saved note.", "2099010373");
+
+        var (query, item, at, outcome, change, note) = row;
+        Assert.Equal(key, query);
+        Assert.Same(filing, item);
+        Assert.Equal(observed, at);
+        Assert.Equal("Success", outcome);
+        Assert.Equal("Reported committed amount", change);
+        Assert.Equal("Saved note.", note);
+        Assert.Equal("2099010373", row.FundingRequestNumber);
+
+        var (query7, item7, at7, outcome7, change7, note7, fundingRequestNumber) = row;
+        Assert.Equal(key, query7);
+        Assert.Same(filing, item7);
+        Assert.Equal(observed, at7);
+        Assert.Equal("Success", outcome7);
+        Assert.Equal("Reported committed amount", change7);
+        Assert.Equal("Saved note.", note7);
+        Assert.Equal("2099010373", fundingRequestNumber);
+    }
+
+    [Fact]
     public void FrnSnapshotMigrationPersistsReportedChangesWithoutFalsePositives()
     {
         var folder = Path.Combine(Path.GetTempPath(), "ERateFrnPortfolio-" + Guid.NewGuid());

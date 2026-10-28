@@ -6,6 +6,20 @@ namespace ERateLookup.Core;
 public sealed record ImportPreview(List<WatchlistEntry> Entries, List<string> Errors);
 public sealed record PortfolioRow(LookupKey Query, Filing? Filing, DateTimeOffset? Observed, string Outcome, string Change, string Note, string FundingRequestNumber = "")
 {
+    /// <summary>
+    /// Keeps the six-value shape from before <see cref="FundingRequestNumber"/> was added.
+    /// The positional record also deconstructs to seven values, including that field.
+    /// </summary>
+    public void Deconstruct(out LookupKey query, out Filing? filing, out DateTimeOffset? observed, out string outcome, out string change, out string note)
+    {
+        query = Query;
+        filing = Filing;
+        observed = Observed;
+        outcome = Outcome;
+        change = Change;
+        note = Note;
+    }
+
     public string Id => Outcome == FrnSnapshot.ReportedOutcome && FundingRequestNumber.Length > 0
         ? Query.Id + "/frn/" + FundingRequestNumber
         : Query.Id + "/" + (Filing?.Number ?? "outcome");
