@@ -1,10 +1,10 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
-## Unreleased
+## v1.0.7 — October 27, 2026: Excel FRN columns, portfolio FRN tracking, and Form 470 revision history
 
 ### Form 470 diff and revision history in the apps
 
-Version numbers are unchanged. `--diff` output is unchanged.
+`--diff` output is unchanged.
 
 - Windows, macOS, Linux, and Android can show what changed between locally observed copies of a Form 470. Linux uses the macOS window. The comparison reuses `Form470Diff` (the same field and service matching as `--diff`, including services, dates, status, and the RFP document list). It does not duplicate that logic and it does not call a different USAC dataset.
 - A live Form 470 lookup, and a watchlist refresh that includes Form 470, stores the published Original and Current rows from dataset `jt8s-3q52`. The portfolio database upgrades to schema version 4 in the existing transactional migration. `form470_revisions` keeps each distinct observation. A newer unknown schema is still refused. Existing watchlists, filing snapshots, and FRN snapshots stay in place.
@@ -12,17 +12,19 @@ Version numbers are unchanged. `--diff` output is unchanged.
 - **[Derived] The difference between observations is computed in the app.** It is not a USAC revision log. Open Data still publishes Original and Current, not every edit between them. The text says so. The latest stored copy also shows the published Original versus Current comparison, with the existing `--diff` disclaimer. Nothing derived is labeled as a USAC fact.
 - **Form 470 revisions** is available on the lookup screen and on a saved Form 470 row. History is oldest first and survives a restart. **Changes only**, **Change history**, and **Mark changes read** include an unread revision. The shared 17-column export and the command-line diff columns are unchanged. Portfolio files stay the base columns plus `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`. **Clear saved history** deletes Form 470 revisions with filing and FRN snapshots. Watchlists are kept. A failed or canceled revision refresh keeps the previous revisions.
 
-The v1.0.6 notes below deferred two Excel items. This follow-on completes them. Version numbers are unchanged. Q8 is still pending: `CommittedAmount` is still `funding_commitment_request` only when the published FRN status is Funded. That inference is not a confirmed commitment letter.
-
 ### FRN status in saved BEN portfolios
 
-Version numbers are unchanged. **Q8 is still pending.** Reported committed amount is not a funding commitment decision letter.
+**Q8 is still pending.** Reported committed amount is not a funding commitment decision letter.
 
 - A watchlist refresh stores an FRN snapshot for each tracked BEN and funding year. The snapshot uses the public FRN Status dataset (`qdmp-ygft`) and the same Core mapping as `--frn`: `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. Windows, macOS, and Linux share the portfolio window. Android uses the same portfolio session. There is no EPC sign-in.
 - The local database upgrades to schema version 3 in the existing transactional migration. `frn_snapshots` is keyed by the Form 471 query and the funding request number. Columns are the published status, the reported committed amount, the FCDL date, the revised FCDL date, the disbursed amount, and the observation sequence. An empty result is still a baseline. A newer unknown schema is still refused.
 - The first complete live snapshot is a baseline. A later refresh writes portfolio change events when the published FRN status, the reported committed amount, the FCDL date, the revised FCDL date, or the disbursed amount differs. A funding request that is new, or no longer returned, is flagged the same way filings are. Unchanged rows do not raise a change. A missing amount or date stays blank and is not compared as zero. A cached response does not advance the baseline.
 - **[Inference] The reported committed amount is not a commitment decision.** It is the export `CommittedAmount` value: `funding_commitment_request` when the published status is Funded, and blank otherwise. **Q8 is pending for Ying:** this has not been confirmed against an FCDL, including when a revised FCDL date is present. Portfolio change text calls it "Reported committed amount". The portfolio does not derive a commitment decision from it. The export column name and meaning are unchanged.
 - The shared 17-column export and app lookup files are unchanged. Portfolio files stay the base columns plus `LookupOutcome`, `Change`, `SourceAndNotes`, and `AllowableContractDate`. They do not add the five FRN columns. An FRN that does not match a displayed Form 471 application is an extra row with outcome `FrnReported`. **Clear saved history** deletes FRN snapshots with filing snapshots. Watchlists are kept. A failed or canceled FRN refresh does not erase the previous FRN snapshot or the filing result.
+
+### FRN columns and Form 470 diff in Excel
+
+The v1.0.6 notes below deferred two Excel items. This release completes them. Q8 is still pending: `CommittedAmount` is still `funding_commitment_request` only when the published FRN status is Funded. That inference is not a confirmed commitment letter.
 
 - `--xlsx` (alias `--excel`) includes `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` when `--frn` is used, in the same order and with the same headers as the command-line table, CSV, and JSON. Without `--frn`, Excel stays the 17 shared base columns. App and portfolio files still do not write those five columns. The shared base names and order are unchanged.
 - `--diff` writes Excel with `--xlsx` or `--excel`. The workbook is one sheet named `Form 470 diff`. Its columns match the diff table and CSV: `ApplicationNumber`, `BEN`, `Name`, `Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`, `Source`. JSON-only fields (`diff`, `applicationCount`, `count`, `fetchedAt`) stay in JSON and are not extra sheets. The header row is frozen and an autofilter covers the written rows. An empty difference list still writes the header row.
@@ -46,7 +48,7 @@ Release files are unsigned by design. No signing step, certificate, or signed pa
 
 - Core has one export schema (`ExportSchema`) and a shared JSON writer (`DataExporter.WriteJson`). The command-line table, CSV, and JSON are built from that schema. Command-line JSON keeps the `CliRow` shape.
 - The shared base stays 17 columns. The command line uses `ExportSchema.CliColumns`, which appends `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount` after those 17. Those five names stay out of the shared base list. Form 470 and Form 471 application rows leave them blank. App and portfolio files do not write the five FRN columns. Category 2 budget columns stay out of the shared base schema. They remain an optional group and are not written by the app files in this version.
-- `--xlsx` (alias `--excel`) writes the 17 base columns only in 1.0.6. It does not include those five FRN columns in 1.0.6, and `--diff` supports the table, CSV, and JSON only in 1.0.6. Both limits are lifted in Unreleased above: Excel with `--frn` includes the five columns, and `--diff` can write Excel. The flag requires `--output`. `--csv`, `--json`, and `--xlsx` cannot be combined. Workbook cells are inline text, including amounts. A value that CSV prefixes with `'` is stored in the workbook as the original text. The sheet has no formula elements.
+- `--xlsx` (alias `--excel`) writes the 17 base columns only in 1.0.6. It does not include those five FRN columns in 1.0.6, and `--diff` supports the table, CSV, and JSON only in 1.0.6. Both limits are lifted in v1.0.7 above: Excel with `--frn` includes the five columns, and `--diff` can write Excel. The flag requires `--output`. `--csv`, `--json`, and `--xlsx` cannot be combined. Workbook cells are inline text, including amounts. A value that CSV prefixes with `'` is stored in the workbook as the original text. The sheet has no formula elements.
 - Windows, macOS, Linux, and Android lookup screens export CSV, Excel, and JSON. CSV and Excel use the shared base columns, including `Source`, `Linked`, `Form470Count`, and `Form471Count`.
 - App lookup and portfolio files rename these headers so the columns match: `Customer` is now `Name`, `FormType` is now `Form`, and `FilingStatus` is now `Status`. Portfolio `RequestedFundingUSD` is now `RequestedAmount`, and `PreDiscountEligibleUSD` is now `PreDiscountAmount`. A spreadsheet keyed on the old header names will not find those columns.
 - App lookup files no longer include `ExportedUTC`, `LookupFetchedUTC`, `DirectoryUpdatedUTC`, `LookupResult`, or the Category 2 budget columns. The on-screen budget text is unchanged. A completed lookup with no filings still exports one row; that row has a blank application number, a blank source, and no `LookupResult` sentence.
@@ -59,12 +61,12 @@ Release files are unsigned by design. No signing step, certificate, or signed pa
 
 - `ERateLookup.Cli --diff` compares published Original and Current rows for a Form 470 from USAC Open Data dataset `jt8s-3q52`. The comparison is field by field and service request by service request. Service lines match on `service_request_id`.
 - An ordinary lookup still collapses to the Current version when USAC published one. The diff query does not require `fcc_form_470_status='Certified'`.
-- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions. Its table, CSV, and JSON use the diff columns, not the lookup export schema. In 1.0.6 it does not write Excel. Unreleased above writes that same column list to one Excel sheet.
+- The diff does not determine whether a change was substantial. It does not store a local history of intermediate revisions. Its table, CSV, and JSON use the diff columns, not the lookup export schema. In 1.0.6 it does not write Excel. v1.0.7 above writes that same column list to one Excel sheet.
 
 ### Committed and disbursed amounts from Open Data
 
 - `--frn` reads committed, FCDL, and disbursed fields from the public USAC Open Data FRN Status dataset `qdmp-ygft`. The command does not sign in to EPC and does not scrape EPC.
-- The command-line table, CSV, and JSON include `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. Form 470 and Form 471 application rows leave those columns blank. Excel does not include them in 1.0.6. Unreleased above adds them to Excel when `--frn` is used. Windows, macOS, Linux, and Android lookup and portfolio files do not write those five columns.
+- The command-line table, CSV, and JSON include `FrnStatus`, `CommittedAmount`, `FcdlDate`, `RevisedFcdlDate`, and `DisbursedAmount`. Form 470 and Form 471 application rows leave those columns blank. Excel does not include them in 1.0.6. v1.0.7 above adds them to Excel when `--frn` is used. Windows, macOS, Linux, and Android lookup and portfolio files do not write those five columns.
 - `FrnStatus` is the published `form_471_frn_status_name`. `FcdlDate` is `fcdl_letter_date`. `RevisedFcdlDate` is `revised_fcdl_date`. `DisbursedAmount` is `total_authorized_disbursement`. A missing disbursement stays blank.
 - **[Inference]** `CommittedAmount` is `funding_commitment_request` when the status is Funded, and blank otherwise. **Q8 is pending for Ying:** this has not been confirmed against an FCDL, including when a revised FCDL date is present.
 - `RequestedAmount` on an FRN row remains the published `funding_commitment_request` for every status. That is the existing column, not the committed-amount rule.

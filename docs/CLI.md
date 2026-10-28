@@ -5,7 +5,7 @@ terminal. It is a .NET 10 console program in `Cli/`. It does not open the
 Windows Forms, Avalonia, or Android screens. The lookup is read-only. It does
 not create, change, certify, or submit a filing.
 
-## Unreleased 1.0.6: committed and disbursed amounts
+## 1.0.6: committed and disbursed amounts
 
 `--frn` reads the public FRN Status dataset `qdmp-ygft`. It does not sign in
 to EPC. The table, CSV, and JSON gain five columns. Excel includes those five
@@ -47,7 +47,7 @@ service provider or applicant."
 
 Version 1.0.5 adds four lookup features. It does not add a Category 2 budget
 helper, EPC authentication, Form 470 version diffing, or committed-amount
-downloads. Unreleased 1.0.6 adds `--diff` for Form 470 Original vs Current.
+downloads. Version 1.0.6 adds `--diff` for Form 470 Original vs Current.
 That command is described below. It does not add local snapshot history.
 
 | Feature | Behavior |
@@ -95,8 +95,8 @@ not use numeric cells. CSV prefixes a field that starts with `=`, `+`, `-`,
 without that prefix. The worksheet stores no formula element. The header row is
 frozen, and an autofilter covers the rows that were written.
 
-Release files are unsigned by design. This follow-on does not change the
-version number. v1.0.6 is not tagged.
+Release files are unsigned by design. Excel FRN columns and the Form 470 diff
+workbook are version 1.0.7. v1.0.7 assets are published once tagged.
 
 This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
@@ -366,7 +366,7 @@ Indented JSON. Names are camelCase. Top-level fields: `form` (470, 471, or
 Omitted `--app` or `--frn` is JSON `null` on the top-level fields. Filing
 rows leave `fundingRequestNumber` as an empty string and leave the five FRN
 Status fields as empty strings. `source` is the Open Data URL.
-`committedAmount` is an inference: see the unreleased 1.0.6 section. Q8 is
+`committedAmount` is an inference: see the 1.0.6 section. Q8 is
 pending.
 
 The Windows, macOS, Linux, and Android lookup screens write this same envelope.
@@ -485,9 +485,9 @@ Application `270000266` had both versions.
 The command does not store a local history of intermediate revisions. Open
 Data publishes Original and Current, not every edit between them. It does not
 determine whether a change was substantial. `--diff` output is unchanged:
-the same columns, sheet name, and messages. Windows, macOS, Linux, and Android
-store later observed copies of those published rows on the device. That history
-is separate from this command. See [the portfolio guide](PORTFOLIO_GUIDE.md).
+the same columns, sheet name, and messages. Version 1.0.7 stores later observed
+copies of those published rows on Windows, macOS, Linux, and Android. That
+history is separate from this command. See [the portfolio guide](PORTFOLIO_GUIDE.md).
 
 Table, CSV, JSON, and Excel use these columns: `ApplicationNumber`, `BEN`,
 `Name`, `Change`, `Scope`, `ServiceRequestId`, `Field`, `Original`, `Current`,
