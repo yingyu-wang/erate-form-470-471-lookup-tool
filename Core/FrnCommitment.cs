@@ -55,4 +55,51 @@ public readonly record struct FrnCommitment(
     }
 
     public string[] Cells() => [FrnStatus, CommittedAmount, FcdlDate, RevisedFcdlDate, DisbursedAmount];
+
+    public const string StatusKind = "FRN status";
+
+    /// <summary>
+    /// Portfolio label for <see cref="CommittedAmount"/>. The export column name stays
+    /// <c>CommittedAmount</c>. This label does not treat that value as a commitment decision.
+    /// </summary>
+    public const string ReportedCommittedAmountKind = "Reported committed amount";
+
+    public const string FcdlDateKind = "FCDL date";
+
+    public const string RevisedFcdlDateKind = "Revised FCDL date";
+
+    public const string DisbursedAmountKind = "Disbursed amount";
+
+    public const string ReportedAmountAssumption =
+        "Reported committed amount is the published funding_commitment_request when the FRN status is Funded, and blank otherwise. It is not a funding commitment decision letter. Q8 is pending.";
+
+    /// <summary>
+    /// Field differences between two mapped FRN rows. Blank and whitespace match.
+    /// A blank disbursement is not zero. <see cref="CommittedAmount"/> is reported
+    /// under <see cref="ReportedCommittedAmountKind"/> and is not a commitment decision.
+    /// </summary>
+    public static IReadOnlyList<FrnFieldDiff> Compare(FrnCommitment before, FrnCommitment after)
+    {
+        var changes = new List<FrnFieldDiff>();
+        Add(changes, StatusKind, before.FrnStatus, after.FrnStatus);
+        Add(changes, ReportedCommittedAmountKind, before.CommittedAmount, after.CommittedAmount);
+        Add(changes, FcdlDateKind, before.FcdlDate, after.FcdlDate);
+        Add(changes, RevisedFcdlDateKind, before.RevisedFcdlDate, after.RevisedFcdlDate);
+        Add(changes, DisbursedAmountKind, before.DisbursedAmount, after.DisbursedAmount);
+        return changes;
+    }
+
+    public static string Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
+
+    static void Add(List<FrnFieldDiff> changes, string kind, string? before, string? after)
+    {
+        var left = Normalize(before);
+        var right = Normalize(after);
+        if (string.Equals(left, right, StringComparison.Ordinal))
+            return;
+        changes.Add(new FrnFieldDiff(kind, left, right));
+    }
 }
+
+/// <summary>One reported FRN field difference. <see cref="FrnFieldDiff.Kind"/> is portfolio text.</summary>
+public readonly record struct FrnFieldDiff(string Kind, string Before, string After);

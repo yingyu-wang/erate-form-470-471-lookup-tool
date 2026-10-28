@@ -4,10 +4,35 @@ using System.Text;
 namespace ERateLookup.Core;
 
 public sealed record ImportPreview(List<WatchlistEntry> Entries, List<string> Errors);
-public sealed record PortfolioRow(LookupKey Query, Filing? Filing, DateTimeOffset? Observed, string Outcome, string Change, string Note)
+public sealed record PortfolioRow(LookupKey Query, Filing? Filing, DateTimeOffset? Observed, string Outcome, string Change, string Note, string FundingRequestNumber = "")
 {
-    public string Id => Query.Id + "/" + (Filing?.Number ?? "outcome");
-    public string Display => $"BEN {Query.Ben} · FY{Query.Year} · {(int)Query.Form} · {Filing?.Number ?? Outcome}\n{Filing?.Name} · {Filing?.Status} · {Change}\n{Filing?.Services}\n{Note}";
+    /// <summary>
+    /// Keeps the six-value shape from before <see cref="FundingRequestNumber"/> was added.
+    /// The positional record also deconstructs to seven values, including that field.
+    /// </summary>
+    public void Deconstruct(out LookupKey query, out Filing? filing, out DateTimeOffset? observed, out string outcome, out string change, out string note)
+    {
+        query = Query;
+        filing = Filing;
+        observed = Observed;
+        outcome = Outcome;
+        change = Change;
+        note = Note;
+    }
+
+    public string Id => Outcome == FrnSnapshot.ReportedOutcome && FundingRequestNumber.Length > 0
+        ? Query.Id + "/frn/" + FundingRequestNumber
+        : Query.Id + "/" + (Filing?.Number ?? "outcome");
+    public string Display
+    {
+        get
+        {
+            var identity = Filing?.Number ?? Outcome;
+            if (FundingRequestNumber.Length > 0)
+                identity = "FRN " + FundingRequestNumber + (string.IsNullOrEmpty(Filing?.Number) ? "" : " · application " + Filing.Number);
+            return $"BEN {Query.Ben} · FY{Query.Year} · {(int)Query.Form} · {identity}\n{Filing?.Name} · {Filing?.Status} · {Change}\n{Filing?.Services}\n{Note}";
+        }
+    }
     public override string ToString() => Display.Replace('\n', ' ');
 }
 
@@ -20,8 +45,10 @@ public sealed class PortfolioSession
         get;
     }
     public List<PortfolioRow> Rows { get; private set; } = [];
+    public const string ClearHistoryPrompt = "Delete all saved filing and FRN snapshots? Watchlists are retained.";
     public HashSet<string> Selected { get; } = [];
     readonly Dictionary<LookupKey, long> displayedSequences = [];
+    readonly Dictionary<string, long> displayedFrnSequences = [];
     public PortfolioSession(UsacClient client, PortfolioStore store)
     {
         this.client = client;
@@ -32,6 +59,7 @@ public sealed class PortfolioSession
         Rows = [];
         Selected.Clear();
         displayedSequences.Clear();
+        displayedFrnSequences.Clear();
     }
     public static List<int> ParseYears(string text)
     {
@@ -68,6 +96,7 @@ public sealed class PortfolioSession
         Rows = [];
         Selected.Clear();
         displayedSequences.Clear();
+        displayedFrnSequences.Clear();
         foreach (var query in queries)
         {
             var saved = Store.Read(query);
@@ -76,12 +105,16 @@ public sealed class PortfolioSession
             else
                 Rows.AddRange(ToRows(saved, "Saved / offline"));
         }
+        ApplyFrnAnnotations();
     }
     public async Task RefreshAsync(IReadOnlyList<LookupKey> queries, IProgress<string>? progress, CancellationToken ct)
     {
         Rows = [];
         Selected.Clear();
         displayedSequences.Clear();
+        displayedFrnSequences.Clear();
+        var frnAttempted = new HashSet<string>(StringComparer.Ordinal);
+        var frnNotes = new List<(string Ben, int Year, string Note)>();
         var completed = 0;
         foreach (var query in queries)
         {
@@ -92,6 +125,7 @@ public sealed class PortfolioSession
             }
             progress?.Report($"Refreshing {completed + 1}/{queries.Count}: BEN {query.Ben}, FY{query.Year}, Form {(int)query.Form}");
             var seq = Store.BeginObservation();
+            var refreshFrn = false;
             try
             {
                 var result = await client.GetFilingsAsync(query.Ben, query.Year, query.Form, true, ct);
@@ -112,6 +146,7 @@ public sealed class PortfolioSession
                         Rows.AddRange(ToRows(current, "Live"));
                     Store.RecordOutcome(query, seq, "Superseded");
                 }
+                refreshFrn = true;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -122,6 +157,24 @@ public sealed class PortfolioSession
             {
                 Store.RecordOutcome(query, seq, "Failed");
                 Rows.Add(new(query, null, null, "Failed", "", ex.Message + " Previous saved results retained."));
+                refreshFrn = true;
+            }
+            if (refreshFrn && frnAttempted.Add(query.Ben + "/" + query.Year.ToString(CultureInfo.InvariantCulture)))
+            {
+                try
+                {
+                    var frns = await client.GetFundingRequestsAsync(query.Ben, query.Year, true, ct);
+                    ct.ThrowIfCancellationRequested();
+                    Store.SaveFrns(query, seq, frns, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    frnNotes.Add((query.Ben, query.Year, "FRN status refresh canceled. Previous FRN snapshot retained."));
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidOperationException)
+                {
+                    frnNotes.Add((query.Ben, query.Year, "FRN status refresh failed. Previous FRN snapshot retained. " + ex.Message));
+                }
             }
             completed++;
             if (completed < queries.Count && !ct.IsCancellationRequested)
@@ -131,12 +184,15 @@ public sealed class PortfolioSession
                 }
                 catch (OperationCanceledException) { }
         }
+        ApplyFrnAnnotations();
+        foreach (var (ben, year, note) in frnNotes)
+            AppendNote(ben, year, note);
         progress?.Report($"Finished: {completed}/{queries.Count} queries attempted. {Rows.Count(r => r.Outcome == "Failed")} failed. Select results to export; use Open saved for prior data.");
     }
     IEnumerable<PortfolioRow> ToRows(SavedLookup saved, string origin)
     {
         displayedSequences[saved.Key] = saved.Sequence;
-        var unread = Store.UnreadChanges(saved.Key).GroupBy(e => e.Change.Application).Select(g => g.Last().Change).ToList();
+        var unread = Store.UnreadChanges(saved.Key).Where(e => !IsFrnChange(e.Change)).GroupBy(e => e.Change.Application).Select(g => g.Last().Change).ToList();
         var note = $"{origin}; observed {saved.ObservedAt.LocalDateTime:g}." + (saved.FirstObservation ? " First observation; comparison starts on the next live refresh." : "");
         if (saved.Filings.Count == 0)
             yield return new(saved.Key, null, saved.ObservedAt, "SuccessEmpty", "", note + " No certified filings found in this published query.");
@@ -144,6 +200,97 @@ public sealed class PortfolioSession
             yield return new(saved.Key, filing, saved.ObservedAt, "Success", unread.FirstOrDefault(c => c.Application == filing.Number)?.Kind ?? "", note);
         foreach (var missing in unread.Where(c => c.Kind == "No longer returned by this query" && !saved.Filings.Any(f => f.Number == c.Application)))
             yield return new(saved.Key, new Filing(missing.Application, saved.Key.Ben, "", "", "", "", "", "Unknown"), saved.ObservedAt, "Not returned", missing.Kind, note + " This does not establish withdrawal or denial.");
+    }
+    static bool IsFrnChange(FilingChange change) => change.Application.StartsWith("FRN ", StringComparison.Ordinal);
+    static string MergeChange(string existing, string kind)
+    {
+        if (existing.Length == 0)
+            return kind;
+        var parts = existing.Split("; ", StringSplitOptions.RemoveEmptyEntries);
+        return parts.Contains(kind, StringComparer.Ordinal) ? existing : existing + "; " + kind;
+    }
+    static string AppendAssumption(string note, string kind)
+    {
+        if (kind != FrnCommitment.ReportedCommittedAmountKind || note.Contains(FrnCommitment.ReportedAmountAssumption, StringComparison.Ordinal))
+            return note;
+        return note + " " + FrnCommitment.ReportedAmountAssumption;
+    }
+    void AppendNote(string ben, int year, string message)
+    {
+        for (var i = 0; i < Rows.Count; i++)
+        {
+            if (Rows[i].Query.Ben == ben && Rows[i].Query.Year == year && !Rows[i].Note.Contains(message, StringComparison.Ordinal))
+                Rows[i] = Rows[i] with
+                {
+                    Note = Rows[i].Note + " " + message
+                };
+        }
+    }
+    static LookupKey LookupKeyFromId(string id)
+    {
+        var parts = id.Split('/');
+        return new LookupKey(parts[0], int.Parse(parts[1], CultureInfo.InvariantCulture), (FilingForm)int.Parse(parts[2], CultureInfo.InvariantCulture));
+    }
+    void ApplyFrnAnnotations()
+    {
+        foreach (var pair in Rows.Select(row => (row.Query.Ben, row.Query.Year)).Distinct().ToList())
+        {
+            var key = new LookupKey(pair.Ben, pair.Year, FilingForm.Form471);
+            var baseline = Store.ReadFrns(key);
+            if (baseline is null)
+                continue;
+            displayedFrnSequences[key.Id] = baseline.Sequence;
+            var latest = Store.UnreadChanges(key)
+                .Where(item => IsFrnChange(item.Change))
+                .GroupBy(item => (item.Change.Application, item.Change.Kind))
+                .Select(group => group.Last())
+                .ToList();
+            if (latest.Count == 0)
+                continue;
+            foreach (var group in latest.GroupBy(item => item.Change.Application))
+            {
+                var number = group.Key["FRN ".Length..];
+                var current = baseline.Frns.FirstOrDefault(frn => frn.FundingRequestNumber == number);
+                var application = current?.ApplicationNumber ?? "";
+                var kinds = group.Select(item => item.Change.Kind).Distinct(StringComparer.Ordinal).ToList();
+                var matched = false;
+                if (application.Length > 0)
+                {
+                    for (var i = 0; i < Rows.Count; i++)
+                    {
+                        var row = Rows[i];
+                        if (row.Query.Ben != pair.Ben || row.Query.Year != pair.Year || row.Query.Form != FilingForm.Form471 || row.Filing?.Number != application || row.Outcome == FrnSnapshot.ReportedOutcome)
+                            continue;
+                        matched = true;
+                        var change = row.Change;
+                        var note = row.Note;
+                        foreach (var kind in kinds)
+                        {
+                            change = MergeChange(change, kind);
+                            note = AppendAssumption(note, kind);
+                        }
+                        if (!note.Contains("FRN " + number, StringComparison.Ordinal))
+                            note += " FRN " + number + ".";
+                        Rows[i] = row with
+                        {
+                            Change = change,
+                            Note = note
+                        };
+                    }
+                }
+                if (matched)
+                    continue;
+                var anchor = Rows.Select(row => row.Query).FirstOrDefault(item => item.Ben == pair.Ben && item.Year == pair.Year && item.Form == FilingForm.Form471)
+                    ?? Rows.Select(row => row.Query).First(item => item.Ben == pair.Ben && item.Year == pair.Year);
+                if (Rows.Any(row => row.Id == anchor.Id + "/frn/" + number))
+                    continue;
+                var noteText = "FRN " + number + ". " + FrnSnapshot.ObservationNote;
+                foreach (var kind in kinds)
+                    noteText = AppendAssumption(noteText, kind);
+                var filing = new Filing(application, pair.Ben, current?.Name ?? "", "", "", "", "", current?.FrnStatus ?? "");
+                Rows.Add(new PortfolioRow(anchor, filing, baseline.ObservedAt, FrnSnapshot.ReportedOutcome, string.Join("; ", kinds), noteText, number));
+            }
+        }
     }
     public List<PortfolioRow> Filter(string keyword, string service, bool changesOnly = false)
     {
@@ -157,14 +304,28 @@ public sealed class PortfolioSession
     {
         var lines = new List<string>();
         foreach (var (key, sequence) in displayedSequences)
-            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence))
+            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence && !IsFrnChange(e.Change)))
                 lines.Add($"BEN {key.Ben} · FY{key.Year} · Form {(int)key.Form} · {item.Change.Application}\n{item.Change.Kind} · observed {item.ObservedAt.LocalDateTime:g}\nBefore: {item.Change.Before}\nAfter: {item.Change.After}\n");
+        var frnLines = new List<string>();
+        foreach (var (id, sequence) in displayedFrnSequences)
+        {
+            var key = LookupKeyFromId(id);
+            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence && IsFrnChange(e.Change)))
+                frnLines.Add($"BEN {key.Ben} · FY{key.Year} · {item.Change.Application}\n{item.Change.Kind} · observed {item.ObservedAt.LocalDateTime:g}\nBefore: {item.Change.Before}\nAfter: {item.Change.After}\n");
+        }
+        if (frnLines.Count > 0)
+        {
+            lines.Add(FrnCommitment.ReportedAmountAssumption + "\n");
+            lines.AddRange(frnLines);
+        }
         return lines.Count == 0 ? "No unread changes in the displayed observations." : string.Join("\n", lines);
     }
     public void AcknowledgeDisplayed()
     {
         foreach (var (key, sequence) in displayedSequences)
             Store.Acknowledge(key, sequence);
+        foreach (var (id, sequence) in displayedFrnSequences)
+            Store.AcknowledgeFrns(LookupKeyFromId(id), sequence);
         Rows = Rows.Select(r => r with { Change = "" }).ToList();
     }
     public List<string[]> ExportRows(CaliforniaDirectory? directory = null) => CreateExport(directory).Table;
@@ -192,10 +353,16 @@ public sealed class PortfolioSession
                 SourceAndNotes = row.Note,
                 AllowableContractDate = PortfolioInsights.ContractDate(row.Filing),
             };
-            if (string.IsNullOrWhiteSpace(filing.Number))
+            if (string.IsNullOrWhiteSpace(filing.Number) && row.FundingRequestNumber.Length == 0)
                 published = published with
                 {
                     Source = ""
+                };
+            if (row.Outcome == FrnSnapshot.ReportedOutcome && row.FundingRequestNumber.Length > 0)
+                published = published with
+                {
+                    FundingRequestNumber = row.FundingRequestNumber,
+                    Source = UsacSources.FundingRequest(row.FundingRequestNumber, filing.Number)
                 };
             table.Add(ExportSchema.ToRow(ExportSchema.WithDisplayedBen(published, row.Query.Ben), columns));
             jsonRows.Add(ExportSchema.ToPortfolioJsonRow(published));
@@ -225,6 +392,7 @@ public sealed class PortfolioSession
             $"Customer: {string.Join("; ", g.Select(r => r.Filing?.Name).Where(n => !string.IsNullOrWhiteSpace(n)).Distinct())}. Latest certification: {g.Where(r => r.Outcome == "Success").Select(r => r.Filing?.Certified).OrderDescending().FirstOrDefault() ?? "Unknown"}.\nObserved: {g.Select(r => r.Observed).FirstOrDefault()?.ToLocalTime().ToString("g") ?? "Unknown"}.\nServices: {string.Join("; ", g.Where(r => r.Outcome == "Success").Select(r => r.Filing?.Services).Where(s => !string.IsNullOrEmpty(s)).Distinct())}"));
     }
     public static string ShareText(PortfolioRow r) => $"E-rate Form {(int)r.Query.Form} · FY{r.Query.Year}\nBEN {r.Query.Ben} · {r.Filing?.Name}\nApplication {r.Filing?.Number}\n{r.Filing?.Services}\n{r.Note}" +
+        (r.FundingRequestNumber.Length > 0 ? "\nFRN " + r.FundingRequestNumber : "") +
         (Uri.TryCreate(r.Filing?.Pdf, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps ? "\n" + uri.AbsoluteUri : "");
 
     public static ImportPreview ParseCsv(string text)

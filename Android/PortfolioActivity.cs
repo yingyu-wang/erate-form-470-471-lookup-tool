@@ -56,7 +56,7 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Refresh watchlist",()=>RefreshAsync(false)));root.AddView(Button("Refresh selected BEN",()=>RefreshAsync(true)));
         root.AddView(Button("Open saved / offline",()=>Do(()=>{session.LoadSaved(Queries(false));page=0;Render();status.Text="Saved results; no network request made.";})));
         root.AddView(Button("Cancel",()=>Do(()=>operation?.Cancel()),false));
-        keyword=Field(root,"Keyword");service=Field(root,"Service contains");changes=new CheckBox(this){Text="Changes only"};root.AddView(changes);gated.Add(changes);
+        keyword=Field(root,"Keyword");service=Field(root,"Service contains");changes=new CheckBox(this){Text="Changes only",ContentDescription="Includes FRN status and reported committed amount"};root.AddView(changes);gated.Add(changes);
         root.AddView(Button("Apply filters",()=>Do(()=>{page=0;Render();})));
         root.AddView(Button("Select visible",()=>Do(()=>{foreach(var r in visible)session.Selected.Add(r.Id);Render();})));
         root.AddView(Button("Clear selection",()=>Do(()=>{session.Selected.Clear();Render();})));
@@ -67,7 +67,7 @@ public sealed class PortfolioActivity : Activity
         root.AddView(Button("Export selected CSV",()=>PrepareExportAsync("csv")));root.AddView(Button("Export selected Excel",()=>PrepareExportAsync("xlsx")));root.AddView(Button("Export selected JSON",()=>PrepareExportAsync("json")));
         root.AddView(Button("Deadlines",async()=>{var text=await PortfolioInsights.DeadlinesAsync(session,windows,operation!.Token);if(!destroyed)new AlertDialog.Builder(this)!.SetTitle("Source-backed dates")!.SetMessage(text)!.SetPositiveButton("Close",(_,_)=>{})!.Show();}));
         root.AddView(Button("History / summary",()=>Do(()=>new AlertDialog.Builder(this)!.SetTitle("District history")!.SetMessage(PortfolioInsights.Summary(session,directory))!.SetPositiveButton("Close",(_,_)=>{})!.Show())));
-        root.AddView(Button("Clear saved history",async()=>{if(await Confirm("Delete all saved filing snapshots? Watchlists are retained.")){session.Store.ClearHistory();session.ClearView();Render();}}));
+        root.AddView(Button("Clear saved history",async()=>{if(await Confirm(PortfolioSession.ClearHistoryPrompt)){session.Store.ClearHistory();session.ClearView();Render();}}));
         lists.ItemSelected+=(_,_)=>{listName.Text=listItems.FirstOrDefault(l=>l.Id==ListId)?.Name??"";ReloadEntries();};
         entries.ItemSelected+=(_,_)=>{if(entries.SelectedItemPosition>=0&&entries.SelectedItemPosition<entryItems.Count){var e=entryItems[entries.SelectedItemPosition];ben.Text=e.Ben;name.Text=e.Name;tags.Text=e.Tags;}};
         var pending=saved?.GetString("pendingPortfolioExport");if(pending is not null&&Path.GetDirectoryName(pending)==CacheDir!.AbsolutePath&&File.Exists(pending))pendingExport=pending;

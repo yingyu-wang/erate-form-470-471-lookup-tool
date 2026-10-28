@@ -25,7 +25,7 @@ public static class PortfolioInsights
                 $"{b.Name} · {b.Cycle} · {b.Version}\nTotal {BudgetRow.Money(b.Total)}; committed {BudgetRow.Money(b.Committed)}; pending {BudgetRow.Money(b.Pending)}; reported available {BudgetRow.Money(b.Available)}."));
         }
         text.AppendLine("Budget snapshot: " + directory.LastUpdated);
-        text.AppendLine("Provider comparisons are unavailable in this application-level view. Requested funding sums observed application totals; it is not committed or disbursed funding.");
+        text.AppendLine("Provider comparisons are unavailable in this application-level view. Requested funding sums observed application totals; it is not committed or disbursed funding. A refresh also compares published FRN status, FCDL dates, disbursed amounts, and the reported committed amount for each tracked BEN and funding year. " + FrnCommitment.ReportedAmountAssumption);
         return text.ToString();
     }
     public static string RequestedTotal(IEnumerable<PortfolioRow> source)

@@ -94,6 +94,26 @@ values; **Mark changes read** acknowledges changes through the observations you
 have displayed. Unread events survive later refreshes; acknowledged events are
 eligible for cleanup after 90 days. Acknowledgement does not reset the baseline.
 
+A refresh also reads FRN Status for each tracked BEN and funding year from the
+public dataset `qdmp-ygft`, using the same columns as the command-line `--frn`
+lookup. The first complete live result is a baseline. Later refreshes flag an
+unread change when the published FRN status, the reported committed amount, the
+FCDL date, the revised FCDL date, or the disbursed amount differs. A funding
+request that appears, or is no longer returned, is flagged too. That label does
+not establish cancellation or denial. Cached FRN responses do not advance the
+baseline. An older request cannot replace a newer baseline. A failed FRN refresh
+keeps the previous snapshot and does not erase saved filings.
+
+**Reported committed amount is not a funding commitment.** It is the same
+inference as export `CommittedAmount`: `funding_commitment_request` when the
+published status is Funded, and blank otherwise. **Q8 is pending.** This has
+not been confirmed against an FCDL, including when a revised FCDL date is
+present. Change text calls it "Reported committed amount" and does not treat a
+status change as a decision letter. A missing disbursement stays blank. It is
+not stored as zero. Portfolio files do not add `FrnStatus`, `CommittedAmount`,
+`FcdlDate`, `RevisedFcdlDate`, or `DisbursedAmount`. The shared base stays 17
+columns.
+
 ## Filter, select, and export
 
 Keyword matches source entity name, BEN, application number, nickname, or service
@@ -160,7 +180,7 @@ On Android, **Share filing summary** opens the system share chooser with the BEN
 year, form, application, service text, observation note, and an available HTTPS
 document link. Choose the receiving app yourself; the app does not send automatically.
 
-**Clear saved history** deletes saved snapshots, change events, and last-run outcomes
+**Clear saved history** deletes saved filing snapshots, FRN snapshots, change events, and last-run outcomes
 after confirmation, while retaining watchlists. Pending observations begun before
 that deletion cannot recreate cleared history. Uninstalling the Android app clears
 local data. Debug-signed CI builds may require uninstalling an older preview when
@@ -171,7 +191,11 @@ the signing key changes; export needed information first.
 The new `portfolio.sqlite3` is separate from the disposable query cache. Desktop
 stores it beside the existing cache directory; Android stores it in private app
 files. Existing v1.0.1 caches and themes are preserved. Schema upgrades are
-transactional; a newer unknown schema is refused rather than overwritten. Keep
+transactional; a newer unknown schema is refused rather than overwritten. Schema
+version 3 adds an FRN snapshot row per query and funding request number
+(`frn_status`, reported committed amount, `fcdl_date`, `revised_fcdl_date`,
+`disbursed_amount`, and the observation sequence). The reported amount is the
+`CommittedAmount` inference, not a confirmed commitment (Q8). Keep
 the app closed when backing up/copying the database. No cloud synchronization or
 background notification service is included.
 
