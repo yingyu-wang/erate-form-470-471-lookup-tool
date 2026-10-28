@@ -94,8 +94,9 @@ values; **Mark changes read** acknowledges changes through the observations you
 have displayed. Unread events survive later refreshes; acknowledged events are
 eligible for cleanup after 90 days. Acknowledgement does not reset the baseline.
 
-A refresh also reads FRN Status for each tracked BEN and funding year from the
-public dataset `qdmp-ygft`, using the same columns as the command-line `--frn`
+Version 1.0.7 tracks reported FRN status and disbursement changes on a saved
+portfolio. A refresh also reads FRN Status for each tracked BEN and funding year
+from the public dataset `qdmp-ygft`, using the same columns as the command-line `--frn`
 lookup. The first complete live result is a baseline. Later refreshes flag an
 unread change when the published FRN status, the reported committed amount, the
 FCDL date, the revised FCDL date, or the disbursed amount differs. A funding
@@ -116,8 +117,9 @@ columns.
 
 ## Form 470 revision history
 
-A Form 470 lookup, and a watchlist refresh that includes Form 470, stores the
-published Original and Current rows for each application returned by the
+Version 1.0.7 stores Form 470 revision history in the apps. A Form 470 lookup,
+and a watchlist refresh that includes Form 470, stores the published Original
+and Current rows for each application returned by the
 existing version-row query (`jt8s-3q52`, the same fields as `--diff`). The
 rows are kept in the local portfolio database. History survives a restart.
 A cached, empty, or failed response does not add a revision. An unchanged
@@ -215,8 +217,9 @@ On Android, **Share filing summary** opens the system share chooser with the BEN
 year, form, application, service text, observation note, and an available HTTPS
 document link. Choose the receiving app yourself; the app does not send automatically.
 
-**Clear saved history** deletes saved filing snapshots, FRN snapshots, change events, and last-run outcomes
-after confirmation, while retaining watchlists. Pending observations begun before
+**Clear saved history** deletes saved filing snapshots, FRN snapshots, Form 470
+revisions, change events, and last-run outcomes after confirmation, while
+retaining watchlists. Pending observations begun before
 that deletion cannot recreate cleared history. Uninstalling the Android app clears
 local data. Debug-signed CI builds may require uninstalling an older preview when
 the signing key changes; export needed information first.
@@ -230,7 +233,8 @@ transactional; a newer unknown schema is refused rather than overwritten. Schema
 version 3 adds an FRN snapshot row per query and funding request number
 (`frn_status`, reported committed amount, `fcdl_date`, `revised_fcdl_date`,
 `disbursed_amount`, and the observation sequence). The reported amount is the
-`CommittedAmount` inference, not a confirmed commitment (Q8). Keep
+`CommittedAmount` inference, not a confirmed commitment (Q8). Schema version 4,
+in 1.0.7, keeps each distinct Form 470 observation in `form470_revisions`. Keep
 the app closed when backing up/copying the database. No cloud synchronization or
 background notification service is included.
 
