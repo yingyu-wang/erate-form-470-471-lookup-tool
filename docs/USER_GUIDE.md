@@ -94,7 +94,7 @@ AND fcc_form_470_status = 'Certified'
 
 Text is escaped and query parameters are URL-encoded. No API token is needed for the unauthenticated endpoint tested during development. Throttling and access errors are surfaced. No credentials are stored.
 
-The dataset column `form_version` is `Original` or `Current`. Ordinary lookups still collapse to Current when that version is present. The command-line `--diff` flag compares the two published versions for one Form 470. It reads the same dataset and does not require `fcc_form_470_status='Certified'`, because a Current row can be canceled while Original stays certified. It does not store a local history of intermediate revisions, and it does not determine whether a change was substantial. See [the command-line guide](CLI.md).
+The dataset column `form_version` is `Original` or `Current`. Ordinary lookups still collapse to Current when that version is present. The command-line `--diff` flag compares the two published versions for one Form 470. It reads the same dataset and does not require `fcc_form_470_status='Certified'`, because a Current row can be canceled while Original stays certified. `--diff` does not store a local history, and it does not determine whether a change was substantial. The apps store later observed copies of those published rows on the device and label the comparison derived. See [the command-line guide](CLI.md) and [the portfolio guide](PORTFOLIO_GUIDE.md).
 
 Official sources:
 

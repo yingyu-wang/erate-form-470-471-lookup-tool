@@ -266,8 +266,12 @@ public class MainActivity : Activity
         resultBen = outcome.Ben; resultYear = outcome.Year; resultForm = outcome.Form;
         filings = outcome.Filings.ToList(); fetched = outcome.FetchedAt; hasCycle470 = outcome.HasNewCycleForm470;
         foreach (var f in filings) selected.Add(f.Number);
-        complete = true; UpdateBudget(); RenderResults();
-        status.Text = outcome.Status;
+        complete = true; UpdateBudget();
+        var revisionNote = "";
+        if (requestedForm == FilingForm.Form470)
+            revisionNote = await ObserveForm470Async(requestedBen, requestedYear, refresh, ct);
+        RenderResults();
+        status.Text = outcome.Status + revisionNote;
     });
 
     void UpdateBudget()
@@ -296,6 +300,15 @@ public class MainActivity : Activity
             results.AddView(check);
             var pdf = new Button(this) { Text = "Open application PDF" };
             pdf.Click += (_, _) => OpenPdf(filing.Pdf); results.AddView(pdf);
+            if (resultForm == FilingForm.Form470)
+            {
+                var number = filing.Number;
+                var nickname = filing.Nickname;
+                results.AddView(Label(RevisionSummary(number, nickname)));
+                var history = new Button(this) { Text = "Form 470 revisions" };
+                history.Click += (_, _) => ShowRevisions(number, nickname);
+                results.AddView(history);
+            }
         }
         if (resultPage + 1 < pages) AddPageButton("Next applications", 1);
         UpdateControls();
@@ -306,6 +319,48 @@ public class MainActivity : Activity
         var button = new Button(this) { Text = title };
         button.Click += (_, _) => { if (!ready || busy || pendingExport is not null) return; resultPage += offset; RenderResults(); };
         results.AddView(button);
+    }
+
+    async Task<string> ObserveForm470Async(string requestedBen, int requestedYear, bool refresh, CancellationToken ct)
+    {
+        try
+        {
+            await Form470Revisions.ObserveLookupAsync(client!, new PortfolioStore(cache), requestedBen, requestedYear, refresh, ct);
+            return "";
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return " " + Form470Revisions.RefreshFailedNote;
+        }
+    }
+
+    string RevisionSummary(string number, string nickname)
+    {
+        try
+        {
+            var store = new PortfolioStore(cache);
+            return Form470Revisions.SelectionSummary(number, store.ReadForm470Revisions(number), nickname);
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            return nickname;
+        }
+    }
+
+    void ShowRevisions(string number, string nickname)
+    {
+        try
+        {
+            var store = new PortfolioStore(cache);
+            Alert(Form470Revisions.ViewText(number, store.ReadForm470Revisions(number), nickname));
+        }
+        catch (Exception ex) when (AppExceptions.IsOperational(ex))
+        {
+            AppLog.Error(ex, "Form 470 revision history");
+            Alert(ex.Message);
+        }
     }
 
     void OpenPdf(string address)

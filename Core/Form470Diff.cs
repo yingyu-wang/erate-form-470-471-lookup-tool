@@ -17,6 +17,7 @@ public sealed record Form470FieldChange(
 /// Compares published Form 470 Original and Current rows from dataset jt8s-3q52.
 /// Service lines are matched on <c>service_request_id</c>. The comparison does not
 /// decide whether a change was substantial, and it does not store earlier lookups.
+/// <see cref="CompareObservations"/> reuses the same fields for two stored copies.
 /// </summary>
 public static class Form470Diff
 {
@@ -44,6 +45,57 @@ public static class Form470Diff
         return changes;
     }
 
+    /// <summary>
+    /// Compares two copies of published Form 470 rows with the same field and service
+    /// matching as <see cref="Compare"/>. The left list is the earlier copy and the
+    /// right list is the later copy. <c>form_version</c> is not treated as Original
+    /// versus Current; callers split versions when they need that.
+    /// A null row is ignored. A missing string is an empty value, not a placeholder.
+    /// </summary>
+    public static IReadOnlyList<Form470FieldChange> CompareObservations(IEnumerable<UsacRow> before, IEnumerable<UsacRow> after)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+        ArgumentNullException.ThrowIfNull(after);
+        var leftGroups = ObservationGroups(before);
+        var rightGroups = ObservationGroups(after);
+        var changes = new List<Form470FieldChange>();
+        foreach (var application in leftGroups.Keys.Union(rightGroups.Keys, StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal))
+        {
+            leftGroups.TryGetValue(application, out var leftRows);
+            rightGroups.TryGetValue(application, out var rightRows);
+            var left = leftRows ?? [];
+            var right = rightRows ?? [];
+            var ben = Prefer(right, left, row => row.Ben);
+            var name = Prefer(right, left, row => row.Name);
+            changes.AddRange(CompareSides(application, ben, name, left, right));
+        }
+
+        return changes;
+    }
+
+    static Dictionary<string, List<UsacRow>> ObservationGroups(IEnumerable<UsacRow> rows)
+    {
+        var groups = new Dictionary<string, List<UsacRow>>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            if (row is null)
+            {
+                continue;
+            }
+
+            var key = (row.Number ?? "").Trim();
+            if (!groups.TryGetValue(key, out var list))
+            {
+                list = new List<UsacRow>();
+                groups.Add(key, list);
+            }
+
+            list.Add(row);
+        }
+
+        return groups;
+    }
+
     static IEnumerable<Form470FieldChange> CompareApplication(string applicationNumber, List<UsacRow> rows)
     {
         var original = rows.Where(row => row.Version == OriginalVersion).ToList();
@@ -69,48 +121,56 @@ public static class Form470Diff
             yield break;
         }
 
+        foreach (var change in CompareSides(applicationNumber, ben, name, original, current))
+        {
+            yield return change;
+        }
+    }
+
+    static IEnumerable<Form470FieldChange> CompareSides(string applicationNumber, string ben, string name, List<UsacRow> leftRows, List<UsacRow> rightRows)
+    {
         foreach (var field in ApplicationFields)
         {
-            var left = Aggregate(original, field);
-            var right = Aggregate(current, field);
+            var left = Aggregate(leftRows, field);
+            var right = Aggregate(rightRows, field);
             if (!string.Equals(left, right, StringComparison.Ordinal))
             {
                 yield return Change(applicationNumber, ben, name, Changed, ApplicationScope, "", field.Name, left, right);
             }
         }
 
-        var originalServices = ServiceGroups(original);
-        var currentServices = ServiceGroups(current);
-        foreach (var serviceId in originalServices.Keys.Except(currentServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
+        var leftServices = ServiceGroups(leftRows);
+        var rightServices = ServiceGroups(rightRows);
+        foreach (var serviceId in leftServices.Keys.Except(rightServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
         {
-            yield return Change(applicationNumber, ben, name, Removed, ServiceScope, serviceId, "service", ServiceSummary(originalServices[serviceId]), "");
+            yield return Change(applicationNumber, ben, name, Removed, ServiceScope, serviceId, "service", ServiceSummary(leftServices[serviceId]), "");
         }
 
-        foreach (var serviceId in originalServices.Keys.Intersect(currentServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
+        foreach (var serviceId in leftServices.Keys.Intersect(rightServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
         {
-            var leftRows = originalServices[serviceId];
-            var rightRows = currentServices[serviceId];
+            var leftService = leftServices[serviceId];
+            var rightService = rightServices[serviceId];
             foreach (var field in ServiceFields)
             {
-                var left = Aggregate(leftRows, field);
-                var right = Aggregate(rightRows, field);
+                var left = Aggregate(leftService, field);
+                var right = Aggregate(rightService, field);
                 if (!string.Equals(left, right, StringComparison.Ordinal))
                 {
                     yield return Change(applicationNumber, ben, name, Changed, ServiceScope, serviceId, field.Name, left, right);
                 }
             }
 
-            var leftDocuments = RfpDocuments(leftRows);
-            var rightDocuments = RfpDocuments(rightRows);
+            var leftDocuments = RfpDocuments(leftService);
+            var rightDocuments = RfpDocuments(rightService);
             if (!string.Equals(leftDocuments, rightDocuments, StringComparison.Ordinal))
             {
                 yield return Change(applicationNumber, ben, name, Changed, ServiceScope, serviceId, "rfp_documents", leftDocuments, rightDocuments);
             }
         }
 
-        foreach (var serviceId in currentServices.Keys.Except(originalServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
+        foreach (var serviceId in rightServices.Keys.Except(leftServices.Keys, StringComparer.Ordinal).OrderBy(id => id, ServiceIdComparer.Instance))
         {
-            yield return Change(applicationNumber, ben, name, Added, ServiceScope, serviceId, "service", "", ServiceSummary(currentServices[serviceId]));
+            yield return Change(applicationNumber, ben, name, Added, ServiceScope, serviceId, "service", "", ServiceSummary(rightServices[serviceId]));
         }
     }
 
@@ -173,9 +233,9 @@ public static class Form470Diff
         return string.Join(" | ", values);
     }
 
-    static string Normalize(FieldSpec field, string value)
+    static string Normalize(FieldSpec field, string? value)
     {
-        var text = value.Trim();
+        var text = value?.Trim() ?? "";
         if (!field.Checkbox)
         {
             return text;

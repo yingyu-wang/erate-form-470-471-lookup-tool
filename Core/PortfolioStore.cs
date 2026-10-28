@@ -42,7 +42,7 @@ public sealed class PortfolioStore
         using var tx = db.BeginTransaction();
         using var version = Command(db, tx, "PRAGMA user_version");
         var schema = Convert.ToInt32(version.ExecuteScalar(), CultureInfo.InvariantCulture);
-        if (schema > 3)
+        if (schema > 4)
             throw new InvalidOperationException("Saved portfolio data belongs to a newer app. Update the app; the data has not been changed.");
         if (schema == 0)
         {
@@ -93,6 +93,25 @@ public sealed class PortfolioStore
                   sequence INTEGER NOT NULL,
                   observed_utc TEXT NOT NULL);
                 PRAGMA user_version=3;
+                """);
+            migration.ExecuteNonQuery();
+        }
+        if (schema < 4)
+        {
+            // Observed copies of published Form 470 rows. The diff between revisions is derived.
+            using var migration = Command(db, tx, """
+                CREATE TABLE form470_revisions(
+                  application_number TEXT NOT NULL,
+                  sequence INTEGER NOT NULL,
+                  observed_utc TEXT NOT NULL,
+                  query_key TEXT NOT NULL,
+                  ben TEXT NOT NULL,
+                  funding_year INTEGER NOT NULL,
+                  name TEXT NOT NULL,
+                  payload TEXT NOT NULL,
+                  PRIMARY KEY(application_number, sequence));
+                CREATE INDEX form470_revisions_query ON form470_revisions(query_key, application_number);
+                PRAGMA user_version=4;
                 """);
             migration.ExecuteNonQuery();
         }
@@ -306,7 +325,7 @@ public sealed class PortfolioStore
     {
         using var db = Open();
         using var tx = db.BeginTransaction();
-        using var c = Command(db, tx, "UPDATE sequence SET value=value+1,cleared_through=value+1; DELETE FROM snapshots; DELETE FROM change_events; DELETE FROM lookup_outcomes; DELETE FROM frn_snapshots; DELETE FROM frn_observations;");
+        using var c = Command(db, tx, "UPDATE sequence SET value=value+1,cleared_through=value+1; DELETE FROM snapshots; DELETE FROM change_events; DELETE FROM lookup_outcomes; DELETE FROM frn_snapshots; DELETE FROM frn_observations; DELETE FROM form470_revisions;");
         c.ExecuteNonQuery();
         tx.Commit();
     }
@@ -426,6 +445,185 @@ public sealed class PortfolioStore
         using var c = Command(db, null, "UPDATE change_events SET acknowledged_utc=$utc WHERE query_key=$key AND sequence<=$seq AND acknowledged_utc IS NULL AND application LIKE 'FRN %'",
             ("$key", key.Id), ("$seq", throughSequence), ("$utc", clock().ToString("O")));
         c.ExecuteNonQuery();
+    }
+
+    public List<Form470Revision> ReadForm470Revisions(string applicationNumber)
+    {
+        var application = (applicationNumber ?? "").Trim();
+        if (application.Length == 0)
+            return [];
+        using var db = Open();
+        using var c = Command(db, null, """
+            SELECT application_number, ben, name, funding_year, query_key, sequence, observed_utc, payload
+            FROM form470_revisions WHERE application_number=$app ORDER BY sequence, observed_utc
+            """, ("$app", application));
+        using var reader = c.ExecuteReader();
+        var revisions = new List<Form470Revision>();
+        while (reader.Read())
+            revisions.Add(ReadRevision(reader));
+        return revisions;
+    }
+
+    /// <summary>
+    /// Stores one observation of published Form 470 version rows for a BEN and funding year.
+    /// A cached, empty, or unusable result is not stored. Unchanged published rows do not add
+    /// a revision or a portfolio change, but the stored sequence advances. The first stored
+    /// copy is a baseline. A sequence at or below <c>cleared_through</c> was invalidated by
+    /// <see cref="ClearHistory"/> and is rejected.
+    /// </summary>
+    public bool SaveForm470Revisions(LookupKey key, long sequence, QueryResult<List<UsacRow>> result, CancellationToken ct = default)
+    {
+        key.Validate();
+        if (key.Form != FilingForm.Form470)
+            throw new ArgumentException("Form 470 revisions are stored on a Form 470 lookup.");
+        if (result.FromCache || result.Data is null || result.Data.Count == 0)
+            return false;
+        var incoming = GroupForm470Rows(key, result.Data);
+        if (incoming.Count == 0)
+            return false;
+        using var db = Open();
+        using var tx = db.BeginTransaction();
+        using var watermark = Command(db, tx, "SELECT cleared_through FROM sequence");
+        if (sequence <= Convert.ToInt64(watermark.ExecuteScalar(), CultureInfo.InvariantCulture))
+            return false;
+        var observed = result.FetchedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var eligible = 0;
+        var blocked = 0;
+        foreach (var (application, rows) in incoming)
+        {
+            ct.ThrowIfCancellationRequested();
+            seen.Add(application);
+            if (IsOlderForm470Sequence(db, tx, application, sequence))
+            {
+                blocked++;
+                continue;
+            }
+            eligible++;
+            WriteForm470Revision(db, tx, key, sequence, observed, application, rows);
+        }
+        // Absence counts only inside a non-empty result. An empty or incomplete
+        // response returns above and must not become "no longer returned".
+        foreach (var application in ApplicationsForQuery(db, tx, key.Id))
+        {
+            if (seen.Contains(application))
+                continue;
+            ct.ThrowIfCancellationRequested();
+            var latest = ReadLatestForm470(db, tx, application);
+            if (latest is null || latest.QueryKey != key.Id)
+                continue;
+            if (latest.Sequence >= sequence)
+            {
+                blocked++;
+                continue;
+            }
+            eligible++;
+            WriteForm470Revision(db, tx, key, sequence, observed, application, []);
+        }
+        if (eligible == 0 && blocked > 0)
+            return false;
+        using var cleanup = Command(db, tx, "DELETE FROM change_events WHERE acknowledged_utc IS NOT NULL AND acknowledged_utc < $cutoff", ("$cutoff", clock().AddDays(-90).ToString("O")));
+        cleanup.ExecuteNonQuery();
+        ct.ThrowIfCancellationRequested();
+        tx.Commit();
+        return true;
+    }
+
+    static Dictionary<string, List<UsacRow>> GroupForm470Rows(LookupKey key, IEnumerable<UsacRow> rows)
+    {
+        var grouped = new Dictionary<string, List<UsacRow>>(StringComparer.Ordinal);
+        foreach (var row in rows)
+        {
+            if (row is null)
+                continue;
+            if (!string.IsNullOrWhiteSpace(row.Ben) && !string.Equals(row.Ben.Trim(), key.Ben, StringComparison.Ordinal))
+                throw new InvalidOperationException("The returned Form 470 rows do not match the requested BEN.");
+            var application = (row.Number ?? "").Trim();
+            if (application.Length == 0)
+                continue;
+            if (!grouped.TryGetValue(application, out var list))
+            {
+                list = new List<UsacRow>();
+                grouped.Add(application, list);
+            }
+            list.Add(row);
+        }
+        return grouped;
+    }
+
+    static bool IsOlderForm470Sequence(SqliteConnection db, SqliteTransaction tx, string application, long sequence)
+    {
+        var latest = ReadLatestForm470(db, tx, application);
+        return latest is not null && sequence <= latest.Sequence;
+    }
+
+    void WriteForm470Revision(SqliteConnection db, SqliteTransaction tx, LookupKey key, long sequence, string observed, string application, List<UsacRow> rows)
+    {
+        var latest = ReadLatestForm470(db, tx, application);
+        if (latest is not null && sequence <= latest.Sequence)
+            return;
+        if (latest is not null && Form470Revisions.Differences(latest.Rows, rows).Count == 0)
+        {
+            using var advance = Command(db, tx, "UPDATE form470_revisions SET sequence=$seq WHERE application_number=$app AND sequence=$old",
+                ("$seq", sequence), ("$app", application), ("$old", latest.Sequence));
+            if (advance.ExecuteNonQuery() != 1)
+                throw new InvalidOperationException("The stored Form 470 revision sequence could not be advanced.");
+            return;
+        }
+        if (latest is null && rows.Count == 0)
+            return;
+        var name = rows.Select(row => row.Name).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? latest?.Name ?? "";
+        using var insert = Command(db, tx, """
+            INSERT INTO form470_revisions(application_number, sequence, observed_utc, query_key, ben, funding_year, name, payload)
+            VALUES($app,$seq,$utc,$key,$ben,$year,$name,$payload)
+            """,
+            ("$app", application), ("$seq", sequence), ("$utc", observed), ("$key", key.Id), ("$ben", key.Ben),
+            ("$year", key.Year), ("$name", name), ("$payload", JsonSerializer.Serialize(rows, Json)));
+        insert.ExecuteNonQuery();
+        if (latest is null)
+            return;
+        foreach (var difference in Form470Revisions.Differences(latest.Rows, rows))
+        {
+            var payload = new FilingChange(Form470Revisions.EventApplication(application), Form470Revisions.ChangeKind(difference), difference.Before, difference.After);
+            using var add = Command(db, tx, "INSERT INTO change_events(query_key,sequence,application,observed_utc,payload) VALUES($key,$seq,$app,$utc,$data)",
+                ("$key", key.Id), ("$seq", sequence), ("$app", Form470Revisions.EventKey(application, difference)),
+                ("$utc", observed), ("$data", JsonSerializer.Serialize(payload, Json)));
+            add.ExecuteNonQuery();
+        }
+    }
+
+    static List<string> ApplicationsForQuery(SqliteConnection db, SqliteTransaction tx, string queryKey)
+    {
+        using var c = Command(db, tx, "SELECT DISTINCT application_number FROM form470_revisions WHERE query_key=$key ORDER BY application_number", ("$key", queryKey));
+        using var reader = c.ExecuteReader();
+        var applications = new List<string>();
+        while (reader.Read())
+            applications.Add(reader.GetString(0));
+        return applications;
+    }
+
+    static Form470Revision? ReadLatestForm470(SqliteConnection db, SqliteTransaction? tx, string application)
+    {
+        using var c = Command(db, tx, """
+            SELECT application_number, ben, name, funding_year, query_key, sequence, observed_utc, payload
+            FROM form470_revisions WHERE application_number=$app ORDER BY sequence DESC LIMIT 1
+            """, ("$app", application));
+        using var reader = c.ExecuteReader();
+        return reader.Read() ? ReadRevision(reader) : null;
+    }
+
+    static Form470Revision ReadRevision(SqliteDataReader reader)
+    {
+        var rows = JsonSerializer.Deserialize<List<UsacRow>>(reader.GetString(7), Json) ?? [];
+        return new Form470Revision(
+            reader.GetString(0),
+            reader.GetString(1),
+            reader.GetString(2),
+            reader.GetInt32(3),
+            reader.GetString(4),
+            reader.GetInt64(5),
+            DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture),
+            rows);
     }
 }
 

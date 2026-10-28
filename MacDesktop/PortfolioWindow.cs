@@ -16,7 +16,7 @@ public sealed class PortfolioWindow : Window
     readonly ListBox entries = new() { Width = 260, Height = 110 };
     readonly TextBox listName = Field("List name", 150), ben = Field("BEN", 100), name = Field("Display name", 180), tags = Field("Tags", 160);
     readonly TextBox years = Field("Years, comma separated", 180), keyword = Field("Keyword", 180), service = Field("Service contains", 180);
-    readonly CheckBox changes = new() { Content = "Changes only", Name = "Changes only, including FRN status and reported committed amount" };
+    readonly CheckBox changes = new() { Content = "Changes only", Name = "Changes only, including Form 470 revision differences, FRN status, and reported committed amount" };
     readonly StackPanel results = new() { Spacing = 8 };
     readonly TextBlock status = Text("Save BENs, choose years/forms, then refresh. Open saved works offline."), counts = Text("");
     readonly List<Control> gated = [];
@@ -84,6 +84,13 @@ public sealed class PortfolioWindow : Window
             {
                 var link = new Button { Content = "Open application PDF" }; link.Click += async (_, _) => await Run(() => { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); return Task.CompletedTask; }); results.Children.Add(link);
             }
+            if (r.Query.Form == FilingForm.Form470 && !string.IsNullOrWhiteSpace(r.Filing?.Number))
+            {
+                var row = r;
+                var history = new Button { Content = "Form 470 revisions" };
+                history.Click += async (_, _) => await Run(() => ShowText(session.Form470RevisionText(row), "Form 470 revisions"));
+                results.Children.Add(history);
+            }
         }
         UpdateCounts();
     }
@@ -94,9 +101,9 @@ public sealed class PortfolioWindow : Window
         var content = new StackPanel { Margin = new(18), Spacing = 10 }; content.Children.Add(Text(message)); var yes = new Button { Content = "Continue" }; var no = new Button { Content = "Cancel" }; content.Children.Add(Row(yes, no)); dialog.Content = content;
         yes.Click += (_, _) => dialog.Close(true); no.Click += (_, _) => dialog.Close(false); return await dialog.ShowDialog<bool>(this);
     }
-    async Task ShowText(string message)
+    async Task ShowText(string message, string title = "District history / summary")
     {
-        var dialog = new Window { Title = "District history / summary", Width = 760, Height = 600, WindowStartupLocation = WindowStartupLocation.CenterOwner }; dialog.Content = new ScrollViewer { Content = Text(message), Margin = new(18) }; await dialog.ShowDialog(this);
+        var dialog = new Window { Title = title, Width = 760, Height = 600, WindowStartupLocation = WindowStartupLocation.CenterOwner }; dialog.Content = new ScrollViewer { Content = Text(message), Margin = new(18) }; await dialog.ShowDialog(this);
     }
     async Task ImportAsync()
     {

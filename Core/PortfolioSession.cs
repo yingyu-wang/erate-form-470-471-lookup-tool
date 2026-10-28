@@ -45,7 +45,7 @@ public sealed class PortfolioSession
         get;
     }
     public List<PortfolioRow> Rows { get; private set; } = [];
-    public const string ClearHistoryPrompt = "Delete all saved filing and FRN snapshots? Watchlists are retained.";
+    public const string ClearHistoryPrompt = "Delete all saved filing, FRN, and Form 470 revision snapshots? Watchlists are retained.";
     public HashSet<string> Selected { get; } = [];
     readonly Dictionary<LookupKey, long> displayedSequences = [];
     readonly Dictionary<string, long> displayedFrnSequences = [];
@@ -106,6 +106,7 @@ public sealed class PortfolioSession
                 Rows.AddRange(ToRows(saved, "Saved / offline"));
         }
         ApplyFrnAnnotations();
+        ApplyForm470Annotations();
     }
     public async Task RefreshAsync(IReadOnlyList<LookupKey> queries, IProgress<string>? progress, CancellationToken ct)
     {
@@ -115,6 +116,7 @@ public sealed class PortfolioSession
         displayedFrnSequences.Clear();
         var frnAttempted = new HashSet<string>(StringComparer.Ordinal);
         var frnNotes = new List<(string Ben, int Year, string Note)>();
+        var revisionNotes = new List<(LookupKey Query, string Note)>();
         var completed = 0;
         foreach (var query in queries)
         {
@@ -159,6 +161,23 @@ public sealed class PortfolioSession
                 Rows.Add(new(query, null, null, "Failed", "", ex.Message + " Previous saved results retained."));
                 refreshFrn = true;
             }
+            if (query.Form == FilingForm.Form470 && refreshFrn)
+            {
+                try
+                {
+                    var versions = await client.GetForm470VersionRowsAsync(query.Ben, null, query.Year, null, true, ct);
+                    ct.ThrowIfCancellationRequested();
+                    Store.SaveForm470Revisions(query, seq, versions, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    revisionNotes.Add((query, Form470Revisions.RefreshCanceledNote));
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidOperationException)
+                {
+                    revisionNotes.Add((query, Form470Revisions.RefreshFailedNote + " " + ex.Message));
+                }
+            }
             if (refreshFrn && frnAttempted.Add(query.Ben + "/" + query.Year.ToString(CultureInfo.InvariantCulture)))
             {
                 try
@@ -185,14 +204,17 @@ public sealed class PortfolioSession
                 catch (OperationCanceledException) { }
         }
         ApplyFrnAnnotations();
+        ApplyForm470Annotations();
         foreach (var (ben, year, note) in frnNotes)
             AppendNote(ben, year, note);
+        foreach (var (query, note) in revisionNotes)
+            AppendQueryNote(query, note);
         progress?.Report($"Finished: {completed}/{queries.Count} queries attempted. {Rows.Count(r => r.Outcome == "Failed")} failed. Select results to export; use Open saved for prior data.");
     }
     IEnumerable<PortfolioRow> ToRows(SavedLookup saved, string origin)
     {
         displayedSequences[saved.Key] = saved.Sequence;
-        var unread = Store.UnreadChanges(saved.Key).Where(e => !IsFrnChange(e.Change)).GroupBy(e => e.Change.Application).Select(g => g.Last().Change).ToList();
+        var unread = Store.UnreadChanges(saved.Key).Where(e => !IsFrnChange(e.Change) && !Form470Revisions.IsChange(e.Change)).GroupBy(e => e.Change.Application).Select(g => g.Last().Change).ToList();
         var note = $"{origin}; observed {saved.ObservedAt.LocalDateTime:g}." + (saved.FirstObservation ? " First observation; comparison starts on the next live refresh." : "");
         if (saved.Filings.Count == 0)
             yield return new(saved.Key, null, saved.ObservedAt, "SuccessEmpty", "", note + " No certified filings found in this published query.");
@@ -202,6 +224,54 @@ public sealed class PortfolioSession
             yield return new(saved.Key, new Filing(missing.Application, saved.Key.Ben, "", "", "", "", "", "Unknown"), saved.ObservedAt, "Not returned", missing.Kind, note + " This does not establish withdrawal or denial.");
     }
     static bool IsFrnChange(FilingChange change) => change.Application.StartsWith("FRN ", StringComparison.Ordinal);
+    void AppendQueryNote(LookupKey query, string message)
+    {
+        for (var i = 0; i < Rows.Count; i++)
+        {
+            if (Rows[i].Query == query && !Rows[i].Note.Contains(message, StringComparison.Ordinal))
+                Rows[i] = Rows[i] with
+                {
+                    Note = Rows[i].Note + " " + message
+                };
+        }
+    }
+    void ApplyForm470Annotations()
+    {
+        for (var i = 0; i < Rows.Count; i++)
+        {
+            var row = Rows[i];
+            if (row.Query.Form != FilingForm.Form470 || string.IsNullOrWhiteSpace(row.Filing?.Number))
+                continue;
+            var revisions = Store.ReadForm470Revisions(row.Filing.Number);
+            if (revisions.Count == 0)
+                continue;
+            var note = row.Note;
+            var marker = Form470Revisions.PortfolioNote(revisions.Count);
+            if (!note.Contains("[Derived]", StringComparison.Ordinal) || !note.Contains("locally observed Form 470 revision", StringComparison.Ordinal))
+                note += " " + marker;
+            var unread = Store.UnreadChanges(row.Query).Where(item => Form470Revisions.IsChange(item.Change) && item.Change.Application == Form470Revisions.EventApplication(row.Filing.Number)).ToList();
+            var change = row.Change;
+            foreach (var kind in unread.Select(item => item.Change.Kind).Distinct(StringComparer.Ordinal))
+                change = MergeChange(change, kind);
+            if (unread.Count > 0)
+            {
+                var newest = unread.Max(item => item.Sequence);
+                displayedSequences[row.Query] = Math.Max(displayedSequences.GetValueOrDefault(row.Query), newest);
+            }
+            if (change != row.Change || note != row.Note)
+                Rows[i] = row with
+                {
+                    Change = change,
+                    Note = note
+                };
+        }
+    }
+    public string Form470RevisionText(PortfolioRow row)
+    {
+        if (row.Query.Form != FilingForm.Form470 || string.IsNullOrWhiteSpace(row.Filing?.Number))
+            return "Select a saved Form 470 application to see locally observed revisions.";
+        return Form470Revisions.ViewText(row.Filing.Number, Store.ReadForm470Revisions(row.Filing.Number), row.Filing.Nickname);
+    }
     static string MergeChange(string existing, string kind)
     {
         if (existing.Length == 0)
@@ -303,9 +373,19 @@ public sealed class PortfolioSession
     public string ChangeHistory()
     {
         var lines = new List<string>();
+        var revisionLines = new List<string>();
         foreach (var (key, sequence) in displayedSequences)
-            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence && !IsFrnChange(e.Change)))
+        {
+            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence && !IsFrnChange(e.Change) && !Form470Revisions.IsChange(e.Change)))
                 lines.Add($"BEN {key.Ben} · FY{key.Year} · Form {(int)key.Form} · {item.Change.Application}\n{item.Change.Kind} · observed {item.ObservedAt.LocalDateTime:g}\nBefore: {item.Change.Before}\nAfter: {item.Change.After}\n");
+            foreach (var item in Store.UnreadChanges(key).Where(e => e.Sequence <= sequence && Form470Revisions.IsChange(e.Change)))
+                revisionLines.Add($"BEN {key.Ben} · FY{key.Year} · Form {(int)key.Form} · {item.Change.Application}\n{item.Change.Kind} · observed {item.ObservedAt.LocalDateTime:g}\nBefore: {item.Change.Before}\nAfter: {item.Change.After}\n");
+        }
+        if (revisionLines.Count > 0)
+        {
+            lines.Add(Form470Revisions.Disclaimer + "\n");
+            lines.AddRange(revisionLines);
+        }
         var frnLines = new List<string>();
         foreach (var (id, sequence) in displayedFrnSequences)
         {
