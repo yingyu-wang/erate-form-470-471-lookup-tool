@@ -31,25 +31,17 @@ jobs:
         run: |
           set -euo pipefail
           packages="xvfb xauth libx11-6 libice6 libsm6 libfontconfig1 fonts-dejavu-core xdg-utils desktop-file-utils"
-          # ubuntu-24.04 runners list azure.archive.ubuntu.com first in
-          # /etc/apt/apt-mirrors.txt. On 2026-11-11 that name did not resolve,
-          # apt exited 100 fetching desktop-file-utils, and the job stopped
-          # before the tests. Drop that line so the next mirror is used.
-          drop_azure_mirror() {
-            if [ -f /etc/apt/apt-mirrors.txt ] && grep -q 'azure\.archive\.ubuntu\.com' /etc/apt/apt-mirrors.txt; then
-              sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
-            fi
-          }
-          if ! getent hosts azure.archive.ubuntu.com >/dev/null 2>&1; then
-            echo "azure.archive.ubuntu.com does not resolve; using the next Ubuntu mirror" >&2
-            drop_azure_mirror
+          # ubuntu-24.04 lists azure.archive.ubuntu.com first. On 2026-11-11
+          # that name did not resolve, apt exited 100 fetching
+          # desktop-file-utils, and the job stopped before the tests. Apt
+          # also keeps a slow Azure mirror instead of moving on. Drop it
+          # when another archive is listed.
+          mirrors=/etc/apt/apt-mirrors.txt
+          if [ -f "$mirrors" ] && grep -q 'azure\.archive\.ubuntu\.com' "$mirrors" && grep -E 'https?://' "$mirrors" | grep -vq 'azure\.archive\.ubuntu\.com'; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' "$mirrors"
           fi
-          if ! sudo apt-get update || ! sudo apt-get install -y $packages; then
-            echo "apt failed; dropping azure.archive.ubuntu.com and retrying" >&2
-            drop_azure_mirror
-            sudo apt-get update
-            sudo apt-get install -y $packages
-          fi
+          sudo apt-get update
+          sudo apt-get install -y $packages
       - name: Shared offline tests
         run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
       - name: Build self-contained package
