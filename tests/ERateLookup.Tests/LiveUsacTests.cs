@@ -119,6 +119,7 @@ public class LiveUsacTests
             using var live = new UsacClient(http, Path.Combine(directory, "live"));
             Form470FieldChange? difference = null;
             var notes = new List<string>();
+            var omittedNotes = 0;
             var sawPair = false;
             for (var offset = 0; difference is null; offset += PairPageSize)
             {
@@ -136,7 +137,9 @@ public class LiveUsacTests
                     }
 
                     if (notes.Count < 30)
-                        notes.Add(pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + " BEN " + pair.Ben + ": " + detail);
+                        notes.Add("number=" + pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + " BEN " + pair.Ben + ": " + detail);
+                    else
+                        omittedNotes++;
                 }
 
                 if (pairs.Count < PairPageSize)
@@ -146,7 +149,12 @@ public class LiveUsacTests
             if (!sawPair)
                 Assert.Fail("USAC dataset jt8s-3q52 published no application with both Original and Current form_version rows.");
             if (difference is null)
-                Assert.Fail("Paired Original and Current rows did not differ in any compared field other than last_modified_date_time. " + string.Join("; ", notes));
+            {
+                var listed = notes.Count == 0 ? "(no candidate rows)" : string.Join("; ", notes);
+                if (omittedNotes > 0)
+                    listed += "; " + omittedNotes.ToString(CultureInfo.InvariantCulture) + " more candidates omitted";
+                Assert.Fail("Paired Original and Current rows did not differ in any compared field other than last_modified_date_time. " + listed);
+            }
 
             Assert.False(string.IsNullOrWhiteSpace(difference.Field));
             Assert.NotEqual("last_modified_date_time", difference.Field);
@@ -210,14 +218,14 @@ public class LiveUsacTests
         if (diff.Any(row => row.Change == Form470Diff.VersionGap || row.Change == Form470Diff.Unexpected))
         {
             change = null;
-            detail = "skipped " + DescribeDiff(diff);
+            detail = "skipped " + DescribeRows(rows) + "; " + DescribeDiff(diff);
             return false;
         }
 
         change = diff.FirstOrDefault(row =>
             row.Field != "last_modified_date_time"
             && (row.Change == Form470Diff.Added || row.Change == Form470Diff.Removed || row.Change == Form470Diff.Changed));
-        detail = DescribeDiff(diff);
+        detail = DescribeRows(rows) + "; " + DescribeDiff(diff);
         return change is not null;
     }
 
