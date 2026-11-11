@@ -295,7 +295,7 @@ dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143618 --fy 
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --frn 2699003124 --xlsx --output frn.xlsx
 
 # Form 470 diff workbook. One sheet, same columns as the diff CSV.
-dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff --xlsx --output diff.xlsx
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 129370 --fy 2027 --app 270002521 --diff --xlsx --output diff.xlsx
 
 # Same FRN, also constrained to an application number
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 471 --ben 143618 --fy 2026 --app 261003372 --frn 2699003124
@@ -456,7 +456,7 @@ ordinary Form 470 or Form 471 lookup. `--diff` writes a table, CSV, JSON, or
 Excel. `--xlsx` and `--excel` require `--output`.
 
 ```sh
-dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 16057656 --fy 2027 --app 270000266 --diff
+dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 129370 --fy 2027 --app 270002521 --diff
 ```
 
 The version-row read uses the same `count(*)` pre-check, 50,000-row cap, and
@@ -481,6 +481,32 @@ When only one of Original or Current is present, the result is a `VersionGap`
 for `form_version`. Those service lines are not reported as added or removed.
 On 2026-10-19, application `270000594` had Current rows and no Original rows.
 Application `270000266` had both versions.
+
+Checked again on 2026-11-11, after the nightly live test failed every night
+from 2026-11-06. The same commit passed on 2026-11-05. Application `270000266`
+no longer publishes an Original row. This query returns two Current rows for
+BEN `16057656` (KIPP CHICAGO SCHOOLS), funding year 2027, status Certified,
+allowable contract date `2026-10-06T00:00:00.000`, last modified
+`2026-09-08T14:55:52.000`, service requests 1 and 2:
+
+https://opendata.usac.org/resource/jt8s-3q52.json?$select=application_number,form_version,billed_entity_number,billed_entity_name,funding_year,fcc_form_470_status,allowable_contract_date,last_modified_date_time,service_request_id&$where=application_number=%27270000266%27&$order=form_version,service_request_id
+
+`form_version` is still the text values `Original` and `Current`. A grouped
+count that day was 1,026,798 Original rows and 593,470 Current rows. The
+dataset view `viewLastModified` is 2026-10-27, so the column was not renamed.
+Application `270000194` is now one Current row with status Canceled. A
+dataset-wide group on `application_number` found exactly three applications
+that still carry both versions, all FY2027 filings for BEN `129370`
+(East Liverpool City Schools): `270002460`, `270002520`, and `270002521`. On `270002521`, Original and Current service request 1 differ
+by `last_modified_date_time` (`2026-10-23T08:58:57.000` to
+`2026-11-10T08:06:01.000`), `rfp_identifier` (`false` to `true`),
+`service_request_rfp_attachment` (`0` to `1`), and `rfp_documents` (Current
+includes `https://publicdata.usac.org/EPC/Prd/Form470/270002521/129370/22912690-East_Liverpool_Network_and_UPS_Vendor_Reference.pdf`).
+`--diff` on that application reports those field changes. The example above
+uses that application. The live test pages through applications that
+currently publish both versions. A candidate that no longer has both, or
+that differs only by `last_modified_date_time`, is skipped. The test passes
+when a later candidate still has a compared field change.
 
 The command does not store a local history of intermediate revisions. Open
 Data publishes Original and Current, not every edit between them. It does not
