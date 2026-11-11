@@ -30,18 +30,32 @@ jobs:
       - name: Install GUI launch-check dependencies
         run: |
           set -euo pipefail
-          packages="xvfb xauth libx11-6 libice6 libsm6 libfontconfig1 fonts-dejavu-core xdg-utils desktop-file-utils"
-          # ubuntu-24.04 lists azure.archive.ubuntu.com first. On 2026-11-11
-          # that name did not resolve, apt exited 100 fetching
-          # desktop-file-utils, and the job stopped before the tests. Apt
-          # also keeps a slow Azure mirror instead of moving on. Drop it
-          # when another archive is listed.
-          mirrors=/etc/apt/apt-mirrors.txt
-          if [ -f "$mirrors" ] && grep -q 'azure\.archive\.ubuntu\.com' "$mirrors" && grep -E 'https?://' "$mirrors" | grep -vq 'azure\.archive\.ubuntu\.com'; then
-            sudo sed -i '/azure\.archive\.ubuntu\.com/d' "$mirrors"
+          # ubuntu-24.04 lists azure.archive.ubuntu.com first, then
+          # archive.ubuntu.com. On 2026-11-11 neither name resolved, apt
+          # exited 100 fetching desktop-file-utils, and the job stopped
+          # before the tests. The launch libraries are already on the image.
+          # Install only what is missing, and do not fail the job when the
+          # archive is unreachable but xvfb is already present.
+          have_gui() {
+            command -v xvfb-run >/dev/null && command -v xauth >/dev/null && command -v xdg-open >/dev/null && ldconfig -p | grep -q 'libfontconfig\.so'
+          }
+          drop_azure_mirror() {
+            mirrors=/etc/apt/apt-mirrors.txt
+            if [ -f "$mirrors" ] && grep -q 'azure\.archive\.ubuntu\.com' "$mirrors" && grep -E 'https?://' "$mirrors" | grep -vq 'azure\.archive\.ubuntu\.com'; then
+              sudo sed -i '/azure\.archive\.ubuntu\.com/d' "$mirrors"
+            fi
+          }
+          if ! have_gui; then
+            drop_azure_mirror
+            sudo apt-get update
+            sudo apt-get install -y xvfb xauth libx11-6 libice6 libsm6 libfontconfig1 fonts-dejavu-core xdg-utils
           fi
-          sudo apt-get update
-          sudo apt-get install -y $packages
+          if ! command -v desktop-file-validate >/dev/null; then
+            drop_azure_mirror
+            if ! timeout 40 sudo apt-get update || ! timeout 40 sudo apt-get install -y desktop-file-utils; then
+              echo "desktop-file-validate was not installed; the launcher check will read the desktop file directly" >&2
+            fi
+          fi
       - name: Shared offline tests
         run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter Category!=Live
       - name: Build self-contained package
@@ -61,7 +75,39 @@ jobs:
           mkdir -p "$PWD/smoke-data"
           export XDG_DATA_HOME="$PWD/smoke-data"
           python3 "$app/install-shortcut.py"
-          desktop-file-validate "$XDG_DATA_HOME/applications/org.eratelookup.desktop.desktop"
+          desktop_file="$XDG_DATA_HOME/applications/org.eratelookup.desktop.desktop"
+          if command -v desktop-file-validate >/dev/null; then
+            desktop-file-validate "$desktop_file"
+          else
+            python3 - "$desktop_file" <<'PY'
+          import sys
+          from pathlib import Path
+          text = Path(sys.argv[1]).read_text(encoding="utf-8")
+          if not text.startswith("[Desktop Entry]\n") or "\x00" in text:
+              raise SystemExit("desktop file is not a Desktop Entry")
+          fields = {}
+          for line in text.splitlines():
+              if line == "" or line.startswith("#") or line.startswith("["):
+                  continue
+              if "=" not in line:
+                  raise SystemExit("desktop line has no '=': " + line)
+              key, value = line.split("=", 1)
+              if key in fields:
+                  raise SystemExit("duplicate desktop key " + key)
+              fields[key] = value
+          for key in ("Type", "Name", "Exec", "Icon", "Terminal", "Categories"):
+              if not fields.get(key, "").strip():
+                  raise SystemExit("desktop file is missing " + key)
+          if fields["Type"] != "Application":
+              raise SystemExit("desktop Type must be Application")
+          if fields["Terminal"] not in ("true", "false"):
+              raise SystemExit("desktop Terminal must be true or false")
+          if not fields["Exec"].startswith("/usr/bin/env"):
+              raise SystemExit("desktop Exec must launch through /usr/bin/env")
+          if "ERateLookup" not in fields["Exec"] or "ERateLookup" not in fields["Icon"]:
+              raise SystemExit("desktop file does not point at ERateLookup")
+          PY
+          fi
           timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-test
           timeout 30s xvfb-run -a "$app/ERateLookup" --smoke-portfolio
           # Portfolio data is optional: rejected or unreadable stores must not block lookup startup.
