@@ -67,46 +67,86 @@ public class LiveUsacTests
         Assert.False(string.IsNullOrWhiteSpace(row.GetProperty("total_authorized_disbursement").GetString()));
     }
 
+    [Fact]
+    public void SubstantiveForm470PairIsChosenAfterEarlierCandidates()
+    {
+        var candidates = new List<(string Number, UsacRow[] Rows)>();
+        for (var index = 1; index <= 11; index++)
+        {
+            var number = index.ToString(CultureInfo.InvariantCulture);
+            candidates.Add(index % 2 == 0
+                ? (number, [VersionRow(number, Form470Diff.CurrentVersion, "2026-02-01T00:00:00.000", "false")])
+                : (number,
+                [
+                    VersionRow(number, Form470Diff.OriginalVersion, "2026-01-01T00:00:00.000", "false"),
+                    VersionRow(number, Form470Diff.CurrentVersion, "2026-02-01T00:00:00.000", "false")
+                ]));
+        }
+
+        candidates.Add(("12",
+        [
+            VersionRow("12", Form470Diff.OriginalVersion, "2026-01-01T00:00:00.000", "false"),
+            VersionRow("12", Form470Diff.CurrentVersion, "2026-02-01T00:00:00.000", "true")
+        ]));
+
+        Form470FieldChange? difference = null;
+        foreach (var candidate in candidates)
+        {
+            if (TrySelectSubstantiveChange(candidate.Number, candidate.Rows, out var change, out _))
+            {
+                difference = change;
+                break;
+            }
+        }
+
+        Assert.NotNull(difference);
+        Assert.Equal("12", difference.ApplicationNumber);
+        Assert.Equal("rfp_identifier", difference.Field);
+        Assert.Equal("false", difference.Original);
+        Assert.Equal("true", difference.Current);
+    }
+
     [LiveUsacFact]
     [Trait("Category", "Live")]
     public async Task PublishedForm470OriginalAndCurrentRowsStillDiff()
     {
         // Application 270000266 published both versions through 2026-11-05 and only
-        // Current rows after that. Search for an application that still has both.
+        // Current rows after that. Page through applications that still have both.
         var directory = Path.Combine(Path.GetTempPath(), "ERateLive-" + Guid.NewGuid());
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
-            var pairs = await FindPairedForm470ApplicationsAsync(http);
-            Assert.True(pairs.Count > 0, "USAC dataset jt8s-3q52 published no application with both Original and Current form_version rows.");
             using var live = new UsacClient(http, Path.Combine(directory, "live"));
             Form470FieldChange? difference = null;
             var notes = new List<string>();
-            foreach (var pair in pairs)
+            var sawPair = false;
+            for (var offset = 0; difference is null; offset += PairPageSize)
             {
-                var versions = await live.GetForm470VersionRowsAsync(pair.Ben, null, pair.Year, pair.Number, true, default);
-                var described = DescribeRows(versions.Data);
-                Assert.True(
-                    versions.Data.Any(row => row.Number == pair.Number && row.Version == Form470Diff.OriginalVersion),
-                    "Missing Original for " + pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + ". Rows: " + described);
-                Assert.True(
-                    versions.Data.Any(row => row.Number == pair.Number && row.Version == Form470Diff.CurrentVersion),
-                    "Missing Current for " + pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + ". Rows: " + described);
-                Assert.All(versions.Data, row => Assert.Equal(pair.Number, row.Number));
-                var diff = Form470Diff.Compare(versions.Data);
-                Assert.DoesNotContain(diff, change => change.Change == Form470Diff.VersionGap || change.Change == Form470Diff.Unexpected);
-                var substantive = diff.FirstOrDefault(change =>
-                    change.Field != "last_modified_date_time"
-                    && (change.Change == Form470Diff.Added || change.Change == Form470Diff.Removed || change.Change == Form470Diff.Changed));
-                notes.Add(pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + " BEN " + pair.Ben + ": " + DescribeDiff(diff));
-                if (substantive is not null && difference is null)
-                    difference = substantive;
+                var pairs = await FindPairedForm470ApplicationsAsync(http, offset);
+                if (pairs.Count == 0)
+                    break;
+                sawPair = true;
+                foreach (var pair in pairs)
+                {
+                    var versions = await live.GetForm470VersionRowsAsync(pair.Ben, null, pair.Year, pair.Number, true, default);
+                    if (TrySelectSubstantiveChange(pair.Number, versions.Data, out var change, out var detail))
+                    {
+                        difference = change;
+                        break;
+                    }
+
+                    if (notes.Count < 30)
+                        notes.Add(pair.Number + " FY" + pair.Year.ToString(CultureInfo.InvariantCulture) + " BEN " + pair.Ben + ": " + detail);
+                }
+
+                if (pairs.Count < PairPageSize)
+                    break;
             }
 
+            if (!sawPair)
+                Assert.Fail("USAC dataset jt8s-3q52 published no application with both Original and Current form_version rows.");
             if (difference is null)
-            {
                 Assert.Fail("Paired Original and Current rows did not differ in any compared field other than last_modified_date_time. " + string.Join("; ", notes));
-            }
 
             Assert.False(string.IsNullOrWhiteSpace(difference.Field));
             Assert.NotEqual("last_modified_date_time", difference.Field);
@@ -121,17 +161,20 @@ public class LiveUsacTests
         }
     }
 
+    const int PairPageSize = 100;
+
     sealed record PairedForm470(string Number, string Ben, int Year);
 
-    static async Task<List<PairedForm470>> FindPairedForm470ApplicationsAsync(HttpClient http)
+    static async Task<List<PairedForm470>> FindPairedForm470ApplicationsAsync(HttpClient http, int offset)
     {
         var parameters = new Dictionary<string, string>
         {
             ["$select"] = "application_number,billed_entity_number,funding_year",
             ["$group"] = "application_number,billed_entity_number,funding_year",
             ["$having"] = "count(distinct form_version) > 1",
-            ["$order"] = "funding_year,application_number",
-            ["$limit"] = "10"
+            ["$order"] = "funding_year,application_number,billed_entity_number",
+            ["$limit"] = PairPageSize.ToString(CultureInfo.InvariantCulture),
+            ["$offset"] = offset.ToString(CultureInfo.InvariantCulture)
         };
         var url = UsacClient.Endpoint + "?" + UsacClient.EncodeQuery(parameters);
         using var response = await http.GetAsync(url);
@@ -150,6 +193,51 @@ public class LiveUsacTests
 
         return pairs;
     }
+
+    static bool TrySelectSubstantiveChange(string applicationNumber, IReadOnlyList<UsacRow> rows, out Form470FieldChange? change, out string detail)
+    {
+        var hasOriginal = rows.Any(row => row.Number == applicationNumber && row.Version == Form470Diff.OriginalVersion);
+        var hasCurrent = rows.Any(row => row.Number == applicationNumber && row.Version == Form470Diff.CurrentVersion);
+        var sameApplication = rows.Count > 0 && rows.All(row => row.Number == applicationNumber);
+        if (!hasOriginal || !hasCurrent || !sameApplication)
+        {
+            change = null;
+            detail = "skipped " + DescribeRows(rows);
+            return false;
+        }
+
+        var diff = Form470Diff.Compare(rows);
+        if (diff.Any(row => row.Change == Form470Diff.VersionGap || row.Change == Form470Diff.Unexpected))
+        {
+            change = null;
+            detail = "skipped " + DescribeDiff(diff);
+            return false;
+        }
+
+        change = diff.FirstOrDefault(row =>
+            row.Field != "last_modified_date_time"
+            && (row.Change == Form470Diff.Added || row.Change == Form470Diff.Removed || row.Change == Form470Diff.Changed));
+        detail = DescribeDiff(diff);
+        return change is not null;
+    }
+
+    static UsacRow VersionRow(string number, string version, string modified, string rfpIdentifier) => new()
+    {
+        Number = number,
+        Ben = "1",
+        Name = "Example",
+        Version = version,
+        Modified = modified,
+        Certified = "2026-01-01T00:00:00.000",
+        Status470 = "Certified",
+        AllowableContractDate = "2026-02-01T00:00:00.000",
+        ServiceRequestId = "1",
+        Category = "Category 2",
+        Service = "Internal Connections",
+        Function = "Switches",
+        RfpIdentifier = rfpIdentifier,
+        RfpAttachmentCount = "0"
+    };
 
     static string JsonText(JsonElement element) => element.ValueKind switch
     {

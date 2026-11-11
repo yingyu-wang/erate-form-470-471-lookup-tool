@@ -503,9 +503,10 @@ by `last_modified_date_time` (`2026-10-23T08:58:57.000` to
 `service_request_rfp_attachment` (`0` to `1`), and `rfp_documents` (Current
 includes `https://publicdata.usac.org/EPC/Prd/Form470/270002521/129370/22912690-East_Liverpool_Network_and_UPS_Vendor_Reference.pdf`).
 `--diff` on that application reports those field changes. The example above
-uses that application. The live test searches for an application that
-currently publishes both versions and expects the comparison to report a
-field change other than `last_modified_date_time`.
+uses that application. The live test pages through applications that
+currently publish both versions. A candidate that no longer has both, or
+that differs only by `last_modified_date_time`, is skipped. The test passes
+when a later candidate still has a compared field change.
 
 The command does not store a local history of intermediate revisions. Open
 Data publishes Original and Current, not every edit between them. It does not
