@@ -133,7 +133,7 @@ list is oldest first. Between two observations the app shows fields, services,
 dates, status, and RFP documents that were added, removed, or changed. That
 comparison reuses the Form 470 diff. It is labeled **[Derived]**. It is not a
 USAC revision log, and it does not decide whether a change was substantial.
-Open Data still publishes Original and Current, not every edit between them.
+Open Data still publishes Original and Current, not every edit between them. As of 2026-11-11, most application numbers include only one of those versions.
 The latest observation also shows the published Original versus Current
 comparison, with the same disclaimer as `--diff`.
 
