@@ -26,10 +26,10 @@ Two other publish workflows also grant `contents: write` on their publish job, a
 
 ## 3. Nightly live USAC check
 
-Workflow **Nightly live USAC checks** (`.github/workflows/nightly-usac.yml`), job `live`, step **Live published-filing checks**, runs `scripts/nightly-live-usac.sh`. The step summary is one line and includes the attempt count.
+Workflow **Nightly live USAC checks** (`.github/workflows/nightly-usac.yml`), job `live`, step **Live published-filing checks**, runs `scripts/nightly-live-usac.sh`. The workflow first runs the offline regression suite, including the deterministic Form 470 diff tests. The live step summary is one line and includes the attempt count.
 
 - [ ] Open the latest completed run of that workflow and confirm the summary says `passed` or `passed after retry`.
-- [ ] Do not tag while that summary says `skipped due to USAC unreachable`.
+- [ ] Do not tag if live coverage was incomplete: `skipped due to USAC unreachable` or `live health passed; Form 470 diff not exercised (no comparable pair)`. The latter means the other live checks passed, but no published Original/Current pair with a non-timestamp difference was found. The offline Form 470 diff tests remain required.
 
 ## 4. Form 471 BEN check
 

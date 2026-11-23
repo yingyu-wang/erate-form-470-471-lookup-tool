@@ -6,21 +6,21 @@ A portable C#/.NET 10 desktop tool with an Android development preview for findi
 
 **Version 1.0.7 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
-Source version 1.0.7 is not tagged and has no GitHub Release yet. v1.0.6 was released on October 20, 2026. Release files stay unsigned by design. v1.0.7 assets are published once tagged. Tag only after the latest nightly USAC check says `passed` or `passed after retry`.
+Release packages are unsigned by design.
 
 ## Download and run
 
-Open this repository's **Releases** page and select **v1.0.2**. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
+Open the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and choose the package for your operating system and architecture. The currently published release is **v1.0.7**. Verify your download against `SHA256SUMS.txt` on the release page. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
-| `ERateLookup-v1.0.2-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
-| `ERateLookup-v1.0.2-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
-| `ERateLookup-v1.0.2-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
-| `ERateLookup-v1.0.2-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
-| `ERateLookup-v1.0.2-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.2-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.2-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
+| `ERateLookup-v1.0.7-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
+| `ERateLookup-v1.0.7-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
+| `ERateLookup-v1.0.7-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
+| `ERateLookup-v1.0.7-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v1.0.7-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.7-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v1.0.7-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
@@ -40,7 +40,7 @@ application-menu shortcut with the app icon.
 
 ## Install on Android
 
-1. On your phone/tablet, open [release v1.0.2](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2) and download **ERateLookup-v1.0.2-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.2-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
+1. On your phone/tablet, open [the latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and download **ERateLookup-v1.0.7-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.7-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
 2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
 3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
 4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.
@@ -73,7 +73,7 @@ watchlist**, without requiring a filing lookup or a published 2027 Form 470.
 See the [portfolio user guide](docs/PORTFOLIO_GUIDE.md).
 
 These features were merged in [implementation PR #8](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/8).
-Download the matching **v1.0.2** package from [the release page](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
+For historical builds, see [the v1.0.2 release page](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.2).
 The release workflow builds and attaches all seven packages plus `SHA256SUMS.txt`; downloads appear after successful packaging.
 CI passed for the merged implementation across Windows/macOS x64 and ARM64, Linux x64 and ARM64, and Android.
 Hands-on desktop and physical-device testing remains outstanding.
@@ -88,7 +88,7 @@ Try CENIC, **BEN 225495**, **Form 470**, **FY2027**. A previous live verificatio
 
 ## Command line
 
-`ERateLookup.Cli` checks published Form 470 and Form 471 rows from a terminal on Windows, macOS, and Linux. It calls the same read-only USAC lookup as the desktop apps. It does not create, change, certify, or submit a filing. Flags, samples, output formats, exit codes, and build steps are in the [command-line guide](docs/CLI.md). Windows, macOS, and Linux release assets include the CLI starting with v1.0.4. v1.0.5 packages are not published until that version is tagged. v1.0.6 was released on October 20, 2026. v1.0.7 assets are published once tagged.
+`ERateLookup.Cli` checks published Form 470 and Form 471 rows from a terminal on Windows, macOS, and Linux. It calls the same read-only USAC lookup as the desktop apps. It does not create, change, certify, or submit a filing. Flags, samples, output formats, exit codes, and build steps are in the [command-line guide](docs/CLI.md). The [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) provides separate `ERateLookup-Cli` downloads for Windows, macOS, and Linux.
 
 ```sh
 dotnet run --project Cli/ERateLookup.Cli.csproj -- --form 470 --ben 143662 --fy 2027
@@ -162,6 +162,8 @@ The dependency command accepts Android SDK licenses; read the terms before using
 For cloud builds, run the **Android preview APK** workflow in GitHub Actions and download its **ERateLookup-Android-preview** artifact. Tagged releases also build and attach the Android preview package ZIP.
 
 ## GitHub Actions and releases
+
+Tag only after the latest nightly USAC check says `passed` or `passed after retry`.
 
 The workflow builds on pushes and pull requests to `main`. Pushing a `v*` tag builds Windows, macOS, and Linux x64/ARM64 packages plus the Android preview, runs the shared/security checks, and attaches the Windows/macOS ZIPs, Linux tar.gz archives, Android package ZIP, and aggregate `SHA256SUMS.txt` to a GitHub Release.
 

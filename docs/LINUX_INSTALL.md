@@ -1,4 +1,4 @@
-# Linux x64 / ARM64 — E-rate Lookup v1.0.1
+# Linux x64 / ARM64 — E-rate Lookup
 
 The Linux GUI shares the macOS Avalonia interface and the Windows/Android lookup,
 SQLite, budget, and CSV/Excel/JSON code. These portable packages include .NET 10;
@@ -6,12 +6,12 @@ you do not need to install .NET to run them.
 
 ## Choose a package
 
-Download from [GitHub Releases](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.1):
+Download from [GitHub Releases](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest):
 
 | `uname -m` | Package |
 | --- | --- |
-| `x86_64` | `ERateLookup-v1.0.1-linux-x64.tar.gz` |
-| `aarch64` or `arm64` | `ERateLookup-v1.0.1-linux-arm64.tar.gz` |
+| `x86_64` | `ERateLookup-v1.0.7-linux-x64.tar.gz` |
+| `aarch64` or `arm64` | `ERateLookup-v1.0.7-linux-arm64.tar.gz` |
 
 Requires a 64-bit **glibc-based Linux desktop**. Ubuntu 24.04 LTS is the build and
 launch-check baseline on both architectures. GNOME and KDE desktops can run the
@@ -37,15 +37,15 @@ Alpine/musl, headless servers without a display, and 32-bit systems are not targ
 
    ```bash
    mkdir -p "$HOME/Applications"
-   tar -xzf ERateLookup-v1.0.1-linux-x64.tar.gz -C "$HOME/Applications"
-   "$HOME/Applications/ERateLookup-v1.0.1-linux-x64/ERateLookup"
+   tar -xzf ERateLookup-v1.0.7-linux-x64.tar.gz -C "$HOME/Applications"
+   "$HOME/Applications/ERateLookup-v1.0.7-linux-x64/ERateLookup"
    ```
 
    Replace `linux-x64` with `linux-arm64` for ARM64.
 3. Optional: add an application-menu shortcut, with the included icon:
 
    ```bash
-   python3 "$HOME/Applications/ERateLookup-v1.0.1-linux-x64/install-shortcut.py"
+   python3 "$HOME/Applications/ERateLookup-v1.0.7-linux-x64/install-shortcut.py"
    ```
 
    No administrator privileges are needed for this step. Keep the app directory
@@ -95,13 +95,7 @@ system-wide installation requirement.
 References: [Avalonia Linux](https://docs.avaloniaui.net/docs/platform-specific-guides/linux),
 [.NET Linux prerequisites](https://learn.microsoft.com/en-us/dotnet/core/install/linux).
 
-## v1.0.2 development build
-
-The released v1.0.1 instructions above remain valid for that release. To test the new
-portfolio workflow, use a successful **PR #8** GitHub Actions artifact for your
-architecture; package names contain **v1.0.2**. Follow the same extraction and
-installation process, substituting that version in the commands. No v1.0.2
-release is published yet.
+## Saved BENs / Watchlists
 
 Open **Saved BENs / Watchlists** and follow [the portfolio guide](PORTFOLIO_GUIDE.md).
 The guide covers CSV import, refresh, changes, filters, summaries, dates, selection,

@@ -60,11 +60,7 @@ public class UsacRegressionTests
             Check(BudgetRow.Money(null) == "Not reported" && BudgetRow.Money("0") == "$0.00", "Missing amounts distinguished from zero");
             Check(directoryClient.GetBudget("88", 2025) is null, "Budget cycle follows selected year");
             Check(directoryClient.Search("%").Count == 0, "Partial name search treats wildcards literally");
-            Check(BudgetRow.ForecastView("Forecast", true), "USAC Forecast stays forecast even with Form 470");
-            Check(!BudgetRow.ForecastView("Confirmed", false), "USAC Confirmed status survives missing new-cycle Form 470");
-            Check(BudgetRow.ForecastView("Preliminary", false), "Missing 470 with unconfirmed status uses forecast view");
             Check(BudgetRow.Money("-12.34").Contains("12.34"), "Negative reported balances remain visible");
-            Check(!BudgetRow.ForecastView("Confirmed", null), "Failed filing check does not imply no forms");
             var seeded = new CaliforniaDirectory(http, Path.Combine(directory, "seeded")); seeded.LoadSeedIfEmpty(); Check(seeded.Search("SAN DIEGO").Count > 0, "Bundled California directory loads"); Check(seeded.Search("SAN DIEGO CITY UNIF").Any(entity => entity.Ben == "143662"), "San Diego Unified is published as San Diego City Unif Sch Dist, BEN 143662");
             Check(seeded.Search("SCHOOL").Count == 15, "GUI suggestions capped at 15");
             var exportRows = new List<string[]> { new[] { "BEN", "Name", "ExportedUTC" }, new[] { "00123", "=SUM(A1)", DateTimeOffset.UtcNow.ToString("O") } };

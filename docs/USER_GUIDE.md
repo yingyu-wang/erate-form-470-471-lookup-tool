@@ -150,11 +150,11 @@ On October 9, 2026 (Pacific time), direct USAC queries for Whittier Christian Sc
 
 USAC budget status guidance: https://www.usac.org/wp-content/uploads/e-rate/documents/Webinars/2025/Admin-Window-2025-FINAL.pdf
 
-## Conservative forecast display rule
+## Budget status and Form 470 are separate
 
-For FY2026/FY2027 selections, a separate two-hour-cached query checks for any certified Form 470 in either year. If none is found and USAC has not reported Confirmed status, the GUI labels the budget **Forecast C2 budget** and the remaining figure **Forecast remaining (not confirmed)**. USAC's original status remains displayed separately. A USAC Forecast budget retains its forecast label even if a Form 470 exists. A failed cycle check never implies absence of filings.
+The GUI reports the C2 status as published by USAC. Only a USAC Forecast record gets the **Forecast C2 budget** and **Forecast remaining (not confirmed)** labels. Preliminary and Confirmed remain distinct, and a missing status is **Not reported**.
 
-This conservative display rule is a user-requested presentation rule, not USAC's confirmation rule. C2 Form 471 certification/review determines Preliminary/Confirmed budget status; posting Form 470 alone does not confirm enrollment or establish a confirmed budget. A district may use another procurement path, such as an applicable existing contract, so absence of a new Form 470 cannot disprove a Confirmed status reported by USAC.
+For current-cycle lookups, a separate two-hour-cached query checks the current and next funding years for a certified Form 470. The result describes what the published data returned, not whether the applicant is eligible for funding. A failed check never implies absence of filings. C2 Form 471 certification and review determine Preliminary and Confirmed status; a district may use another procurement path, such as an applicable existing contract.
 
 ## Corner cases reviewed
 

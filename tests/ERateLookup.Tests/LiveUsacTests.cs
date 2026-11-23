@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using ERateLookup.Core;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ERateLookup.Tests;
 
@@ -14,7 +15,7 @@ public sealed class LiveUsacFactAttribute : FactAttribute
     }
 }
 
-public class LiveUsacTests
+public class LiveUsacTests(ITestOutputHelper output)
 {
     [LiveUsacFact]
     [Trait("Category", "Live")]
@@ -106,9 +107,28 @@ public class LiveUsacTests
         Assert.Equal("true", difference.Current);
     }
 
+    [Fact]
+    public void MissingOrTimestampOnlyVersionsAreNotComparable()
+    {
+        var original = VersionRow("1", Form470Diff.OriginalVersion, "2026-01-01T00:00:00.000", "false");
+        var current = VersionRow("1", Form470Diff.CurrentVersion, "2026-02-01T00:00:00.000", "false");
+        Assert.False(TrySelectSubstantiveChange("1", [], out _, out _));
+        Assert.False(TrySelectSubstantiveChange("1", [current], out _, out _));
+        Assert.False(TrySelectSubstantiveChange("1", [original, current], out _, out _));
+    }
+
+    [Fact]
+    public void MismatchedApplicationOrUnexpectedVersionFailsInsteadOfSkipping()
+    {
+        var wrongApplication = VersionRow("2", Form470Diff.CurrentVersion, "2026-02-01T00:00:00.000", "false");
+        var wrongVersion = VersionRow("1", "", "2026-02-01T00:00:00.000", "false");
+        Assert.Throws<Xunit.Sdk.EqualException>(() => TrySelectSubstantiveChange("1", [wrongApplication], out _, out _));
+        Assert.Throws<Xunit.Sdk.TrueException>(() => TrySelectSubstantiveChange("1", [wrongVersion], out _, out _));
+    }
+
     [LiveUsacFact]
     [Trait("Category", "Live")]
-    public async Task PublishedForm470OriginalAndCurrentRowsStillDiff()
+    public async Task PublishedForm470DiffWhenComparableRowsExist()
     {
         // Application 270000266 published both versions through 2026-11-05 and only
         // Current rows after that. Page through applications that still have both.
@@ -120,13 +140,11 @@ public class LiveUsacTests
             Form470FieldChange? difference = null;
             var notes = new List<string>();
             var omittedNotes = 0;
-            var sawPair = false;
             for (var offset = 0; difference is null; offset += PairPageSize)
             {
                 var pairs = await FindPairedForm470ApplicationsAsync(http, offset);
                 if (pairs.Count == 0)
                     break;
-                sawPair = true;
                 foreach (var pair in pairs)
                 {
                     var versions = await live.GetForm470VersionRowsAsync(pair.Ben, null, pair.Year, pair.Number, true, default);
@@ -146,20 +164,20 @@ public class LiveUsacTests
                     break;
             }
 
-            if (!sawPair)
-                Assert.Fail("USAC dataset jt8s-3q52 published no application with both Original and Current form_version rows.");
             if (difference is null)
             {
                 var listed = notes.Count == 0 ? "(no candidate rows)" : string.Join("; ", notes);
                 if (omittedNotes > 0)
                     listed += "; " + omittedNotes.ToString(CultureInfo.InvariantCulture) + " more candidates omitted";
-                Assert.Fail("Paired Original and Current rows did not differ in any compared field other than last_modified_date_time. " + listed);
+                ReportForm470DiffCoverage("no comparable pair", "No published Original/Current pair with a non-timestamp difference was found. " + listed);
+                return;
             }
 
             Assert.False(string.IsNullOrWhiteSpace(difference.Field));
             Assert.NotEqual("last_modified_date_time", difference.Field);
             Assert.NotEqual(difference.Original, difference.Current);
             Assert.False(string.IsNullOrWhiteSpace(difference.ApplicationNumber));
+            ReportForm470DiffCoverage("exercised", $"Compared published Original/Current values for application {difference.ApplicationNumber}.");
         }
         finally
         {
@@ -167,6 +185,13 @@ public class LiveUsacTests
             if (Directory.Exists(directory))
                 Directory.Delete(directory, true);
         }
+    }
+
+    void ReportForm470DiffCoverage(string result, string detail)
+    {
+        output.WriteLine(detail);
+        if (Environment.GetEnvironmentVariable("ERATE_FORM470_DIFF_COVERAGE_FILE") is { Length: > 0 } path)
+            File.WriteAllText(path, result + "\n" + detail + "\n");
     }
 
     const int PairPageSize = 100;
@@ -178,6 +203,7 @@ public class LiveUsacTests
         var parameters = new Dictionary<string, string>
         {
             ["$select"] = "application_number,billed_entity_number,funding_year",
+            ["$where"] = "form_version in ('Original','Current')",
             ["$group"] = "application_number,billed_entity_number,funding_year",
             ["$having"] = "count(distinct form_version) > 1",
             ["$order"] = "funding_year,application_number,billed_entity_number",
@@ -191,11 +217,15 @@ public class LiveUsacTests
         var pairs = new List<PairedForm470>();
         foreach (var row in document.RootElement.EnumerateArray())
         {
-            var number = JsonText(row.GetProperty("application_number"));
-            var ben = JsonText(row.GetProperty("billed_entity_number"));
-            var yearText = JsonText(row.GetProperty("funding_year"));
-            if (number.Length == 0 || ben.Length == 0 || !int.TryParse(yearText, NumberStyles.None, CultureInfo.InvariantCulture, out var year))
-                continue;
+            Assert.Equal(JsonValueKind.Object, row.ValueKind);
+            Assert.True(row.TryGetProperty("application_number", out var numberValue), "Missing application_number in Form 470 pair discovery.");
+            Assert.True(row.TryGetProperty("billed_entity_number", out var benValue), "Missing billed_entity_number in Form 470 pair discovery.");
+            Assert.True(row.TryGetProperty("funding_year", out var yearValue), "Missing funding_year in Form 470 pair discovery.");
+            var number = JsonText(numberValue);
+            var ben = JsonText(benValue);
+            Assert.True(number.Length > 0 && number.All(char.IsAsciiDigit), $"Invalid application_number in Form 470 pair discovery: {number}");
+            Assert.True(ben.Length > 0 && ben.All(char.IsAsciiDigit), $"Invalid billed_entity_number in Form 470 pair discovery: {ben}");
+            Assert.True(int.TryParse(JsonText(yearValue), NumberStyles.None, CultureInfo.InvariantCulture, out var year), "Invalid funding_year in Form 470 pair discovery.");
             pairs.Add(new PairedForm470(number, ben, year));
         }
 
@@ -206,8 +236,12 @@ public class LiveUsacTests
     {
         var hasOriginal = rows.Any(row => row.Number == applicationNumber && row.Version == Form470Diff.OriginalVersion);
         var hasCurrent = rows.Any(row => row.Number == applicationNumber && row.Version == Form470Diff.CurrentVersion);
-        var sameApplication = rows.Count > 0 && rows.All(row => row.Number == applicationNumber);
-        if (!hasOriginal || !hasCurrent || !sameApplication)
+        foreach (var row in rows)
+        {
+            Assert.Equal(applicationNumber, row.Number);
+            Assert.True(row.Version is Form470Diff.OriginalVersion or Form470Diff.CurrentVersion, $"Unexpected form_version for {applicationNumber}: {row.Version}");
+        }
+        if (!hasOriginal || !hasCurrent)
         {
             change = null;
             detail = "skipped " + DescribeRows(rows);
@@ -215,12 +249,7 @@ public class LiveUsacTests
         }
 
         var diff = Form470Diff.Compare(rows);
-        if (diff.Any(row => row.Change == Form470Diff.VersionGap || row.Change == Form470Diff.Unexpected))
-        {
-            change = null;
-            detail = "skipped " + DescribeRows(rows) + "; " + DescribeDiff(diff);
-            return false;
-        }
+        Assert.DoesNotContain(diff, row => row.Change is Form470Diff.VersionGap or Form470Diff.Unexpected);
 
         change = diff.FirstOrDefault(row =>
             row.Field != "last_modified_date_time"

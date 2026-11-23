@@ -126,7 +126,7 @@ public sealed class LookupViewModel
                 if (optional.Available)
                     hasCycle = optional.Value;
                 else
-                    notes += " Budget eligibility cross-check unavailable.";
+                    notes += " New-cycle Form 470 check unavailable.";
             }
             else
             {
@@ -213,41 +213,44 @@ public sealed class LookupViewModel
         var cycle = year >= 2026 ? "FY2026–2030" : year >= 2021 ? "FY2021–2025" : "not loaded for this year";
         if (row is null)
             return $"C2 budget · {cycle} · BEN {ben}\nNot reported in the downloaded C2 dataset. This is not a zero budget and does not establish whether an application was filed.\nDirectory updated: {updated}";
-        var forecast = BudgetRow.ForecastView(row.Version, hasCycle);
+        var forecast = row.IsForecast;
         var heading = forecast ? "Forecast C2 budget" : "C2 budget";
         var remaining = forecast ? "Forecast remaining (not confirmed)" : "Reported available";
-        var cycleNote = hasCycle == false
-            ? forecast
-                ? $"No certified Form 470 found for {years}; forecast view. "
-                : $"No certified Form 470 found for {years}; USAC Confirmed status is preserved. "
-            : "";
+        var cycleNote = Form470Note(hasCycle, years);
         var balanceNote = Negative(row.Available) ? " Negative reported remaining balance — review with USAC; not clamped to zero." : "";
-        return $"{heading} · {row.Cycle} · USAC status: {row.Version} · {row.Name}\nTotal: {BudgetRow.Money(row.Total)}     Committed: {BudgetRow.Money(row.Committed)}     Pending: {BudgetRow.Money(row.Pending)}\n{remaining}: {BudgetRow.Money(row.Available)}\n{cycleNote}Pre-discount figures. Posting Form 470 does not confirm a budget; C2 Form 471 review determines confirmation. Updated: {updated}{balanceNote}";
+        return $"{heading} · {row.Cycle} · USAC status: {row.ReportedStatus} · {row.Name}\nTotal: {BudgetRow.Money(row.Total)}     Committed: {BudgetRow.Money(row.Committed)}     Pending: {BudgetRow.Money(row.Pending)}\n{remaining}: {BudgetRow.Money(row.Available)}\n{cycleNote}Pre-discount figures. Posting Form 470 does not confirm a budget; C2 Form 471 review determines confirmation. Updated: {updated}{balanceNote}";
     }
 
     string AvaloniaBudget(string ben, BudgetRow? row, bool? hasCycle, string years)
     {
         if (row is null)
             return $"C2 budget · BEN {ben}\nNot reported in the downloaded budget data. This is not a zero budget.\nDirectory updated: {directory.LastUpdated}";
-        var forecast = BudgetRow.ForecastView(row.Version, hasCycle);
-        var note = hasCycle == false ? $"No certified Form 470 found for {years}. " : "";
+        var forecast = row.IsForecast;
+        var note = Form470Note(hasCycle, years);
         if (Negative(row.Available))
             note += "Negative remaining balance: review with USAC. ";
-        return $"{(forecast ? "Forecast C2 budget" : "C2 budget")} · {row.Cycle} · USAC status: {row.Version} · {row.Name}\nTotal: {BudgetRow.Money(row.Total)}     Committed: {BudgetRow.Money(row.Committed)}     Pending: {BudgetRow.Money(row.Pending)}\n{(forecast ? "Forecast remaining (not confirmed)" : "Reported available")}: {BudgetRow.Money(row.Available)}\n{note}Pre-discount figures; committed is not disbursed. Form 470 does not confirm a budget. Updated: {directory.LastUpdated}";
+        return $"{(forecast ? "Forecast C2 budget" : "C2 budget")} · {row.Cycle} · USAC status: {row.ReportedStatus} · {row.Name}\nTotal: {BudgetRow.Money(row.Total)}     Committed: {BudgetRow.Money(row.Committed)}     Pending: {BudgetRow.Money(row.Pending)}\n{(forecast ? "Forecast remaining (not confirmed)" : "Reported available")}: {BudgetRow.Money(row.Available)}\n{note}Pre-discount figures; committed is not disbursed. Form 470 does not confirm a budget. Updated: {directory.LastUpdated}";
     }
 
     string AndroidBudget(BudgetRow? row, bool? hasCycle, string years)
     {
         if (row is null)
             return "C2 budget not reported in the CA snapshot. This is not a zero budget. Snapshot: " + directory.LastUpdated;
-        var forecast = BudgetRow.ForecastView(row.Version, hasCycle);
-        var text = $"{(forecast ? "Forecast C2 budget" : "C2 budget")} · {row.Cycle}\n{row.Name}\nUSAC status: {row.Version}\nTotal: {BudgetRow.Money(row.Total)}\nCommitted: {BudgetRow.Money(row.Committed)}\nPending: {BudgetRow.Money(row.Pending)}\n{(forecast ? "Forecast remaining (not confirmed)" : "Reported available")}: {BudgetRow.Money(row.Available)}\nPre-discount figures. Committed is not disbursed. Form 470 does not confirm a budget.\nSnapshot: {directory.LastUpdated}";
-        if (hasCycle == false)
-            text += $"\nNo certified Form 470 found for {years}.";
+        var forecast = row.IsForecast;
+        var text = $"{(forecast ? "Forecast C2 budget" : "C2 budget")} · {row.Cycle}\n{row.Name}\nUSAC status: {row.ReportedStatus}\nTotal: {BudgetRow.Money(row.Total)}\nCommitted: {BudgetRow.Money(row.Committed)}\nPending: {BudgetRow.Money(row.Pending)}\n{(forecast ? "Forecast remaining (not confirmed)" : "Reported available")}: {BudgetRow.Money(row.Available)}\nPre-discount figures. Committed is not disbursed. Form 470 does not confirm a budget.\nSnapshot: {directory.LastUpdated}";
+        if (Form470Note(hasCycle, years) is { Length: > 0 } note)
+            text += "\n" + note.TrimEnd();
         if (Negative(row.Available))
             text += "\nNegative remaining balance: review with USAC.";
         return text;
     }
+
+    static string Form470Note(bool? observed, string years) => observed switch
+    {
+        true => $"Certified Form 470 found in published data for {years}. ",
+        false => $"No certified Form 470 found in published data for {years}. ",
+        null => ""
+    };
 
     static bool Negative(string? available) =>
         decimal.TryParse(available, NumberStyles.Number, CultureInfo.InvariantCulture, out var balance) && balance < 0;
