@@ -4,23 +4,23 @@
 
 A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.7 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+**Source version 1.0.8 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 Release packages are unsigned by design.
 
 ## Download and run
 
-Open the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and choose the package for your operating system and architecture. The currently published release is **v1.0.7**. Verify your download against `SHA256SUMS.txt` on the release page. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
+Open the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and choose the package for your operating system and architecture. In these filenames, replace `<VERSION>` with the version on that release page (without the leading `v`). Verify your download against `SHA256SUMS.txt` on the release page. GitHub's automatic source ZIP contains source code; download a platform package to run the app.
 
 | Release asset | Computer | Install first |
 | --- | --- | --- |
-| `ERateLookup-v1.0.7-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
-| `ERateLookup-v1.0.7-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
-| `ERateLookup-v1.0.7-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
-| `ERateLookup-v1.0.7-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
-| `ERateLookup-v1.0.7-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.7-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
-| `ERateLookup-v1.0.7-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
+| `ERateLookup-v<VERSION>-win-x64.zip` | Windows x64 | .NET 10 Desktop Runtime, Windows x64 |
+| `ERateLookup-v<VERSION>-win-arm64.zip` | Windows on ARM | .NET 10 Desktop Runtime, Windows ARM64 |
+| `ERateLookup-v<VERSION>-macos-arm64.zip` | Apple Silicon Mac | .NET 10 Runtime, macOS Arm64 |
+| `ERateLookup-v<VERSION>-macos-x64.zip` | Intel Mac | .NET 10 Runtime, macOS x64 |
+| `ERateLookup-v<VERSION>-linux-x64.tar.gz` | Linux x64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v<VERSION>-linux-arm64.tar.gz` | Linux ARM64 desktop | .NET bundled; native Linux libraries required |
+| `ERateLookup-v<VERSION>-android-preview.zip` | Android APK plus installation guide and notices | Extract the APK first |
 
 Get the matching runtime from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Windows requires the **Desktop Runtime**. macOS requires the standard **.NET Runtime**. The SDK is needed only for development and builds. Desktop runtime files are not bundled in the Windows/macOS downloads. The Android APK and both Linux archives include their runtime.
 
@@ -40,7 +40,7 @@ application-menu shortcut with the app icon.
 
 ## Install on Android
 
-1. On your phone/tablet, open [the latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and download **ERateLookup-v1.0.7-android-preview.zip**. Extract it in Files/your file manager to find **ERateLookup-v1.0.7-android-preview.apk**, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
+1. On your phone/tablet, open [the latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and download `ERateLookup-v<VERSION>-android-preview.zip`. Extract it in Files/your file manager to find `ERateLookup-v<VERSION>-android-preview.apk`, the installation guide, and notices. `SHA256SUMS.txt` covers all platform packages.
 2. Open the APK from Downloads/Files. If prompted, allow installation from the browser/file manager through **Settings → Apps → Special app access → Install unknown apps → Allow from this source**. The wording varies by device.
 3. Return to the APK, tap **Install**, then **Open**. Wait for **Ready** in **E-rate Lookup**. You do not need .NET, Android Studio, or a computer to install the APK.
 4. Turn off **Allow from this source** afterward if no longer needed. Keep Play Protect enabled. Device policies or developer-verification prompts may require additional steps; see the detailed guide.

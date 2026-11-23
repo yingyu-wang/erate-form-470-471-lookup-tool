@@ -6,7 +6,7 @@ Complete this list before pushing a `v*` tag or running a rebuild that sets `rel
 
 Release archives are unsigned by design. This branch does not add a signing step, a certificate, or a notarization step for the Windows, macOS, or Linux packages.
 
-- [ ] Confirm [RELEASE_NOTES.md](../RELEASE_NOTES.md) for the version being tagged still says the packages are unsigned. The current v1.0.2 notes say: "Windows and macOS packages are unsigned; macOS packages are not notarized."
+- [ ] Confirm [RELEASE_NOTES.md](../RELEASE_NOTES.md) for the version being tagged still says the packages are unsigned. Confirm the macOS package is not described as notarized.
 - [ ] The Android preview note is separate: the notes say that preview uses a generated debug signing key, not a publisher release signature.
 
 ## 2. Write permission and the tag-move approval
