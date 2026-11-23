@@ -6,7 +6,7 @@ This app reuses the same C# Core project as the Windows app: live USAC Form 470/
 
 1. Use a supported macOS version: **macOS 14 Sonoma or later** for .NET 10.
 2. Install the **.NET 10 Runtime** matching your Mac from https://dotnet.microsoft.com/en-us/download/dotnet/10.0 . Select macOS **Arm64** for Apple Silicon (M1/M2/M3/M4 and later) or **x64** for Intel. Use the standard .NET Runtime, not Windows Desktop Runtime. The matching .NET 10 SDK also satisfies this prerequisite.
-3. From the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest), download `ERateLookup-v1.0.8-macos-arm64.zip` (Apple Silicon) or `ERateLookup-v1.0.8-macos-x64.zip` (Intel).
+3. From the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest), download `ERateLookup-v<VERSION>-macos-arm64.zip` (Apple Silicon) or `ERateLookup-v<VERSION>-macos-x64.zip` (Intel), using the version shown on the release page in place of `<VERSION>` (without the leading `v`).
 4. Extract it and open **ERateLookup.app**. The app itself has no installer and may be moved to Applications or another folder. Keep the .app bundle intact; its DLLs and native libraries are inside it.
 5. Enter a BEN or type at least two name characters for local California suggestions. Select Form 470/471 and funding year. Names never query USAC per keystroke. Check a selected customer to retrieve its filings.
 6. All filing rows start selected. Use **Command-click** for individual selections or **Shift-click** for a range, or Select all / Unselect all. CSV, Excel, and JSON export only selected filings. PDFs open in the browser when available.

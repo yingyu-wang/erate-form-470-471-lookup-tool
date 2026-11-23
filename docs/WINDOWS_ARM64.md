@@ -1,6 +1,6 @@
 # Windows ARM64 portable app
 
-Download `ERateLookup-v1.0.8-win-arm64.zip` from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). Install the **.NET 10 Desktop Runtime for Windows ARM64** from https://dotnet.microsoft.com/en-us/download/dotnet/10.0, extract the ZIP, and open `ERateLookup.exe`. No app installer or administrator access is required for the extracted application. The runtime is a separate prerequisite.
+Download `ERateLookup-v<VERSION>-win-arm64.zip` from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest), using the version shown there in place of `<VERSION>` (without the leading `v`). Install the **.NET 10 Desktop Runtime for Windows ARM64** from https://dotnet.microsoft.com/en-us/download/dotnet/10.0, extract the ZIP, and open `ERateLookup.exe`. No app installer or administrator access is required for the extracted application. The runtime is a separate prerequisite.
 
 This package targets native Windows ARM64 (for example, a Snapdragon Windows PC). It does not run on Windows x64 or x86. Existing Windows x64 downloads remain available. The source is MIT licensed; third-party notices are included.
 

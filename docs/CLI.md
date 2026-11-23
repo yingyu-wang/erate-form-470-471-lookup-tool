@@ -135,7 +135,7 @@ files, and v1.0.4 is rebuilt to include them.
 
 ## Install and run
 
-Download the matching `ERateLookup-Cli-v1.0.8-<platform>` archive from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). The archive is a `.zip` on Windows and macOS or a `.tar.gz` on Linux. Choose the package matching your operating system and CPU architecture. There is no Android command-line package.
+Download the matching `ERateLookup-Cli-v<VERSION>-<platform>` archive from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). Replace `<VERSION>` with the version shown on that release page (without the leading `v`). The archive is a `.zip` on Windows and macOS or a `.tar.gz` on Linux. Choose the package matching your operating system and CPU architecture. There is no Android command-line package.
 
 The program is framework-dependent. It needs the .NET 10 runtime
 (`Microsoft.NETCore.App`), not the Windows Desktop Runtime the GUI uses. Keep
