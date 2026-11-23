@@ -16,6 +16,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Keep the pinned .NET 10 workload separate from hosted-runner SDK manifests.
+      - name: Isolate .NET SDK installation
+        run: echo "DOTNET_INSTALL_DIR=$RUNNER_TEMP/erate-dotnet10" >> "$GITHUB_ENV"
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: '10.0.401'
@@ -24,7 +27,10 @@ jobs:
           distribution: microsoft
           java-version: '21'
       - name: Install Android workload
-        run: dotnet workload install android --version 10.0.401
+        run: |
+          test "$(command -v dotnet)" = "$DOTNET_INSTALL_DIR/dotnet"
+          dotnet --info
+          dotnet workload install android --version 10.0.401
       - name: Install matching Android SDK components
         run: dotnet build Android/ERateLookup.Android.csproj -t:InstallAndroidDependencies -p:AndroidSdkDirectory="$ANDROID_HOME" -p:JavaSdkDirectory="$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
       - name: Shared offline tests
