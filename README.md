@@ -4,7 +4,7 @@
 
 A portable C#/.NET 10 desktop tool with an Android development preview for finding published certified E-rate Form 470 and Form 471 applications by BEN and funding year. Windows uses Windows Forms; macOS and Linux use Avalonia. All platforms share the lookup, export, budget, and SQLite code.
 
-**Version 1.0.7 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
+**Source version 1.0.8 · MIT license · Windows x64/ARM64, macOS Arm64/x64, Linux x64/ARM64, and Android preview**
 
 Release packages are unsigned by design.
 

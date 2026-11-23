@@ -1,5 +1,14 @@
 # E-rate Form 470 / 471 Lookup Tool — release notes
 
+## v1.0.8 — Category Two budget labels and live check reporting
+
+- Keep the published USAC Category Two budget status separate from Form 470 search results in the Windows, macOS, Linux, and Android apps. A Preliminary budget is no longer labeled Forecast when no certified Form 470 is found. A missing Form 470 result does not establish the budget status; local name autocomplete is unchanged.
+- Run offline regression checks before the nightly live USAC checks. If the feed is healthy but provides no comparable Original/Current Form 470 pair with a change beyond the modification timestamp, report incomplete live coverage rather than a failed lookup or a full pass. This outcome still does not meet the tagging gate.
+- Repair the Android preview build workflow by installing .NET 10 into an isolated runner directory, avoiding conflicts with the runner's preinstalled .NET 11 workload manifests.
+- Clarify how to find published packages and choose the appropriate desktop, Android, or CLI download.
+
+See [PR #32](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/32). The CLI's reported FRN commitment amount remains an inference, not a verified funding commitment letter.
+
 ## v1.0.7 — October 27, 2026: Excel FRN columns, portfolio FRN tracking, and Form 470 revision history
 
 ### Form 470 diff and revision history in the apps
