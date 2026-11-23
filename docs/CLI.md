@@ -106,8 +106,8 @@ merged as `0c29de3` and set `<Version>` to 1.0.4. There is no `--version`
 flag. `--version` exits 1 with `Unknown argument: --version`.
 
 Starting with v1.0.4, the CLI ships as Windows, macOS, and Linux release
-assets. v1.0.4 is being rebuilt so those assets are included. There is no
-Android CLI. Building from source remains an alternative.
+assets. See [Install and run](#install-and-run) for current downloads. There is
+no Android CLI. Building from source remains an alternative.
 
 Checked on 2026-10-15 against `Cli/CliCommand.cs`, `Cli/Program.cs`, and
 `dotnet run --project Cli/ERateLookup.Cli.csproj -- --help` (SDK 10.0.402,
@@ -135,7 +135,7 @@ files, and v1.0.4 is rebuilt to include them.
 
 ## Install and run
 
-Download the matching `ERateLookup-Cli-v1.0.7-<platform>` archive from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). Choose Windows, macOS, or Linux and match the CPU architecture. There is no Android command-line package.
+Download the matching `ERateLookup-Cli-v1.0.8-<platform>` archive from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). The archive is a `.zip` on Windows and macOS or a `.tar.gz` on Linux. Choose the package matching your operating system and CPU architecture. There is no Android command-line package.
 
 The program is framework-dependent. It needs the .NET 10 runtime
 (`Microsoft.NETCore.App`), not the Windows Desktop Runtime the GUI uses. Keep

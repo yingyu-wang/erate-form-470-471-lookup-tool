@@ -9,7 +9,7 @@
 
 ## Download the APK
 
-Open the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and download **ERateLookup-v1.0.7-android-preview.zip**. Extract it in Files/your file manager; the ZIP contains **ERateLookup-v1.0.7-android-preview.apk**, this guide, and notices. Check the shared `SHA256SUMS.txt` if verifying your download.
+Open the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest) and download **ERateLookup-v1.0.8-android-preview.zip**. Extract it in Files/your file manager; the ZIP contains **ERateLookup-v1.0.8-android-preview.apk**, this guide, and notices. Check the shared `SHA256SUMS.txt` if verifying your download.
 
 The following Actions method is also available for development builds.
 
@@ -22,7 +22,7 @@ Tagged releases include the preview package ZIP after all platform builds and pa
 
 ## Install on a phone or tablet
 
-1. Tap **ERateLookup-v1.0.7-android-preview.apk** in Downloads/Files.
+1. Tap **ERateLookup-v1.0.8-android-preview.apk** in Downloads/Files.
 2. If Android says installation from this source is not allowed, tap **Settings**. Enable **Allow from this source** for the browser or file manager you are using. The usual path is **Settings → Apps → Special app access → Install unknown apps**; wording varies by manufacturer.
 3. Return to the APK and tap **Install**, then **Open**. The launcher name is **E-rate Lookup**.
 4. After installation, turn off **Allow from this source** again if you no longer need it. This does not remove the installed app. Keep Play Protect enabled.
@@ -65,7 +65,7 @@ Install Android platform tools on a computer. Enable Developer options and USB d
 
 ```sh
 adb devices
-adb install -r ERateLookup-v1.0.7-android-preview.apk
+adb install -r ERateLookup-v1.0.8-android-preview.apk
 ```
 
 Only use `-r` for a compatible signing certificate. Do not uninstall an existing copy without first exporting anything you need. Turn USB debugging off after testing.

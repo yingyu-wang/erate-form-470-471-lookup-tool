@@ -7,6 +7,8 @@
 - Repair the Android preview build workflow by installing .NET 10 into an isolated runner directory, avoiding conflicts with the runner's preinstalled .NET 11 workload manifests.
 - Clarify how to find published packages and choose the appropriate desktop, Android, or CLI download.
 
+Windows, macOS, and Linux packages are unsigned; macOS packages are not notarized. The Android preview APK uses a generated debug signing key, not a publisher release key, and is distributed inside the Android ZIP.
+
 See [PR #32](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/32). The CLI's reported FRN commitment amount remains an inference, not a verified funding commitment letter.
 
 ## v1.0.7 — October 27, 2026: Excel FRN columns, portfolio FRN tracking, and Form 470 revision history

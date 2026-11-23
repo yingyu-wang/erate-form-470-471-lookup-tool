@@ -10,8 +10,8 @@ Download from [GitHub Releases](https://github.com/yingyu-wang/erate-form-470-47
 
 | `uname -m` | Package |
 | --- | --- |
-| `x86_64` | `ERateLookup-v1.0.7-linux-x64.tar.gz` |
-| `aarch64` or `arm64` | `ERateLookup-v1.0.7-linux-arm64.tar.gz` |
+| `x86_64` | `ERateLookup-v1.0.8-linux-x64.tar.gz` |
+| `aarch64` or `arm64` | `ERateLookup-v1.0.8-linux-arm64.tar.gz` |
 
 Requires a 64-bit **glibc-based Linux desktop**. Ubuntu 24.04 LTS is the build and
 launch-check baseline on both architectures. GNOME and KDE desktops can run the
@@ -37,15 +37,15 @@ Alpine/musl, headless servers without a display, and 32-bit systems are not targ
 
    ```bash
    mkdir -p "$HOME/Applications"
-   tar -xzf ERateLookup-v1.0.7-linux-x64.tar.gz -C "$HOME/Applications"
-   "$HOME/Applications/ERateLookup-v1.0.7-linux-x64/ERateLookup"
+   tar -xzf ERateLookup-v1.0.8-linux-x64.tar.gz -C "$HOME/Applications"
+   "$HOME/Applications/ERateLookup-v1.0.8-linux-x64/ERateLookup"
    ```
 
    Replace `linux-x64` with `linux-arm64` for ARM64.
 3. Optional: add an application-menu shortcut, with the included icon:
 
    ```bash
-   python3 "$HOME/Applications/ERateLookup-v1.0.7-linux-x64/install-shortcut.py"
+   python3 "$HOME/Applications/ERateLookup-v1.0.8-linux-x64/install-shortcut.py"
    ```
 
    No administrator privileges are needed for this step. Keep the app directory
