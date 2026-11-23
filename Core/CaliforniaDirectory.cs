@@ -42,7 +42,10 @@ public sealed class BudgetRow
     {
         get; set;
     }
-    public static bool ForecastView(string version, bool? hasCycle470) => version.Equals("Forecast", StringComparison.OrdinalIgnoreCase) || (hasCycle470 == false && !version.Equals("Confirmed", StringComparison.OrdinalIgnoreCase));
+    [JsonIgnore]
+    public string ReportedStatus => string.IsNullOrWhiteSpace(Version) ? "Not reported" : Version.Trim();
+    [JsonIgnore]
+    public bool IsForecast => string.Equals(ReportedStatus, "Forecast", StringComparison.OrdinalIgnoreCase);
     public static string Money(string? raw) => decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var value) ? value.ToString("C2", CultureInfo.GetCultureInfo("en-US")) : "Not reported";
 }
 public sealed class CaliforniaDirectory

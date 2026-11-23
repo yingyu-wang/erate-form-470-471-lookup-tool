@@ -268,8 +268,22 @@ public class PortfolioClockTests
 
 public class LookupViewModelTests
 {
-    [Fact]
-    public void BudgetCopyUsesClockFundingYears()
+    public static IEnumerable<object?[]> BudgetCases()
+    {
+        foreach (var surface in Enum.GetValues<LookupSurface>())
+        {
+            yield return [surface, "Preliminary", false, "Preliminary", false];
+            yield return [surface, "Forecast", true, "Forecast", true];
+            yield return [surface, "Confirmed", false, "Confirmed", false];
+            yield return [surface, null, false, "Not reported", false];
+            yield return [surface, "Preliminary", null, "Preliminary", false];
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(BudgetCases))]
+    public void BudgetStatusDoesNotDependOnForm470(
+        LookupSurface surface, string? version, bool? hasForm470, string expectedStatus, bool forecast)
     {
         var directory = Path.Combine(Path.GetTempPath(), "ERateBudget-" + Guid.NewGuid());
         try
@@ -278,12 +292,21 @@ public class LookupViewModelTests
             using var http = new HttpClient(new EmptyHandler());
             using var client = new UsacClient(http, directory, () => now);
             var catalog = new CaliforniaDirectory(http, directory);
-            catalog.Replace([], [new BudgetRow { Ben = "88", Name = "Forecast District", State = "CA", Cycle = "FY2026-2030", Version = "Confirmed", Total = "10", Committed = "0", Pending = "0", Available = "10" }], now);
-            var screen = new LookupViewModel(client, catalog, new FilingWindow(http, directory), LookupSurface.Windows, () => now);
-            var text = screen.BudgetText("88", 2027, false);
-            Assert.Contains("2027 or 2028", text);
-            Assert.Contains("USAC Confirmed status is preserved", text);
+            catalog.Replace([], [new BudgetRow { Ben = "88", Name = "Test District", State = "CA", Cycle = "FY2026-2030", Version = version!, Total = "10", Committed = "0", Pending = "0", Available = "10" }], now);
+            Assert.NotNull(catalog.GetBudget("88", 2027));
+            var screen = new LookupViewModel(client, catalog, new FilingWindow(http, directory), surface, () => now);
+            var text = screen.BudgetText("88", 2027, hasForm470);
+            Assert.StartsWith(forecast ? "Forecast C2 budget" : "C2 budget", text);
+            Assert.Contains($"USAC status: {expectedStatus}", text);
+            Assert.Contains(forecast ? "Forecast remaining (not confirmed)" : "Reported available", text);
+            Assert.DoesNotContain("USAC Confirmed status is preserved", text);
             Assert.DoesNotContain("2026 or 2027", text);
+            if (hasForm470 == true)
+                Assert.Contains("Certified Form 470 found in published data for 2027 or 2028", text);
+            else if (hasForm470 == false)
+                Assert.Contains("No certified Form 470 found in published data for 2027 or 2028", text);
+            else
+                Assert.DoesNotContain("found in published data", text);
         }
         finally
         {

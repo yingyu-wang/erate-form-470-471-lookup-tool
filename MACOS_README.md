@@ -6,7 +6,7 @@ This app reuses the same C# Core project as the Windows app: live USAC Form 470/
 
 1. Use a supported macOS version: **macOS 14 Sonoma or later** for .NET 10.
 2. Install the **.NET 10 Runtime** matching your Mac from https://dotnet.microsoft.com/en-us/download/dotnet/10.0 . Select macOS **Arm64** for Apple Silicon (M1/M2/M3/M4 and later) or **x64** for Intel. Use the standard .NET Runtime, not Windows Desktop Runtime. The matching .NET 10 SDK also satisfies this prerequisite.
-3. Download the matching ZIP: `ERateLookup-macOS-osx-arm64.zip` or `ERateLookup-macOS-osx-x64.zip`.
+3. From the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest), download `ERateLookup-v1.0.7-macos-arm64.zip` (Apple Silicon) or `ERateLookup-v1.0.7-macos-x64.zip` (Intel).
 4. Extract it and open **ERateLookup.app**. The app itself has no installer and may be moved to Applications or another folder. Keep the .app bundle intact; its DLLs and native libraries are inside it.
 5. Enter a BEN or type at least two name characters for local California suggestions. Select Form 470/471 and funding year. Names never query USAC per keystroke. Check a selected customer to retrieve its filings.
 6. All filing rows start selected. Use **Command-click** for individual selections or **Shift-click** for a range, or Select all / Unselect all. CSV, Excel, and JSON export only selected filings. PDFs open in the browser when available.
@@ -51,8 +51,8 @@ The shared Core tests pass in the build environment. Both Mac architectures are 
 
 The Mint Glass document/search icon is included in `Assets` as PNG, Windows ICO, and macOS ICNS. Windows builds embed the ICO in the executable and main window. The Mac packaging script copies the ICNS into the app bundle and registers it in Info.plist. No additional runtime dependency is required.
 
-## v1.0.2 development: saved BENs
+## Saved BENs / Watchlists
 
 Open **Saved BENs / Watchlists** to save favorite BENs, refresh a list, import CSV,
 review changes, and reopen results offline. See [the portfolio guide](docs/PORTFOLIO_GUIDE.md).
-These features require the unreleased v1.0.2 build from a successful PR #8 Actions run.
+These features are included in current releases.

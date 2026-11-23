@@ -1,4 +1,4 @@
-# Command-line lookup — 1.0.5
+# Command-line lookup
 
 `ERateLookup.Cli` looks up published E-rate Form 470 and Form 471 rows from a
 terminal. It is a .NET 10 console program in `Cli/`. It does not open the
@@ -72,7 +72,7 @@ dotnet run --project Cli/ERateLookup.Cli.csproj -- --form both --ben 143662 --fy
 An empty result is not proof that no filing exists. If USAC cannot be reached
 during `--form both`, the command exits 3 and does not print a partial link.
 
-Release files are unsigned by design. v1.0.5 is not tagged.
+Release files are unsigned by design.
 
 ## Excel export
 
@@ -96,7 +96,7 @@ without that prefix. The worksheet stores no formula element. The header row is
 frozen, and an autofilter covers the rows that were written.
 
 Release files are unsigned by design. Excel FRN columns and the Form 470 diff
-workbook are version 1.0.7. v1.0.7 assets are published once tagged.
+workbook are available in v1.0.7.
 
 This page describes the command-line lookup added in pull request
 [#14](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/pull/14)
@@ -135,10 +135,7 @@ files, and v1.0.4 is rebuilt to include them.
 
 ## Install and run
 
-Starting with v1.0.4, the [v1.0.4 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.4)
-includes the CLI for Windows, macOS, and Linux. That release is being rebuilt
-to add those assets. The [v1.0.3 release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/tag/v1.0.3)
-does not include the CLI. There is no Android command-line package.
+Download the matching `ERateLookup-Cli-v1.0.7-<platform>` archive from the [latest release](https://github.com/yingyu-wang/erate-form-470-471-lookup-tool/releases/latest). Choose Windows, macOS, or Linux and match the CPU architecture. There is no Android command-line package.
 
 The program is framework-dependent. It needs the .NET 10 runtime
 (`Microsoft.NETCore.App`), not the Windows Desktop Runtime the GUI uses. Keep

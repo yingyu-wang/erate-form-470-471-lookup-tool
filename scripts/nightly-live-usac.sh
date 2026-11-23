@@ -28,7 +28,7 @@ write_summary() {
 log_is_genuine_failure() {
   local log="$1"
   [[ -f "$log" ]] || return 1
-  grep -E -q 'Assert\.|Xunit\.Sdk|error CS[0-9]|error NETSDK|Build FAILED' "$log"
+  grep -E -q 'Assert\.|Xunit\.Sdk|JsonException|JsonReaderException|Form471IdentityMismatchException|error CS[0-9]|error NETSDK|Build FAILED' "$log"
 }
 
 # 0 when this endpoint answers. Network errors, timeouts, HTTP 408, 429, and 5xx are unreachable.
@@ -57,9 +57,10 @@ usac_unreachable() {
 
 run_live_tests() {
   local log="$1"
+  local coverage="$2"
   local status=0
   set +e
-  dotnet test "$project" -c Release --filter Category=Live >"$log" 2>&1
+  ERATE_FORM470_DIFF_COVERAGE_FILE="$coverage" dotnet test "$project" -c Release --filter Category=Live >"$log" 2>&1
   status=$?
   set -e
   cat "$log"
@@ -110,18 +111,37 @@ nightly_live_usac() {
     fi
     attempts=$((attempts + 1))
     local log="$log_dir/attempt-$attempts.log"
-    if run_live_tests "$log"; then
+    local coverage="$log_dir/attempt-$attempts.coverage"
+    if run_live_tests "$log" "$coverage"; then
       local quoted=0
       set +e
       quoted_source_link_status
       quoted=$?
       set -e
       if [[ "$quoted" -eq 0 ]]; then
-        if [[ "$attempts" -eq 1 ]]; then
-          write_summary "passed" "$attempts"
-        else
-          write_summary "passed after retry" "$attempts"
+        local diff_coverage=""
+        if [[ -s "$coverage" ]]; then
+          IFS= read -r diff_coverage <"$coverage"
         fi
+        case "$diff_coverage" in
+          "exercised")
+            if [[ "$attempts" -eq 1 ]]; then
+              write_summary "passed" "$attempts"
+            else
+              write_summary "passed after retry" "$attempts"
+            fi
+            ;;
+          "no comparable pair")
+            echo "::warning::Live Form 470 diff coverage unavailable: no comparable pair"
+            tail -n +2 "$coverage"
+            write_summary "live health passed; Form 470 diff not exercised (no comparable pair)" "$attempts"
+            ;;
+          *)
+            echo "Live Form 470 test did not report a valid coverage outcome" >&2
+            write_summary "failed" "$attempts"
+            return 1
+            ;;
+        esac
         return 0
       fi
       if [[ "$quoted" -eq 1 ]]; then
@@ -154,6 +174,8 @@ if [[ "${1:-}" == "--self-check" ]]; then
     echo "transport error was classified as an assertion" >&2
     exit 1
   fi
+  printf 'System.Text.Json.JsonException: Unexpected token\n' >"$tmp"
+  log_is_genuine_failure "$tmp"
   printf 'Build FAILED.\n' >"$tmp"
   log_is_genuine_failure "$tmp"
   rm -f "$tmp"

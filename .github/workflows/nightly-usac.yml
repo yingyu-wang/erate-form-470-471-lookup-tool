@@ -14,5 +14,7 @@ jobs:
       - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: '10.0.x'
+      - name: Offline regression checks
+        run: dotnet test tests/ERateLookup.Tests/ERateLookup.Tests.csproj -c Release --filter "Category!=Live"
       - name: Live published-filing checks
         run: bash scripts/nightly-live-usac.sh
